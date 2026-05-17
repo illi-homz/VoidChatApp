@@ -54,17 +54,13 @@
         android:strokeLineCap="round"/>
 
     <!-- Частица (эффект распада/эфемерности) -->
-    <circle
-        android:cx="85"
-        android:cy="40"
-        android:r="2"
+    <path
+        android:pathData="M83,40A2,2 0 1,1 87,40A2,2 0 1,1 83,40Z"
         android:fillColor="#FFFFFF"
         android:fillAlpha="0.5"/>
 
-    <circle
-        android:cx="91"
-        android:cy="34"
-        android:r="1.2"
+    <path
+        android:pathData="M89.8,34A1.2,1.2 0 1,1 92.2,34A1.2,1.2 0 1,1 89.8,34Z"
         android:fillColor="#FFFFFF"
         android:fillAlpha="0.3"/>
 </vector>
