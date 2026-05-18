@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   View,
+  Clipboard,
 } from 'react-native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
@@ -20,7 +21,7 @@ import { Colors } from '../theme/colors';
 
 declare const __DEV__: boolean;
 
-const DEV_SERVER_URL = 'http://10.0.2.2:9001';
+const DEFAULT_PORT = '9001';
 
 interface AddServerScreenProps {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AddServer'>;
@@ -34,39 +35,62 @@ function ClearButton({ onPress }: { onPress: () => void }): React.JSX.Element {
   );
 }
 
+function PasteIcon(): React.JSX.Element {
+  return (
+    <View style={styles.pasteIcon}>
+      <View style={styles.pasteIconClip} />
+      <View style={styles.pasteIconBody}>
+        <View style={styles.pasteIconLine} />
+        <View style={styles.pasteIconLine} />
+      </View>
+    </View>
+  );
+}
+
 export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX.Element {
   const serverStore = useServerStore();
   const appStore = useStore();
   const { toast } = useToast();
   const [name, setName] = useState('');
-  const [url, setUrl] = useState('');
+  const [ip, setIp] = useState('');
+  const [port, setPort] = useState(DEFAULT_PORT);
   const [isConnecting, setIsConnecting] = useState(false);
 
   useEffect(() => {
     if (__DEV__) {
       setName('Тестовый сервер');
-      setUrl(DEV_SERVER_URL);
+      setIp('10.0.2.2');
+      setPort(DEFAULT_PORT);
     }
   }, []);
 
+  function pasteFromClipboard(): void {
+    Clipboard.getString()
+      .then(text => {
+        if (text) {
+          setIp(text.trim());
+        }
+      })
+      .catch(() => {
+        toast('Не удалось прочитать буфер обмена', 'error');
+      });
+  }
+
   async function handleAdd(): Promise<void> {
     const trimmedName = name.trim();
-    const trimmedUrl = url.trim();
+    const trimmedIp = ip.trim();
+    const trimmedPort = port.trim() || DEFAULT_PORT;
 
     if (!trimmedName) {
       toast('Введите название сервера', 'error');
       return;
     }
-    if (!trimmedUrl) {
+    if (!trimmedIp) {
       toast('Введите IP сервера', 'error');
       return;
     }
 
-    // Автоматически добавляем http:// если пользователь ввёл просто IP
-    let normalizedUrl = trimmedUrl;
-    if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
-      normalizedUrl = 'http://' + normalizedUrl;
-    }
+    const serverUrl = `http://${trimmedIp}:${trimmedPort}`;
 
     setIsConnecting(true);
 
@@ -76,7 +100,7 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
       const newUserId = uuidv4();
 
       const serverId = uuidv4();
-      const serverConfig = { id: serverId, name: trimmedName, url: normalizedUrl };
+      const serverConfig = { id: serverId, name: trimmedName, url: serverUrl };
 
       await serverStore.add(serverConfig);
       serverStore.setActive(serverId);
@@ -84,13 +108,12 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
       await appStore.load(serverId);
       await appStore.saveUser({ userId: newUserId, publicKey, privateKey });
 
-      await socketService.connect(normalizedUrl, newUserId, publicKey);
+      await socketService.connect(serverUrl, newUserId, publicKey);
 
       navigation.replace('Home');
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       console.error('[AddServer] Connection error:', message);
-      // Показываем реальную причину: таймаут, DNS, refused и т.д.
       toast(`Ошибка подключения: ${message}`, 'error');
     } finally {
       setIsConnecting(false);
@@ -103,8 +126,9 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <Text style={styles.title}>Добавить сервер</Text>
-      <Text style={styles.description}>Введите название и адрес сервера для подключения</Text>
+      <Text style={styles.description}>Введите название и IP-адрес сервера для подключения</Text>
 
+      {/* Название */}
       <View style={styles.inputWrapper}>
         <TextInput
           style={styles.input}
@@ -118,19 +142,48 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
         {name.length > 0 && !isConnecting && <ClearButton onPress={() => setName('')} />}
       </View>
 
+      {/* IP-адрес + вставка из буфера */}
+      <View style={styles.inputRow}>
+        <View style={[styles.inputWrapper, styles.ipInputWrapper]}>
+          <TextInput
+            style={styles.input}
+            value={ip}
+            onChangeText={setIp}
+            placeholder='IP (например: 138.16.224.63)'
+            placeholderTextColor={Colors.textMuted}
+            autoCapitalize='none'
+            autoCorrect={false}
+            keyboardType='decimal-pad'
+            editable={!isConnecting}
+          />
+          {ip.length > 0 && !isConnecting && <ClearButton onPress={() => setIp('')} />}
+        </View>
+        <TouchableOpacity
+          style={styles.pasteButton}
+          onPress={pasteFromClipboard}
+          disabled={isConnecting}
+          activeOpacity={0.7}
+        >
+          <PasteIcon />
+        </TouchableOpacity>
+      </View>
+
+      {/* Порт */}
       <View style={styles.inputWrapper}>
         <TextInput
           style={styles.input}
-          value={url}
-          onChangeText={setUrl}
-          placeholder='IP сервера (например: 138.16.224.63)'
+          value={port}
+          onChangeText={setPort}
+          placeholder='Порт'
           placeholderTextColor={Colors.textMuted}
           autoCapitalize='none'
           autoCorrect={false}
-          keyboardType='url'
+          keyboardType='number-pad'
           editable={!isConnecting}
         />
-        {url.length > 0 && !isConnecting && <ClearButton onPress={() => setUrl('')} />}
+        {port.length > 0 && port !== DEFAULT_PORT && !isConnecting && (
+          <ClearButton onPress={() => setPort(DEFAULT_PORT)} />
+        )}
       </View>
 
       <TouchableOpacity
@@ -176,6 +229,16 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     marginBottom: 16,
   },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 10,
+  },
+  ipInputWrapper: {
+    flex: 1,
+    marginBottom: 0,
+  },
   input: {
     flex: 1,
     paddingHorizontal: 16,
@@ -195,6 +258,45 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     fontSize: 14,
     fontWeight: '600',
+  },
+  pasteButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pasteIcon: {
+    width: 20,
+    height: 22,
+    alignItems: 'center',
+  },
+  pasteIconClip: {
+    width: 8,
+    height: 3,
+    backgroundColor: Colors.textPrimary,
+    borderRadius: 1,
+    borderTopLeftRadius: 2,
+    borderTopRightRadius: 2,
+    zIndex: 1,
+  },
+  pasteIconBody: {
+    width: 18,
+    height: 18,
+    borderWidth: 2,
+    borderColor: Colors.textPrimary,
+    borderRadius: 3,
+    marginTop: -1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+  },
+  pasteIconLine: {
+    width: 10,
+    height: 2,
+    backgroundColor: Colors.textPrimary,
+    borderRadius: 1,
   },
   button: {
     backgroundColor: Colors.primary,
