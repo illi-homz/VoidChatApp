@@ -20,7 +20,7 @@ import { Colors } from '../theme/colors';
 
 declare const __DEV__: boolean;
 
-const DEV_SERVER_URL = 'http://10.0.2.2'; // порт 80 (стандартный HTTP)
+const DEV_SERVER_URL = 'http://10.0.2.2:9001';
 
 interface AddServerScreenProps {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AddServer'>;
