@@ -72,6 +72,9 @@ def enableProguardInReleaseBuilds = false
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
+def appVersionName = project.properties['VERSION_NAME'] ?: '1.0.0'
+def appVersionCode = (project.properties['VERSION_CODE'] ?: '1').toInteger()
+
 android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
@@ -82,8 +85,8 @@ android {
         applicationId "com.voidchatapp"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode appVersionCode
+        versionName appVersionName
     }
     signingConfigs {
         debug {
@@ -105,6 +108,16 @@ android {
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
+    }
+}
+
+// Custom APK naming: VoidChatApp-{versionName}.{versionCode}[-debug].apk
+android.applicationVariants.all { variant ->
+    variant.outputs.all { output ->
+        def versionTag = "${appVersionName}.${appVersionCode}"
+        def buildType = variant.buildType.name
+        def newName = "VoidChatApp-${versionTag}${buildType == 'debug' ? '-debug' : ''}.apk"
+        outputFileName = newName
     }
 }
 

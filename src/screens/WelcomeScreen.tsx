@@ -148,7 +148,7 @@ export const WelcomeScreen = observer(function WelcomeScreen({
 
   if (!serverStore.isReady) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={styles.container}>
         <ActivityIndicator size='large' color={Colors.primary} />
         <Text style={styles.statusText}>Загрузка карт...</Text>
       </SafeAreaView>
@@ -156,7 +156,7 @@ export const WelcomeScreen = observer(function WelcomeScreen({
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container}>
       <Text style={styles.title}>☠ VOID CHAT</Text>
       <Text style={styles.subtitle}>Выбери порт для входа</Text>
 
