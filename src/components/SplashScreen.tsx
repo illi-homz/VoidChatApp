@@ -12,7 +12,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Line, Circle } from 'react-native-svg';
 import { Colors } from '../theme/colors';
-import { PirateIcon } from './PirateIcon';
+import { BootSplashLogo } from './BootSplashLogo';
 
 // ---------------------------------------------------------------------------
 // Константы
@@ -346,7 +346,7 @@ export function SplashScreen({
       <View style={styles.centerBlock}>
         {/* Череп с костями */}
         <Animated.View style={skullAnimatedStyle}>
-          <PirateIcon variant='skull' size={120} />
+          <BootSplashLogo size={160} />
         </Animated.View>
 
         {/* VOID + CHAT */}
