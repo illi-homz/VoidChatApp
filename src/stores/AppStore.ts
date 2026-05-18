@@ -132,6 +132,15 @@ export class AppStore {
     return this.messages.get(contactId) ?? [];
   }
 
+  async clearMessages(contactId: string): Promise<void> {
+    this.messages.set(contactId, []);
+    this.unreadCount = { ...this.unreadCount, [contactId]: 0 };
+    await Promise.all([
+      AsyncStorage.setItem(this.KEYS.MESSAGES, JSON.stringify(Object.fromEntries(this.messages))),
+      AsyncStorage.setItem(this.KEYS.UNREAD, JSON.stringify(this.unreadCount)),
+    ]);
+  }
+
   async addMessage(contactId: string, message: Message): Promise<void> {
     const existing = this.messages.get(contactId);
     if (existing) {

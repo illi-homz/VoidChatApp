@@ -12,6 +12,7 @@ import { BottomSheet } from '../components/BottomSheet';
 import { BottomSheetPrompt } from '../components/BottomSheetPrompt';
 import { useToast } from '../components/Toast';
 import { useNotification } from '../components/NotificationBanner';
+import { ConfirmAlert } from '../components/ConfirmAlert';
 import { maskUserId } from '../utils/maskUserId';
 import { Colors } from '../theme';
 import { PirateIcon } from '../components/PirateIcon';
@@ -35,6 +36,8 @@ export const HomeScreen = observer(function HomeScreen({
     actions: BottomSheetAction[];
   }>({ actions: [] });
   const [promptContact, setPromptContact] = useState<Contact | null>(null);
+  const [clearChatConfirmVisible, setClearChatConfirmVisible] = useState(false);
+  const [clearChatTarget, setClearChatTarget] = useState<Contact | null>(null);
   const onMessageCleanupRef = useRef<(() => void) | null>(null);
   const [friendBtnScale] = useState(new Animated.Value(1));
   const [shareBtnScale] = useState(new Animated.Value(1));
@@ -263,6 +266,11 @@ export const HomeScreen = observer(function HomeScreen({
           onPress: () => setPromptContact(contact),
         },
         {
+          text: 'Очистить чат',
+          style: 'destructive',
+          onPress: () => showClearChatConfirm(contact),
+        },
+        {
           text: 'Удалить',
           style: 'destructive',
           onPress: () => showDeleteConfirm(contact),
@@ -288,6 +296,21 @@ export const HomeScreen = observer(function HomeScreen({
         ],
       });
     }, 300);
+  }
+
+  function showClearChatConfirm(contact: Contact): void {
+    // Ждём закрытия первого BottomSheet, затем показываем алерт
+    setTimeout(() => {
+      setClearChatTarget(contact);
+      setClearChatConfirmVisible(true);
+    }, 300);
+  }
+
+  async function handleClearChatConfirm(): Promise<void> {
+    if (!clearChatTarget) return;
+    await store.clearMessages(clearChatTarget.userId);
+    setClearChatConfirmVisible(false);
+    setClearChatTarget(null);
   }
 
   function handleGoBack(): void {
@@ -348,6 +371,18 @@ export const HomeScreen = observer(function HomeScreen({
           setPromptContact(null);
         }}
         onCancel={() => setPromptContact(null)}
+      />
+      <ConfirmAlert
+        visible={clearChatConfirmVisible}
+        title='Очистить чат'
+        message='Все сообщения будут удалены. Это действие нельзя отменить.'
+        confirmText='Очистить'
+        cancelText='Отмена'
+        onConfirm={handleClearChatConfirm}
+        onCancel={() => {
+          setClearChatConfirmVisible(false);
+          setClearChatTarget(null);
+        }}
       />
     </View>
   );
