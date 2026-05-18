@@ -20,7 +20,7 @@ import { Colors } from '../theme/colors';
 
 declare const __DEV__: boolean;
 
-const DEV_SERVER_URL = 'http://10.0.2.2:3001';
+const DEV_SERVER_URL = 'http://10.0.2.2'; // порт 80 (стандартный HTTP)
 
 interface AddServerScreenProps {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AddServer'>;
@@ -58,8 +58,14 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
       return;
     }
     if (!trimmedUrl) {
-      toast('Введите адрес сервера', 'error');
+      toast('Введите IP сервера', 'error');
       return;
+    }
+
+    // Автоматически добавляем http:// если пользователь ввёл просто IP
+    let normalizedUrl = trimmedUrl;
+    if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
+      normalizedUrl = 'http://' + normalizedUrl;
     }
 
     setIsConnecting(true);
@@ -70,7 +76,7 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
       const newUserId = uuidv4();
 
       const serverId = uuidv4();
-      const serverConfig = { id: serverId, name: trimmedName, url: trimmedUrl };
+      const serverConfig = { id: serverId, name: trimmedName, url: normalizedUrl };
 
       await serverStore.add(serverConfig);
       serverStore.setActive(serverId);
@@ -78,7 +84,7 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
       await appStore.load(serverId);
       await appStore.saveUser({ userId: newUserId, publicKey, privateKey });
 
-      await socketService.connect(trimmedUrl, newUserId, publicKey);
+      await socketService.connect(normalizedUrl, newUserId, publicKey);
 
       navigation.replace('Home');
     } catch (e) {
@@ -117,7 +123,7 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
           style={styles.input}
           value={url}
           onChangeText={setUrl}
-          placeholder='Адрес (например: http://192.168.1.100:3001)'
+          placeholder='IP сервера (например: 138.16.224.63)'
           placeholderTextColor={Colors.textMuted}
           autoCapitalize='none'
           autoCorrect={false}
