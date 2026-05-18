@@ -82,8 +82,10 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
 
       navigation.replace('Home');
     } catch (e) {
-      console.error('Connection error:', e instanceof Error ? e.message : e);
-      toast('Не удалось подключиться к серверу', 'error');
+      const message = e instanceof Error ? e.message : String(e);
+      console.error('[AddServer] Connection error:', message);
+      // Показываем реальную причину: таймаут, DNS, refused и т.д.
+      toast(`Ошибка подключения: ${message}`, 'error');
     } finally {
       setIsConnecting(false);
     }

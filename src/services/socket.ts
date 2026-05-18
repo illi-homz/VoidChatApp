@@ -51,13 +51,25 @@ class SocketService {
       this.socket.removeAllListeners();
       this.stopHeartbeat();
     }
+
+    // Сброс счётчика перед новой попыткой
+    this.reconnectAttempts = 0;
+
     return new Promise((resolve, reject) => {
+      // Единый таймер для reject — страховая от зависания
+      const timeout = setTimeout(() => {
+        this.socket?.close();
+        this.socket = null;
+        reject(new Error('Connection timed out after 15 seconds'));
+      }, 15_000);
+
       this.socket = io(serverUrl, {
-        transports: ['websocket'],
+        transports: ['websocket', 'polling'],
         autoConnect: true,
         reconnection: true,
         reconnectionAttempts: this.maxReconnectAttempts,
         reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
       });
 
       this.socket.on('connect', () => {
@@ -66,22 +78,34 @@ class SocketService {
       });
 
       this.socket.on('registered', () => {
+        clearTimeout(timeout);
         this.userId = userId;
         this.startHeartbeat();
         this.connectedCallback?.();
         resolve();
       });
 
-      this.socket.on('connect_error', () => {
+      this.socket.on('connect_error', (err: Error) => {
         this.reconnectAttempts++;
+        console.warn(
+          `[socket] connect_error (${this.reconnectAttempts}/${this.maxReconnectAttempts}):`,
+          err.message,
+        );
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-          reject(new Error('Failed to connect to server'));
+          clearTimeout(timeout);
+          this.socket?.close();
+          this.socket = null;
+          reject(new Error(`Failed to connect to server: ${err.message}`));
         }
       });
 
-      this.socket.on('disconnect', () => {
+      this.socket.on('disconnect', (reason: string) => {
+        clearTimeout(timeout);
         this.stopHeartbeat();
         this.disconnectedCallback?.();
+        if (reason === 'io server disconnect' || reason === 'transport close') {
+          console.warn('[socket] disconnected:', reason);
+        }
       });
 
       this.socket.on('kicked', (data: { message: string }) => {
