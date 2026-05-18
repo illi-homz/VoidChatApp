@@ -29,21 +29,9 @@ export function BackButton({
     >
       <View style={styles.chevron}>
         {/* Upper arm — tilts up-right from the left tip */}
-        <View
-          style={[
-            styles.line,
-            styles.lineTop,
-            { backgroundColor: color },
-          ]}
-        />
+        <View style={[styles.line, styles.lineTop, { backgroundColor: color }]} />
         {/* Lower arm — tilts down-right from the left tip */}
-        <View
-          style={[
-            styles.line,
-            styles.lineBottom,
-            { backgroundColor: color },
-          ]}
-        />
+        <View style={[styles.line, styles.lineBottom, { backgroundColor: color }]} />
       </View>
     </TouchableOpacity>
   );

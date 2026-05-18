@@ -53,7 +53,10 @@ export class AppStore {
       }
       if (messagesData) {
         const parsed: Record<string, Message[]> = JSON.parse(messagesData);
-        this.messages.replace(parsed);
+        this.messages.clear();
+        for (const [key, value] of Object.entries(parsed)) {
+          this.messages.set(key, value);
+        }
       } else {
         this.messages.clear();
       }

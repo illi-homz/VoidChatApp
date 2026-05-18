@@ -111,7 +111,7 @@ export const HomeScreen = observer(function HomeScreen({
               onPressOut={() => animateRelease(friendBtnScale)}
               activeOpacity={1}
             >
-              <PirateIcon variant='crossedSwords' size={20} color='#000' />
+              <PirateIcon variant='ship' size={20} color='#000' />
             </TouchableOpacity>
           </Animated.View>
           <Animated.View style={{ transform: [{ scale: shareBtnScale }] }}>
@@ -122,7 +122,7 @@ export const HomeScreen = observer(function HomeScreen({
               onPressOut={() => animateRelease(shareBtnScale)}
               activeOpacity={1}
             >
-              <PirateIcon variant='anchor' size={20} color='#000' />
+              <PirateIcon variant='scroll' size={20} color='#000' />
             </TouchableOpacity>
           </Animated.View>
         </View>

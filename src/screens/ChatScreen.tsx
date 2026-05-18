@@ -22,6 +22,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Colors } from '../theme/colors';
 import { BackButton } from '../components/BackButton';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface ChatScreenProps {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Chat'>;
@@ -36,6 +37,7 @@ interface MessageExt extends Message {
 
 export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.Element {
   const { contactId, contactName } = route.params;
+  const { bottom } = useSafeAreaInsets();
   const store = useStore();
   const [messages, setMessages] = useState<MessageExt[]>(() =>
     store.getMessages(contactId).map(m => ({
@@ -260,7 +262,7 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
             onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
           />
 
-          <View style={styles.inputContainer}>
+          <View style={[styles.inputContainer, { paddingBottom: bottom }]}>
             <TextInput
               style={styles.input}
               value={inputText}

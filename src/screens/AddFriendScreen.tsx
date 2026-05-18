@@ -14,6 +14,7 @@ import type { Contact } from '../types';
 import { useStore } from '../stores';
 import { socketService } from '../services/socket';
 import { useToast } from '../components/Toast';
+import { QrScannerModal } from '../components/QrScannerModal';
 import { Colors } from '../theme/colors';
 
 interface AddFriendScreenProps {
@@ -25,7 +26,9 @@ export function AddFriendScreen({ navigation }: AddFriendScreenProps): React.JSX
   const { toast } = useToast();
   const [friendId, setFriendId] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
   const sentRequestId = useRef<string | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     socketService.onFriendRequestSent(handleRequestSent);
@@ -33,6 +36,8 @@ export function AddFriendScreen({ navigation }: AddFriendScreenProps): React.JSX
 
     return () => {
       sentRequestId.current = null;
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      socketService.offFriendRequestSent();
       socketService.onError(null);
     };
   }, []);
@@ -72,23 +77,49 @@ export function AddFriendScreen({ navigation }: AddFriendScreenProps): React.JSX
       });
   }
 
-  async function sendFriendRequest(): Promise<void> {
-    if (!friendId.trim()) {
+  async function submitFriendRequest(userId: string): Promise<void> {
+    if (!userId.trim()) {
       toast('Введите ID пользователя', 'error');
       return;
     }
 
     setIsLoading(true);
-    sentRequestId.current = friendId.trim();
-    socketService.sendFriendRequest(friendId.trim());
+    sentRequestId.current = userId.trim();
+    socketService.sendFriendRequest(userId.trim());
 
-    setTimeout(() => {
+    timeoutRef.current = setTimeout(() => {
       if (sentRequestId.current) {
         sentRequestId.current = null;
         setIsLoading(false);
         toast('Пользователь не в сети или не отвечает', 'error');
       }
     }, 5000);
+  }
+
+  async function sendFriendRequest(): Promise<void> {
+    await submitFriendRequest(friendId);
+  }
+
+  function handleQrScan(userId: string): void {
+    // Проверка: не сканируем свой же QR
+    if (store.user && userId === store.user.userId) {
+      toast('Нельзя добавить самого себя', 'error');
+      return;
+    }
+
+    // Проверка: контакт уже существует
+    if (store.contacts.some(c => c.userId === userId)) {
+      toast('Пользователь уже в контактах', 'error');
+      return;
+    }
+
+    setShowScanner(false);
+
+    // Заполняем поле ввода (для UX)
+    setFriendId(userId);
+
+    // Автоматически отправляем friend request
+    submitFriendRequest(userId);
   }
 
   return (
@@ -125,6 +156,15 @@ export function AddFriendScreen({ navigation }: AddFriendScreenProps): React.JSX
       </View>
 
       <TouchableOpacity
+        style={styles.scanButton}
+        onPress={() => setShowScanner(true)}
+        disabled={isLoading}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.scanButtonText}>📷 Сканировать QR</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
         style={[styles.button, isLoading && styles.buttonDisabled]}
         onPress={sendFriendRequest}
         disabled={isLoading}
@@ -138,6 +178,12 @@ export function AddFriendScreen({ navigation }: AddFriendScreenProps): React.JSX
       </TouchableOpacity>
 
       <Text style={styles.note}>Пират должен быть онлайн для вербовки</Text>
+
+      <QrScannerModal
+        visible={showScanner}
+        onScan={handleQrScan}
+        onClose={() => setShowScanner(false)}
+      />
     </View>
   );
 }
@@ -227,6 +273,20 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#000',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  scanButton: {
+    backgroundColor: 'transparent',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  scanButtonText: {
+    color: Colors.primary,
     fontSize: 16,
     fontWeight: '600',
   },
