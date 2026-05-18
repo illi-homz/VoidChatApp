@@ -1,10 +1,9 @@
 import React, { useEffect, useCallback, useState, useRef } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { observer } from 'mobx-react-lite';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
-import type { Contact, ServerConfig } from '../types';
+import type { Contact } from '../types';
 import type { BottomSheetAction } from '../components/BottomSheet';
 import { useStore, useServerStore } from '../stores';
 import { socketService } from '../services/socket';
@@ -14,7 +13,9 @@ import { BottomSheetPrompt } from '../components/BottomSheetPrompt';
 import { useToast } from '../components/Toast';
 import { useNotification } from '../components/NotificationBanner';
 import { maskUserId } from '../utils/maskUserId';
-import { Colors } from '../theme/colors';
+import { Colors } from '../theme';
+import { PirateIcon } from '../components/PirateIcon';
+import { BackButton } from '../components/BackButton';
 
 interface HomeScreenProps {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Home'>;
@@ -35,6 +36,26 @@ export const HomeScreen = observer(function HomeScreen({
   }>({ actions: [] });
   const [promptContact, setPromptContact] = useState<Contact | null>(null);
   const onMessageCleanupRef = useRef<(() => void) | null>(null);
+  const [friendBtnScale] = useState(new Animated.Value(1));
+  const [shareBtnScale] = useState(new Animated.Value(1));
+
+  function animatePress(scaleAnim: Animated.Value): void {
+    Animated.spring(scaleAnim, {
+      toValue: 0.92,
+      useNativeDriver: true,
+      friction: 8,
+      tension: 100,
+    }).start();
+  }
+
+  function animateRelease(scaleAnim: Animated.Value): void {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      friction: 8,
+      tension: 100,
+    }).start();
+  }
 
   function showSheet(config: {
     title?: string;
@@ -75,6 +96,39 @@ export const HomeScreen = observer(function HomeScreen({
       onMessageCleanupRef.current?.();
     };
   }, []);
+
+  useEffect(() => {
+    navigation.setOptions({
+      title: serverStore.activeServer?.name ?? 'VoidChat',
+      headerLeft: () => <BackButton onPress={handleGoBack} />,
+      headerRight: () => (
+        <View style={styles.headerButtons}>
+          <Animated.View style={{ transform: [{ scale: friendBtnScale }] }}>
+            <TouchableOpacity
+              style={styles.headerButton}
+              onPress={() => navigation.navigate('AddFriend')}
+              onPressIn={() => animatePress(friendBtnScale)}
+              onPressOut={() => animateRelease(friendBtnScale)}
+              activeOpacity={1}
+            >
+              <PirateIcon variant='crossedSwords' size={20} color='#000' />
+            </TouchableOpacity>
+          </Animated.View>
+          <Animated.View style={{ transform: [{ scale: shareBtnScale }] }}>
+            <TouchableOpacity
+              style={styles.headerButton}
+              onPress={() => navigation.navigate('ShareId')}
+              onPressIn={() => animatePress(shareBtnScale)}
+              onPressOut={() => animateRelease(shareBtnScale)}
+              activeOpacity={1}
+            >
+              <PirateIcon variant='anchor' size={20} color='#000' />
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
+      ),
+    });
+  }, [navigation, serverStore.activeServer?.name]);
 
   function setupSocketListeners(): void {
     socketService.onKicked(handleKicked);
@@ -235,20 +289,9 @@ export const HomeScreen = observer(function HomeScreen({
     }, 300);
   }
 
-  function handleSwitchServer(_server: ServerConfig): void {
+  function handleGoBack(): void {
     socketService.disconnect();
     navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
-  }
-
-  function showServerSwitcher(): void {
-    const actions: BottomSheetAction[] = serverStore.servers.map(s => ({
-      text: `${s.name}${s.id === serverStore.activeServerId ? ' ✓' : ''}`,
-      onPress: s.id !== serverStore.activeServerId ? () => handleSwitchServer(s) : undefined,
-    }));
-    actions.push({ text: '+ Добавить сервер', onPress: () => navigation.navigate('AddServer') });
-    actions.push({ text: 'Отмена', style: 'cancel' });
-    setSheetConfig({ title: 'Серверы', actions });
-    setSheetVisible(true);
   }
 
   function openChat(contact: Contact): void {
@@ -269,48 +312,11 @@ export const HomeScreen = observer(function HomeScreen({
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={showServerSwitcher}
-          activeOpacity={0.7}
-          style={styles.serverTitle}
-        >
-          <Text style={styles.title}>{serverStore.activeServer?.name ?? 'VoidChat'}</Text>
-          <Text style={styles.serverSwitchHint}>▼</Text>
-        </TouchableOpacity>
-        <View style={styles.headerButtons}>
-          <TouchableOpacity
-            style={styles.headerButton}
-            onPress={() => navigation.navigate('AddFriend')}
-            activeOpacity={0.7}
-          >
-            <View style={styles.personPlusIcon}>
-              <View style={styles.personHead} />
-              <View style={styles.personBody} />
-              <View style={styles.plusIcon}>
-                <View style={styles.plusLineH} />
-                <View style={styles.plusLineV} />
-              </View>
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.headerButton}
-            onPress={() => navigation.navigate('ShareId')}
-            activeOpacity={0.7}
-          >
-            <View style={styles.idCardIcon}>
-              <View style={styles.idCardLine} />
-              <View style={styles.idCardLine} />
-            </View>
-          </TouchableOpacity>
-        </View>
-      </View>
-
+    <View style={styles.container}>
       {store.contacts.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>Нет контактов</Text>
-          <Text style={styles.emptySubtext}>Добавьте друга, чтобы начать общение</Text>
+          <Text style={styles.emptyText}>Команда пуста</Text>
+          <Text style={styles.emptySubtext}>Найди соратников для плавания</Text>
         </View>
       ) : (
         <FlatList
@@ -343,7 +349,7 @@ export const HomeScreen = observer(function HomeScreen({
         }}
         onCancel={() => setPromptContact(null)}
       />
-    </SafeAreaView>
+    </View>
   );
 });
 
@@ -352,41 +358,20 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    backgroundColor: Colors.surface,
-    gap: 12,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.textPrimary,
-  },
-  serverTitle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  serverSwitchHint: {
-    fontSize: 10,
-    color: Colors.textMuted,
-    marginTop: 4,
-  },
   headerButtons: {
     flexDirection: 'row',
     gap: 8,
+    flexShrink: 0,
   },
   headerButton: {
     backgroundColor: Colors.primary,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: Colors.primaryDark,
   },
   personPlusIcon: {
     width: 18,

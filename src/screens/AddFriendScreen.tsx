@@ -93,10 +93,8 @@ export function AddFriendScreen({ navigation }: AddFriendScreenProps): React.JSX
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Добавить друга</Text>
-      <Text style={styles.description}>
-        Введите ID пользователя, которого хотите добавить в друзья
-      </Text>
+      <Text style={styles.title}>🏴 Вербовка</Text>
+      <Text style={styles.description}>Введи ID пирата, чтобы завербовать его в команду</Text>
 
       <View style={styles.inputRow}>
         <TextInput
@@ -133,13 +131,13 @@ export function AddFriendScreen({ navigation }: AddFriendScreenProps): React.JSX
         activeOpacity={0.7}
       >
         {isLoading ? (
-          <ActivityIndicator color={Colors.textPrimary} />
+          <ActivityIndicator color='#000' />
         ) : (
-          <Text style={styles.buttonText}>Отправить запрос</Text>
+          <Text style={styles.buttonText}>🏴 Отправить приглашение</Text>
         )}
       </TouchableOpacity>
 
-      <Text style={styles.note}>Пользователь должен быть онлайн для получения запроса</Text>
+      <Text style={styles.note}>Пират должен быть онлайн для вербовки</Text>
     </View>
   );
 }
@@ -170,7 +168,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.background,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
@@ -228,7 +226,7 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   buttonText: {
-    color: Colors.textPrimary,
+    color: '#000',
     fontSize: 16,
     fontWeight: '600',
   },

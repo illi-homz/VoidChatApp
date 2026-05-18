@@ -166,6 +166,27 @@ export class AppStore {
       AsyncStorage.removeItem(this.KEYS.UNREAD),
     ]);
   }
+
+  async clearServerData(serverId: string): Promise<void> {
+    const k = keys(serverId);
+    await Promise.all([
+      AsyncStorage.removeItem(k.USER),
+      AsyncStorage.removeItem(k.CONTACTS),
+      AsyncStorage.removeItem(k.MESSAGES),
+      AsyncStorage.removeItem(k.UNREAD),
+    ]);
+  }
+
+  resetInMemoryState(): void {
+    this.user = null;
+    this.contacts = [];
+    this.messages.clear();
+    this.unreadCount = {};
+    this.presenceMap = {};
+    this.activeChatId = null;
+    this.currentServerId = null;
+    this.isReady = false;
+  }
 }
 
 export const appStore = new AppStore();

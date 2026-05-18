@@ -1,66 +1,99 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  VoidChat – Piracy‑style adaptive icon foreground
+  Skull & crossbones on transparent background.
+  Viewport is the standard 108×108 Android adaptive icon canvas.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Свечение вокруг бабла -->
-    <path
-        android:pathData="M54,54m-40,0a40,40 0,1 1,80 0a40,40 0,1 1,-80 0"
-        android:fillColor="#6C63FF"
-        android:fillAlpha="0.12"/>
+    <!-- ══════════════════════════════════════════════════
+         CROSSBONES (drawn first so they sit behind skull)
+         Two elongated rounded rectangles rotated ±35°
+         around the icon centre (54, 54).
+         ══════════════════════════════════════════════════ -->
 
-    <!-- Хвостик бабла -->
-    <path
-        android:pathData="M72,76Q78,88 74,96Q68,84 66,78Z"
-        android:fillColor="#7C73FF"/>
+    <!-- Bone 1 – rotated −35° (top‑left → bottom‑right) -->
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:rotation="-35">
+        <path
+            android:pathData="M8,48L100,48Q104,48 104,52L104,60Q104,64 100,64L8,64Q4,64 4,60L4,52Q4,48 8,48Z"
+            android:fillColor="#F0F0F0"
+            android:fillAlpha="0.95"/>
+    </group>
 
-    <!-- Основное тело бабла (скруглённый прямоугольник) -->
-    <path
-        android:pathData="M34,36L74,36C80,36 84,40 84,46L84,66C84,72 80,76 74,76L44,76L32,86L34,76L34,46C34,40 38,36 44,36Z"
-        android:fillColor="#6C63FF"/>
+    <!-- Bone 2 – rotated +35° (bottom‑left → top‑right) -->
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:rotation="35">
+        <path
+            android:pathData="M8,48L100,48Q104,48 104,52L104,60Q104,64 100,64L8,64Q4,64 4,60L4,52Q4,48 8,48Z"
+            android:fillColor="#F0F0F0"
+            android:fillAlpha="0.95"/>
+    </group>
 
-    <!-- Внутренняя область бабла (темнее, для контраста) -->
+    <!-- ══════════════════════════════════════════════════
+         SKULL – outer silhouette
+         Smooth rounded cranium, slightly flared cheekbones
+         and a narrower rounded jaw.
+         ══════════════════════════════════════════════════ -->
     <path
-        android:pathData="M38,42L70,42C73.5,42 76,44.5 76,48L76,64C76,67.5 73.5,70 70,70L42,70L40,68L40,48C40,44.5 42.5,42 46,42Z"
-        android:fillColor="#5A52D6"/>
+        android:pathData="M54,16
+            C66,16 78,24 78,38
+            C78,47 75,56 71,60
+            C68,64 64,68 59,71
+            Q54,73 49,71
+            C44,68 41,64 37,60
+            C33,56 30,47 30,38
+            C30,24 42,16 54,16
+            Z"
+        android:fillColor="#F0F0F0"/>
 
-    <!-- Волна/эхо — линия 1 -->
-    <path
-        android:pathData="M44,50C48,46 52,46 56,50C60,54 64,54 68,50"
-        android:strokeWidth="2.8"
-        android:strokeColor="#FFFFFF"
-        android:strokeAlpha="0.9"
-        android:fillColor="@android:color/transparent"
-        android:strokeLineCap="round"/>
+    <!-- ══════════════════════════════════════════════════
+         EYE SOCKETS – two circular voids
+         ══════════════════════════════════════════════════ -->
 
-    <!-- Волна/эхо — линия 2 -->
+    <!-- Left eye socket  (centre ~41, 39) -->
     <path
-        android:pathData="M46,58C50,54 54,54 58,58C62,62 66,62 68,58"
-        android:strokeWidth="2.5"
-        android:strokeColor="#FFFFFF"
-        android:strokeAlpha="0.7"
-        android:fillColor="@android:color/transparent"
-        android:strokeLineCap="round"/>
+        android:pathData="M41,33.5A5.5,5.5 0 1,1 41,44.5A5.5,5.5 0 1,1 41,33.5Z"
+        android:fillColor="#080808"/>
 
-    <!-- Волна/эхо — линия 3 (короткая) -->
+    <!-- Right eye socket (centre ~67, 39) -->
     <path
-        android:pathData="M48,66C52,62 56,62 60,66"
-        android:strokeWidth="2"
-        android:strokeColor="#FFFFFF"
-        android:strokeAlpha="0.5"
-        android:fillColor="@android:color/transparent"
-        android:strokeLineCap="round"/>
+        android:pathData="M67,33.5A5.5,5.5 0 1,1 67,44.5A5.5,5.5 0 1,1 67,33.5Z"
+        android:fillColor="#080808"/>
 
-    <!-- Частица (эффект распада/эфемерности) -->
+    <!-- ══════════════════════════════════════════════════
+         NOSE – inverted triangle (pirate‑skull style)
+         ══════════════════════════════════════════════════ -->
     <path
-        android:pathData="M83,40A2,2 0 1,1 87,40A2,2 0 1,1 83,40Z"
-        android:fillColor="#FFFFFF"
-        android:fillAlpha="0.5"/>
+        android:pathData="M54,45L50,54L58,54Z"
+        android:fillColor="#080808"/>
 
+    <!-- ══════════════════════════════════════════════════
+         MOUTH – dark base with individual white teeth
+         Base is a black rectangle; teeth are white rects
+         drawn on top with 1 dp gaps between them.
+         ══════════════════════════════════════════════════ -->
+
+    <!-- Mouth / gum background -->
     <path
-        android:pathData="M89.8,34A1.2,1.2 0 1,1 92.2,34A1.2,1.2 0 1,1 89.8,34Z"
-        android:fillColor="#FFFFFF"
-        android:fillAlpha="0.3"/>
+        android:pathData="M36,58L72,58L72,66L36,66Z"
+        android:fillColor="#080808"/>
+
+    <!-- Seven rectangular teeth (#F0F0F0) -->
+    <path android:pathData="M37,59h4v6h-4Z" android:fillColor="#F0F0F0"/>
+    <path android:pathData="M42,59h4v6h-4Z" android:fillColor="#F0F0F0"/>
+    <path android:pathData="M47,59h4v6h-4Z" android:fillColor="#F0F0F0"/>
+    <path android:pathData="M52,59h4v6h-4Z" android:fillColor="#F0F0F0"/>
+    <path android:pathData="M57,59h4v6h-4Z" android:fillColor="#F0F0F0"/>
+    <path android:pathData="M62,59h4v6h-4Z" android:fillColor="#F0F0F0"/>
+    <path android:pathData="M67,59h4v6h-4Z" android:fillColor="#F0F0F0"/>
+
 </vector>

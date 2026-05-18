@@ -125,8 +125,8 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <Text style={styles.title}>Добавить сервер</Text>
-      <Text style={styles.description}>Введите название и IP-адрес сервера для подключения</Text>
+      <Text style={styles.title}>⚓ Новый порт</Text>
+      <Text style={styles.description}>Введи название и координаты порта для швартовки</Text>
 
       {/* Название */}
       <View style={styles.inputWrapper}>
@@ -193,9 +193,9 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
         activeOpacity={0.7}
       >
         {isConnecting ? (
-          <ActivityIndicator color={Colors.textPrimary} />
+          <ActivityIndicator color='#000' />
         ) : (
-          <Text style={styles.buttonText}>Подключиться</Text>
+          <Text style={styles.buttonText}>🏴 Отчалить!</Text>
         )}
       </TouchableOpacity>
     </KeyboardAvoidingView>
@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.background,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border,
@@ -309,7 +309,7 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   buttonText: {
-    color: Colors.textPrimary,
+    color: '#000',
     fontSize: 16,
     fontWeight: '600',
   },

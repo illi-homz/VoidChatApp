@@ -135,6 +135,7 @@ export function BottomSheetPrompt({
           ]}
           {...panResponder.panHandlers}
         >
+          <View style={styles.dragIndicator} />
           <Text style={styles.title}>Прозвище</Text>
           <Text style={styles.subtitle}>Введите прозвище для этого контакта</Text>
 
@@ -183,7 +184,7 @@ export function BottomSheetPrompt({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: Colors.overlay,
     justifyContent: 'flex-end',
   },
   overlayTouchable: {
@@ -230,7 +231,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   cancelText: {
-    color: Colors.textSecondary,
+    color: Colors.primary,
     fontSize: 15,
     fontWeight: '600',
   },
@@ -241,8 +242,16 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   saveText: {
-    color: Colors.textPrimary,
+    color: '#000',
     fontSize: 15,
     fontWeight: '600',
+  },
+  dragIndicator: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    alignSelf: 'center',
+    marginBottom: 12,
   },
 });

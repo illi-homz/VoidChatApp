@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  VoidChat – Piracy‑style app icon (iOS source)
+  Skull & crossbones on solid #080808 background.
+  1024×1024 raster source — identical proportions to the
+  Android adaptive‑icon foreground (viewBox 108×108).
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1024" height="1024"
+     viewBox="0 0 108 108">
+
+  <!-- ══════════════════════════════
+       BACKGROUND — solid pitch black
+       ══════════════════════════════ -->
+  <rect x="0" y="0" width="108" height="108" fill="#080808"/>
+
+  <!-- ══════════════════════════════════════════════════
+       CROSSBONES — two rounded rectangles, ±35° rotated
+       around the icon centre (54, 54), drawn first so
+       they sit behind the skull.
+       ══════════════════════════════════════════════════ -->
+
+  <!-- Bone 1 – rotated −35° -->
+  <g transform="rotate(-35, 54, 54)">
+    <rect x="4" y="48" width="100" height="16" rx="4" ry="4" fill="#F0F0F0" opacity="0.95"/>
+  </g>
+
+  <!-- Bone 2 – rotated +35° -->
+  <g transform="rotate(35, 54, 54)">
+    <rect x="4" y="48" width="100" height="16" rx="4" ry="4" fill="#F0F0F0" opacity="0.95"/>
+  </g>
+
+  <!-- ══════════════════════════════════════════════════
+       SKULL — outer silhouette
+       Smooth rounded cranium, slightly flared cheekbones,
+       narrower rounded jaw.
+       ══════════════════════════════════════════════════ -->
+  <path d="M 54,16
+           C 66,16 78,24 78,38
+           C 78,47 75,56 71,60
+           C 68,64 64,68 59,71
+           Q 54,73 49,71
+           C 44,68 41,64 37,60
+           C 33,56 30,47 30,38
+           C 30,24 42,16 54,16 Z"
+        fill="#F0F0F0"/>
+
+  <!-- ══════════════════════════════════════════════════
+       EYE SOCKETS
+       ══════════════════════════════════════════════════ -->
+
+  <!-- Left eye  (centre ~41, 39) -->
+  <circle cx="41" cy="39" r="5.5" fill="#080808"/>
+
+  <!-- Right eye (centre ~67, 39) -->
+  <circle cx="67" cy="39" r="5.5" fill="#080808"/>
+
+  <!-- ══════════════════════════════════════════════════
+       NOSE — inverted triangle
+       ══════════════════════════════════════════════════ -->
+  <polygon points="54,45 50,54 58,54" fill="#080808"/>
+
+  <!-- ══════════════════════════════════════════════════
+       MOUTH — dark base with individual teeth
+       ══════════════════════════════════════════════════ -->
+
+  <!-- Mouth / gum background -->
+  <rect x="36" y="58" width="36" height="8" fill="#080808"/>
+
+  <!-- Seven rectangular teeth -->
+  <rect x="37" y="59" width="4" height="6" fill="#F0F0F0"/>
+  <rect x="42" y="59" width="4" height="6" fill="#F0F0F0"/>
+  <rect x="47" y="59" width="4" height="6" fill="#F0F0F0"/>
+  <rect x="52" y="59" width="4" height="6" fill="#F0F0F0"/>
+  <rect x="57" y="59" width="4" height="6" fill="#F0F0F0"/>
+  <rect x="62" y="59" width="4" height="6" fill="#F0F0F0"/>
+  <rect x="67" y="59" width="4" height="6" fill="#F0F0F0"/>
+
+</svg>

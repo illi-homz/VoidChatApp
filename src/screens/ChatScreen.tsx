@@ -20,6 +20,7 @@ import { socketService } from '../services/socket';
 import { deriveSharedSecret, encryptMessage, decryptMessage } from '../services/crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { Colors } from '../theme/colors';
+import { BackButton } from '../components/BackButton';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 interface ChatScreenProps {
@@ -69,6 +70,7 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
     const displayName = contact?.nickname ?? contactName;
     navigation.setOptions({
       title: displayName,
+      headerLeft: () => <BackButton onPress={() => navigation.goBack()} />,
     });
     initializeChat();
 
@@ -222,9 +224,15 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
           <View style={styles.messageFooter}>
             <Text style={styles.messageTime}>{formatTime(item.timestamp)}</Text>
             {isMe && item.status && (
-              <Text style={[styles.statusIcon, item.status === 'failed' && styles.statusFailed]}>
+              <Text
+                style={[
+                  styles.statusIcon,
+                  item.status === 'failed' && styles.statusFailed,
+                  item.status === 'sent' && styles.statusSent,
+                ]}
+              >
                 {item.status === 'pending'
-                  ? '⏳'
+                  ? '⚓'
                   : item.status === 'sent'
                     ? '✓'
                     : item.status === 'read'
@@ -257,7 +265,7 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
               style={styles.input}
               value={inputText}
               onChangeText={setInputText}
-              placeholder='Сообщение...'
+              placeholder='Написать послание...'
               placeholderTextColor={Colors.textMuted}
               multiline
               maxLength={1000}
@@ -271,7 +279,7 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
               disabled={!inputText.trim() || !isSecretReady}
               activeOpacity={0.7}
             >
-              <Text style={styles.sendButtonText}>Отпр.</Text>
+              <Text style={styles.sendButtonText}>🚀</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -294,7 +302,7 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
             style={styles.input}
             value={inputText}
             onChangeText={setInputText}
-            placeholder='Сообщение...'
+            placeholder='Написать послание...'
             placeholderTextColor={Colors.textMuted}
             multiline
             maxLength={1000}
@@ -308,7 +316,7 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
             disabled={!inputText.trim() || !isSecretReady}
             activeOpacity={0.7}
           >
-            <Text style={styles.sendButtonText}>Отпр.</Text>
+            <Text style={styles.sendButtonText}>🚀</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -332,7 +340,7 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
           style={styles.input}
           value={inputText}
           onChangeText={setInputText}
-          placeholder='Сообщение...'
+          placeholder='Написать послание...'
           placeholderTextColor={Colors.textMuted}
           multiline
           maxLength={1000}
@@ -345,7 +353,7 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
           onPress={sendMessage}
           disabled={!inputText.trim() || !isSecretReady}
         >
-          <Text style={styles.sendButtonText}>Отпр.</Text>
+          <Text style={styles.sendButtonText}>🚀</Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -371,14 +379,18 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   myMessage: {
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.surface,
     alignSelf: 'flex-end',
     borderBottomRightRadius: 4,
+    borderWidth: 1,
+    borderColor: Colors.borderGold,
   },
   theirMessage: {
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.surfaceLight,
     alignSelf: 'flex-start',
     borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   messageText: {
     color: Colors.textPrimary,
@@ -393,12 +405,16 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   messageTime: {
-    color: Colors.timestamp,
-    fontSize: 11,
+    color: Colors.textSecondary,
+    fontSize: 10,
+    fontStyle: 'italic',
   },
   statusIcon: {
     fontSize: 11,
-    color: Colors.timestamp,
+    color: Colors.textSecondary,
+  },
+  statusSent: {
+    color: Colors.primary,
   },
   statusFailed: {
     color: Colors.error,
@@ -410,7 +426,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: Colors.surface,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    borderTopColor: Colors.borderLight,
     gap: 10,
   },
   input: {
@@ -422,6 +438,8 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     fontSize: 16,
     maxHeight: 100,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   sendButton: {
     backgroundColor: Colors.primary,
@@ -433,7 +451,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   sendButtonText: {
-    color: Colors.textPrimary,
+    color: '#000',
     fontSize: 15,
     fontWeight: '600',
   },

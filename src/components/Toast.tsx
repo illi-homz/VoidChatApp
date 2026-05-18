@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
+import { Colors } from '../theme/colors';
 
 type ToastType = 'success' | 'error' | 'info';
 
@@ -21,9 +22,15 @@ const TOAST_ANIMATION_IN = 300;
 const TOAST_ANIMATION_OUT = 250;
 
 const BG_COLORS: Record<ToastType, string> = {
-  success: '#4CAF50',
-  error: '#FF6B6B',
-  info: '#666',
+  success: Colors.toastSuccess,
+  error: Colors.toastError,
+  info: Colors.toastInfo,
+};
+
+const TEXT_COLORS: Record<ToastType, string> = {
+  success: '#000',
+  error: '#FFFFFF',
+  info: '#FFFFFF',
 };
 
 export function ToastProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
@@ -105,7 +112,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }): Reac
             accessibilityRole='alert'
             accessibilityLabel={toast.message}
           >
-            <Text style={styles.toastText}>{toast.message}</Text>
+            <Text style={[styles.toastText, { color: TEXT_COLORS[toast.type] }]}>
+              {toast.message}
+            </Text>
           </Animated.View>
         </View>
       )}
@@ -131,6 +140,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 24,
     paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -139,7 +150,6 @@ const styles = StyleSheet.create({
     maxWidth: '85%',
   },
   toastText: {
-    color: '#FFFFFF',
     fontSize: 14,
     textAlign: 'center',
     fontWeight: '500',

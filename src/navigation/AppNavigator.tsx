@@ -12,18 +12,22 @@ import { Colors } from '../theme/colors';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-export function AppNavigator(): React.JSX.Element {
+interface AppNavigatorProps {
+  onReady?: () => void;
+}
+
+export function AppNavigator({ onReady }: AppNavigatorProps): React.JSX.Element {
   return (
-    <NavigationContainer>
+    <NavigationContainer onReady={onReady}>
       <Stack.Navigator
         initialRouteName='Welcome'
         screenOptions={{
           headerStyle: {
             backgroundColor: Colors.surface,
           },
-          headerTintColor: Colors.textPrimary,
+          headerTintColor: Colors.primary,
           headerTitleStyle: {
-            fontWeight: '600',
+            fontWeight: '700',
           },
           headerShadowVisible: false,
           contentStyle: {
@@ -32,19 +36,19 @@ export function AppNavigator(): React.JSX.Element {
         }}
       >
         <Stack.Screen name='Welcome' component={WelcomeScreen} options={{ headerShown: false }} />
-        <Stack.Screen name='Home' component={HomeScreen} options={{ headerShown: false }} />
-        <Stack.Screen name='Chat' component={ChatScreen} options={{ title: 'Чат' }} />
+        <Stack.Screen name='Home' component={HomeScreen} />
+        <Stack.Screen name='Chat' component={ChatScreen} options={{ title: '⚓ Чат' }} />
         <Stack.Screen
           name='AddFriend'
           component={AddFriendScreen}
-          options={{ title: 'Добавить друга' }}
+          options={{ title: 'Вербовка' }}
         />
         <Stack.Screen
           name='AddServer'
           component={AddServerScreen}
-          options={{ title: 'Новый сервер' }}
+          options={{ title: 'Новый порт' }}
         />
-        <Stack.Screen name='ShareId' component={ShareIdScreen} options={{ title: 'Мой ID' }} />
+        <Stack.Screen name='ShareId' component={ShareIdScreen} options={{ title: 'Каперское' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

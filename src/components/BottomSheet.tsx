@@ -140,6 +140,7 @@ export function BottomSheet({
           style={[styles.sheet, { transform: [{ translateY }] }]}
           {...panResponder.panHandlers}
         >
+          <View style={styles.dragIndicator} />
           {title && <Text style={styles.title}>{title}</Text>}
           {message && <Text style={styles.message}>{message}</Text>}
 
@@ -177,7 +178,7 @@ export function BottomSheet({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: Colors.overlay,
     justifyContent: 'flex-end',
   },
   overlayTouchable: {
@@ -218,7 +219,7 @@ const styles = StyleSheet.create({
   },
   actionSeparator: {
     height: 1,
-    backgroundColor: Colors.border,
+    backgroundColor: Colors.borderLight,
     marginLeft: 20,
   },
   cancelContainer: {
@@ -227,6 +228,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: Colors.surface,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: Colors.borderGold,
   },
   cancelButton: {
     height: 50,
@@ -236,6 +239,14 @@ const styles = StyleSheet.create({
   cancelText: {
     fontSize: 17,
     fontWeight: '500',
-    color: Colors.textSecondary,
+    color: Colors.primary,
+  },
+  dragIndicator: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    alignSelf: 'center',
+    marginBottom: 12,
   },
 });

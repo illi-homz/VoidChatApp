@@ -12,9 +12,12 @@ import { observer } from 'mobx-react-lite';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
 import type { ServerConfig } from '../types';
+import type { BottomSheetAction } from '../components/BottomSheet';
 import { useStore, useServerStore } from '../stores';
 import { socketService } from '../services/socket';
 import { useToast } from '../components/Toast';
+import { BottomSheet } from '../components/BottomSheet';
+import { BottomSheetPrompt } from '../components/BottomSheetPrompt';
 import { Colors } from '../theme/colors';
 
 interface WelcomeScreenProps {
@@ -28,6 +31,14 @@ export const WelcomeScreen = observer(function WelcomeScreen({
   const serverStore = useServerStore();
   const { toast } = useToast();
   const [connectingId, setConnectingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [sheetVisible, setSheetVisible] = useState(false);
+  const [sheetConfig, setSheetConfig] = useState<{
+    title?: string;
+    message?: string;
+    actions: BottomSheetAction[];
+  }>({ actions: [] });
+  const [renameServer, setRenameServer] = useState<ServerConfig | null>(null);
 
   useEffect(() => {
     if (!serverStore.isReady) return;
@@ -37,6 +48,15 @@ export const WelcomeScreen = observer(function WelcomeScreen({
       navigation.replace('AddServer');
     }
   }, [serverStore.isReady, serverStore.servers.length, navigation]);
+
+  function showSheet(config: {
+    title?: string;
+    message?: string;
+    actions: BottomSheetAction[];
+  }): void {
+    setSheetConfig(config);
+    setSheetVisible(true);
+  }
 
   async function handleConnect(server: ServerConfig): Promise<void> {
     setConnectingId(server.id);
@@ -64,19 +84,81 @@ export const WelcomeScreen = observer(function WelcomeScreen({
     }
   }
 
+  function handleRename(server: ServerConfig): void {
+    setRenameServer(server);
+  }
+
+  function handleSaveRename(newName: string): void {
+    if (renameServer && newName) {
+      serverStore.rename(renameServer.id, newName);
+      toast('Порт переименован', 'success');
+    }
+    setRenameServer(null);
+  }
+
+  function showDeleteConfirm(server: ServerConfig): void {
+    setTimeout(() => {
+      showSheet({
+        title: 'Удалить порт',
+        message: `Удалить "${server.name}"? Все сообщения и контакты этого порта будут потеряны.`,
+        actions: [
+          { text: 'Отмена', style: 'cancel' },
+          {
+            text: 'Удалить',
+            style: 'destructive',
+            onPress: async () => {
+              setDeletingId(server.id);
+              try {
+                await serverStore.remove(server.id);
+                toast('Порт удалён', 'success');
+              } catch (e) {
+                console.error('Delete server error:', e instanceof Error ? e.message : e);
+                toast('Ошибка при удалении порта', 'error');
+              } finally {
+                setDeletingId(null);
+              }
+            },
+          },
+        ],
+      });
+    }, 300);
+  }
+
+  function showServerActions(server: ServerConfig): void {
+    showSheet({
+      title: server.name,
+      actions: [
+        {
+          text: 'Подключиться',
+          onPress: () => handleConnect(server),
+        },
+        {
+          text: 'Переименовать',
+          onPress: () => handleRename(server),
+        },
+        {
+          text: 'Удалить',
+          style: 'destructive',
+          onPress: () => showDeleteConfirm(server),
+        },
+        { text: 'Отмена', style: 'cancel' },
+      ],
+    });
+  }
+
   if (!serverStore.isReady) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <ActivityIndicator size='large' color={Colors.primary} />
-        <Text style={styles.statusText}>Загрузка...</Text>
+        <Text style={styles.statusText}>Загрузка карт...</Text>
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <Text style={styles.title}>VoidChat</Text>
-      <Text style={styles.subtitle}>Выберите сервер</Text>
+      <Text style={styles.title}>☠ VOID CHAT</Text>
+      <Text style={styles.subtitle}>Выбери порт для входа</Text>
 
       <FlatList
         data={serverStore.servers}
@@ -84,9 +166,17 @@ export const WelcomeScreen = observer(function WelcomeScreen({
         contentContainerStyle={styles.list}
         renderItem={({ item }) => (
           <TouchableOpacity
-            style={[styles.serverCard, connectingId === item.id && styles.serverCardDisabled]}
+            style={[
+              styles.serverCard,
+              (connectingId === item.id || deletingId === item.id) && styles.serverCardDisabled,
+            ]}
             onPress={() => handleConnect(item)}
-            disabled={connectingId !== null}
+            onLongPress={() => {
+              if (!deletingId) {
+                showServerActions(item);
+              }
+            }}
+            disabled={connectingId !== null || deletingId !== null}
             activeOpacity={0.7}
           >
             <View style={styles.serverInfo}>
@@ -96,13 +186,13 @@ export const WelcomeScreen = observer(function WelcomeScreen({
             {connectingId === item.id ? (
               <ActivityIndicator size='small' color={Colors.primary} />
             ) : (
-              <Text style={styles.connectArrow}>→</Text>
+              <Text style={styles.connectArrow}>⚓</Text>
             )}
           </TouchableOpacity>
         )}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>Нет сохранённых серверов</Text>
+            <Text style={styles.emptyText}>Нет портов...</Text>
           </View>
         }
       />
@@ -112,8 +202,21 @@ export const WelcomeScreen = observer(function WelcomeScreen({
         onPress={() => navigation.navigate('AddServer')}
         activeOpacity={0.7}
       >
-        <Text style={styles.addButtonText}>+ Добавить сервер</Text>
+        <Text style={styles.addButtonText}>+ Добавить порт</Text>
       </TouchableOpacity>
+      <BottomSheet
+        visible={sheetVisible}
+        title={sheetConfig.title}
+        message={sheetConfig.message}
+        actions={sheetConfig.actions}
+        onClose={() => setSheetVisible(false)}
+      />
+      <BottomSheetPrompt
+        visible={renameServer !== null}
+        currentNickname={renameServer?.name ?? ''}
+        onSave={handleSaveRename}
+        onCancel={() => setRenameServer(null)}
+      />
     </SafeAreaView>
   );
 });
@@ -148,6 +251,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   serverCardDisabled: {
     opacity: 0.7,
@@ -157,8 +262,8 @@ const styles = StyleSheet.create({
   },
   serverName: {
     fontSize: 16,
-    fontWeight: '600',
-    color: Colors.textPrimary,
+    fontWeight: '700',
+    color: Colors.primary,
     marginBottom: 4,
   },
   serverUrl: {
@@ -191,9 +296,11 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   addButtonText: {
-    color: Colors.textPrimary,
+    color: '#000',
     fontSize: 16,
     fontWeight: '600',
   },

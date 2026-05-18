@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Colors } from '../theme/colors';
 
 interface NotificationData {
   message: string;
@@ -115,10 +116,10 @@ export function NotificationProvider({
               activeOpacity={0.8}
             >
               <View style={styles.bannerIcon}>
-                <Text style={styles.bannerIconText}>💬</Text>
+                <Text style={styles.bannerIconText}>☠</Text>
               </View>
               <View style={styles.bannerTextContainer}>
-                <Text style={styles.bannerTitle}>Новое сообщение</Text>
+                <Text style={styles.bannerTitle}>Новое послание</Text>
                 <Text style={styles.bannerMessage} numberOfLines={1}>
                   {notification.message}
                 </Text>
@@ -156,9 +157,9 @@ const styles = StyleSheet.create({
   },
   banner: {
     width: '100%',
-    backgroundColor: 'rgba(22, 33, 62, 0.92)',
-    borderBottomLeftRadius: 16,
-    borderBottomRightRadius: 16,
+    backgroundColor: Colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.4,
@@ -175,7 +176,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(108, 99, 255, 0.3)',
+    backgroundColor: 'rgba(255,215,0,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,

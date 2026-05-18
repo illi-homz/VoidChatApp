@@ -69,7 +69,7 @@ export function NicknameEditModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: Colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -79,6 +79,8 @@ const styles = StyleSheet.create({
     padding: 24,
     width: '85%',
     maxWidth: 400,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   title: {
     fontSize: 20,
@@ -113,7 +115,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   cancelText: {
-    color: Colors.textSecondary,
+    color: Colors.primary,
     fontSize: 15,
     fontWeight: '600',
   },
@@ -124,7 +126,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   saveText: {
-    color: Colors.textPrimary,
+    color: '#000',
     fontSize: 15,
     fontWeight: '600',
   },

@@ -52,6 +52,8 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 12,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   avatar: {
     width: 48,
@@ -63,7 +65,7 @@ const styles = StyleSheet.create({
     marginRight: 14,
   },
   avatarText: {
-    color: Colors.textPrimary,
+    color: '#000',
     fontSize: 20,
     fontWeight: 'bold',
   },
@@ -73,7 +75,7 @@ const styles = StyleSheet.create({
   contactName: {
     color: Colors.textPrimary,
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   contactId: {
     color: Colors.textSecondary,
@@ -87,10 +89,10 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
   online: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: Colors.success,
   },
   offline: {
-    backgroundColor: '#757575',
+    backgroundColor: Colors.error,
   },
   badge: {
     minWidth: 22,

@@ -40,8 +40,8 @@ export const ShareIdScreen = observer(function ShareIdScreen(): React.JSX.Elemen
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Мой ID</Text>
-      <Text style={styles.subtitle}>Отсканируйте QR код или скопируйте ID</Text>
+      <Text style={styles.title}>🏴 Каперское свидетельство</Text>
+      <Text style={styles.subtitle}>Покажи этот свиток соратникам</Text>
 
       <View style={styles.qrContainer}>
         <QRCode
@@ -60,10 +60,10 @@ export const ShareIdScreen = observer(function ShareIdScreen(): React.JSX.Elemen
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.shareButton} onPress={shareId} activeOpacity={0.7}>
-        <Text style={styles.shareButtonText}>Поделиться ID</Text>
+        <Text style={styles.shareButtonText}>🏴 Поделиться</Text>
       </TouchableOpacity>
 
-      <Text style={styles.hint}>Покажите этот QR код другу, чтобы он мог добавить вас</Text>
+      <Text style={styles.hint}>Пират получит твой ID и сможет добавить тебя в команду</Text>
     </View>
   );
 });
@@ -88,10 +88,12 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   qrContainer: {
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.background,
     padding: 20,
     borderRadius: 16,
     marginBottom: 30,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   idContainer: {
     backgroundColor: Colors.surface,
@@ -100,6 +102,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     width: '100%',
     marginBottom: 20,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   idLabel: {
     fontSize: 12,
@@ -107,9 +111,10 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   idValue: {
-    fontSize: 14,
+    fontSize: 13,
     color: Colors.primary,
     fontFamily: 'monospace',
+    letterSpacing: 0.5,
   },
   shareButton: {
     backgroundColor: Colors.primary,
@@ -119,7 +124,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   shareButtonText: {
-    color: Colors.textPrimary,
+    color: '#000',
     fontSize: 16,
     fontWeight: '600',
   },

@@ -1,16 +1,28 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import { StatusBar } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import BootSplash from 'react-native-bootsplash';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { serverStore } from './src/stores/ServerStore';
 import { StoreProvider } from './src/stores';
 import { ToastProvider } from './src/components/Toast';
 import { NotificationProvider } from './src/components/NotificationBanner';
+import { SplashScreen } from './src/components/SplashScreen';
 import { Colors } from './src/theme/colors';
 
 function App(): React.JSX.Element {
+  const [splashVisible, setSplashVisible] = useState(true);
+
   useEffect(() => {
     serverStore.load();
+  }, []);
+
+  const handleNavigationReady = useCallback(() => {
+    BootSplash.hide({ fade: true });
+  }, []);
+
+  const handleSplashFinish = useCallback(() => {
+    setSplashVisible(false);
   }, []);
 
   return (
@@ -19,7 +31,14 @@ function App(): React.JSX.Element {
         <ToastProvider>
           <NotificationProvider>
             <StatusBar barStyle="light-content" backgroundColor={Colors.background} translucent />
-            <AppNavigator />
+            <AppNavigator onReady={handleNavigationReady} />
+            {splashVisible && (
+              <SplashScreen
+                visible={splashVisible}
+                onFinish={handleSplashFinish}
+                duration={2000}
+              />
+            )}
           </NotificationProvider>
         </ToastProvider>
       </StoreProvider>
