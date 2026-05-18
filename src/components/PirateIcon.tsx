@@ -16,12 +16,12 @@ function SkullIcon({ size, color }: { size: number; color: string }) {
   return (
     <Svg width={size} height={size} viewBox='0 0 64 64' fill='none'>
       {/* Crossbones (behind skull) */}
-      <Rect x={12} y={2} width={40} height={8} rx={4} fill={color} transform='rotate(45, 32, 32)' />
+      <Rect x={4} y={23} width={56} height={9} rx={4} fill={color} transform='rotate(45, 32, 32)' />
       <Rect
-        x={12}
-        y={54}
-        width={40}
-        height={8}
+        x={4}
+        y={23}
+        width={56}
+        height={9}
         rx={4}
         fill={color}
         transform='rotate(-45, 32, 32)'
