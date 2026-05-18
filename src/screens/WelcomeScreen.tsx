@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import type { RootStackParamList } from '../navigation/types';
 import type { ServerConfig } from '../types';
 import type { BottomSheetAction } from '../components/BottomSheet';
 import { useStore, useServerStore } from '../stores';
+import { maskUserId } from '../utils/maskUserId';
 import { socketService } from '../services/socket';
 import { useToast } from '../components/Toast';
 import { BottomSheet } from '../components/BottomSheet';
@@ -40,6 +41,39 @@ export const WelcomeScreen = observer(function WelcomeScreen({
   }>({ actions: [] });
   const [renameServer, setRenameServer] = useState<ServerConfig | null>(null);
 
+  const onMessageCleanupRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    if (socketService.isConnected() && serverStore.activeServerId) {
+      // Очищаем предыдущий listener если был
+      onMessageCleanupRef.current?.();
+
+      const cleanup = socketService.onMessage(data => {
+        const message = {
+          id: data.nonce,
+          from: data.from,
+          ciphertext: data.ciphertext,
+          nonce: data.nonce,
+          timestamp: data.timestamp,
+          read: false,
+        };
+        appStore.addMessage(data.from, message);
+        appStore.incrementUnread(data.from);
+        serverStore.incrementServerUnread(serverStore.activeServerId!);
+
+        const contact = appStore.contacts.find(c => c.userId === data.from);
+        const displayName = contact?.nickname ?? maskUserId(data.from);
+        toast(`Новое сообщение от ${displayName}`, 'info');
+      });
+      onMessageCleanupRef.current = cleanup;
+    }
+
+    return () => {
+      onMessageCleanupRef.current?.();
+      onMessageCleanupRef.current = null;
+    };
+  }, []);
+
   useEffect(() => {
     if (!serverStore.isReady) return;
 
@@ -59,6 +93,22 @@ export const WelcomeScreen = observer(function WelcomeScreen({
   }
 
   async function handleConnect(server: ServerConfig): Promise<void> {
+    // Если уже подключены к этому серверу — просто переходим на Home
+    const connectedUrl = socketService.getConnectedUrl();
+    if (
+      connectedUrl === server.url &&
+      serverStore.activeServerId === server.id &&
+      appStore.isReady
+    ) {
+      navigation.replace('Home');
+      return;
+    }
+
+    // Если подключены к другому серверу — дисконнектимся
+    if (socketService.isConnected()) {
+      socketService.disconnect();
+    }
+
     setConnectingId(server.id);
 
     try {
@@ -180,7 +230,18 @@ export const WelcomeScreen = observer(function WelcomeScreen({
             activeOpacity={0.7}
           >
             <View style={styles.serverInfo}>
-              <Text style={styles.serverName}>{item.name}</Text>
+              <View style={styles.serverNameRow}>
+                <Text style={styles.serverName}>{item.name}</Text>
+                {serverStore.serverUnread[item.id] > 0 && (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>
+                      {serverStore.serverUnread[item.id] > 99
+                        ? '99+'
+                        : serverStore.serverUnread[item.id]}
+                    </Text>
+                  </View>
+                )}
+              </View>
               <Text style={styles.serverUrl}>{item.url}</Text>
             </View>
             {connectingId === item.id ? (
@@ -270,6 +331,25 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.textMuted,
     fontFamily: 'monospace',
+  },
+  serverNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  badge: {
+    backgroundColor: Colors.error,
+    borderRadius: 12,
+    minWidth: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    marginLeft: 8,
+  },
+  badgeText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
   connectArrow: {
     fontSize: 20,

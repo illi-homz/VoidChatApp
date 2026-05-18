@@ -226,6 +226,7 @@ export const HomeScreen = observer(function HomeScreen({
       };
       store.addMessage(data.from, message);
       store.incrementUnread(data.from);
+      serverStore.incrementServerUnread(serverStore.activeServerId!);
 
       // Показываем push-уведомление, если чат с этим контактом не открыт
       if (data.from !== store.activeChatId) {
@@ -290,7 +291,6 @@ export const HomeScreen = observer(function HomeScreen({
   }
 
   function handleGoBack(): void {
-    socketService.disconnect();
     navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
   }
 

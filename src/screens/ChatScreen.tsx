@@ -15,7 +15,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import type { RootStackParamList } from '../navigation/types';
 import type { Message, ServerMessage } from '../types';
-import { useStore } from '../stores';
+import { useStore, useServerStore } from '../stores';
 import { socketService } from '../services/socket';
 import { deriveSharedSecret, encryptMessage, decryptMessage } from '../services/crypto';
 import { v4 as uuidv4 } from 'uuid';
@@ -39,6 +39,7 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
   const { contactId, contactName } = route.params;
   const { bottom } = useSafeAreaInsets();
   const store = useStore();
+  const serverStore = useServerStore();
   const [messages, setMessages] = useState<MessageExt[]>(() =>
     store.getMessages(contactId).map(m => ({
       ...m,
@@ -87,6 +88,7 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
 
     // Сбрасываем счётчик непрочитанных при открытии чата
     store.markAsRead(contactId);
+    serverStore.recalculateServerUnread(store.currentServerId!);
 
     // Уведомляем собеседника, что сообщения прочитаны
     socketService.sendMessageRead(contactId);
@@ -154,6 +156,7 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
       setMessages(prev => [...prev, message]);
       store.addMessage(contactId, message);
       store.markAsRead(contactId);
+      serverStore.recalculateServerUnread(store.currentServerId!);
       socketService.sendMessageRead(contactId);
     } catch {
       console.error('Decryption error');

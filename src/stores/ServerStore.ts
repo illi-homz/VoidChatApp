@@ -5,11 +5,14 @@ import { appStore } from './AppStore';
 import { socketService } from '../services/socket';
 
 const STORAGE_KEY = 'servers';
+const SERVER_UNREAD_KEY = 'server_unread';
 
 export class ServerStore {
   servers: ServerConfig[] = [];
   activeServerId: string | null = null;
   isReady = false;
+  serverUnread: Record<string, number> = {};
+  serverUnreadLoaded = false;
 
   constructor() {
     makeAutoObservable(this);
@@ -21,12 +24,19 @@ export class ServerStore {
   }
 
   async load(): Promise<void> {
-    const data = await AsyncStorage.getItem(STORAGE_KEY);
+    const [data, unreadData] = await Promise.all([
+      AsyncStorage.getItem(STORAGE_KEY),
+      AsyncStorage.getItem(SERVER_UNREAD_KEY),
+    ]);
     runInAction(() => {
       if (data) {
         this.servers = JSON.parse(data);
       }
+      if (unreadData) {
+        this.serverUnread = JSON.parse(unreadData);
+      }
       this.isReady = true;
+      this.serverUnreadLoaded = true;
     });
   }
 
@@ -51,8 +61,15 @@ export class ServerStore {
       this.activeServerId = this.servers[0]?.id ?? null;
     }
 
-    // 4. Сохраняем обновлённый список
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(this.servers));
+    // 4. Удаляем unread-данные для этого сервера
+    const { [serverId]: _removed, ...rest } = this.serverUnread;
+    this.serverUnread = rest;
+
+    // 5. Сохраняем обновлённые данные
+    await Promise.all([
+      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(this.servers)),
+      AsyncStorage.setItem(SERVER_UNREAD_KEY, JSON.stringify(this.serverUnread)),
+    ]);
   }
 
   setActive(serverId: string): void {
@@ -65,6 +82,27 @@ export class ServerStore {
       server.name = newName;
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(this.servers));
     }
+  }
+
+  async incrementServerUnread(serverId: string): Promise<void> {
+    this.serverUnread = {
+      ...this.serverUnread,
+      [serverId]: (this.serverUnread[serverId] ?? 0) + 1,
+    };
+    await AsyncStorage.setItem(SERVER_UNREAD_KEY, JSON.stringify(this.serverUnread));
+  }
+
+  async recalculateServerUnread(serverId: string): Promise<void> {
+    if (serverId === appStore.currentServerId) {
+      const total = Object.values(appStore.unreadCount).reduce((sum, v) => sum + v, 0);
+      this.serverUnread = { ...this.serverUnread, [serverId]: total };
+      await AsyncStorage.setItem(SERVER_UNREAD_KEY, JSON.stringify(this.serverUnread));
+    }
+  }
+
+  async setServerUnread(serverId: string, count: number): Promise<void> {
+    this.serverUnread = { ...this.serverUnread, [serverId]: count };
+    await AsyncStorage.setItem(SERVER_UNREAD_KEY, JSON.stringify(this.serverUnread));
   }
 }
 

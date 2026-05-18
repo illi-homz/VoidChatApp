@@ -10,9 +10,9 @@ import {
   PanResponder,
   Dimensions,
   Easing,
-  Platform,
 } from 'react-native';
 import { Colors } from '../theme/colors';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const SWIPE_THRESHOLD = 80;
@@ -40,6 +40,7 @@ export function BottomSheet({
 }: BottomSheetProps): React.JSX.Element {
   const [localVisible, setLocalVisible] = useState(false);
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const { bottom } = useSafeAreaInsets();
 
   const panResponder = useRef(
     PanResponder.create({
@@ -137,7 +138,7 @@ export function BottomSheet({
         </TouchableWithoutFeedback>
 
         <Animated.View
-          style={[styles.sheet, { transform: [{ translateY }] }]}
+          style={[styles.sheet, { transform: [{ translateY }], paddingBottom: bottom + 20 }]}
           {...panResponder.panHandlers}
         >
           <View style={styles.dragIndicator} />
@@ -189,7 +190,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     paddingTop: 20,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
   },
   title: {
     fontSize: 18,

@@ -6,6 +6,7 @@ const HEARTBEAT_INTERVAL = 30000;
 class SocketService {
   private socket: Socket | null = null;
   private userId: string | null = null;
+  private connectedUrl: string | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
@@ -64,7 +65,7 @@ class SocketService {
       }, 15_000);
 
       this.socket = io(serverUrl, {
-        transports: ['websocket', 'polling'],
+        transports: ['polling', 'websocket'],
         autoConnect: true,
         reconnection: true,
         reconnectionAttempts: this.maxReconnectAttempts,
@@ -80,6 +81,7 @@ class SocketService {
       this.socket.on('registered', () => {
         clearTimeout(timeout);
         this.userId = userId;
+        this.connectedUrl = serverUrl;
         this.startHeartbeat();
         this.connectedCallback?.();
         resolve();
@@ -213,6 +215,7 @@ class SocketService {
     this.stopHeartbeat();
     this.socket?.disconnect();
     this.socket = null;
+    this.connectedUrl = null;
     this.userId = null;
   }
 
@@ -425,6 +428,10 @@ class SocketService {
 
   getUserId(): string | null {
     return this.userId;
+  }
+
+  getConnectedUrl(): string | null {
+    return this.connectedUrl;
   }
 }
 
