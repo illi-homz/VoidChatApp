@@ -44,6 +44,7 @@ curl -sS https://raw.githubusercontent.com/illi-homz/voidchat-server/main/deploy
 
 > **Важно:** при первом запуске Android может потребоваться очистка кэша эмулятора:
 > `adb -s emulator-5554 uninstall com.voidchatapp && adb -s emulator-5554 shell pm trim-caches 99999999999`
+```
 
 ## Структура проекта
 
