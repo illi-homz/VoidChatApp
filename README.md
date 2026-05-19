@@ -30,6 +30,15 @@ cd ../voidchat-server && npm install && npm run dev
 
 Сервер по умолчанию на `ws://127.0.0.1:9001`.
 
+> **ARM64-only:** Релизная сборка оптимизирована для `arm64-v8a`. При запуске на эмуляторе (x86_64) используйте:
+> ```bash
+> npm run android -- --active-arch-only
+> ```
+> или напрямую:
+> ```bash
+> ./gradlew assembleDebug -PreactNativeArchitectures=x86_64
+> ```
+
 ### Деплой на удалённый VPS
 
 Скрипт лежит в корне репозитория `voidchat-server`:
