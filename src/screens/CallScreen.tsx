@@ -195,33 +195,6 @@ const CallScreenComponent: React.FC = observer(() => {
 
     // Удалённый поток — через onRemoteStream callback
     // (установлен в init useEffect)
-    webrtcService.onError = error => {
-      if (!endedRef.current) {
-        endedRef.current = true;
-        callStore.setFailed(error);
-        webrtcService.stopCall();
-        toast(error || 'Ошибка соединения', 'error');
-        setTimeout(() => navigation.goBack(), 2000);
-      }
-    };
-
-    // Мониторинг соединения
-    webrtcService.onConnectionState = state => {
-      if (state === 'failed' && !endedRef.current) {
-        endedRef.current = true;
-        callStore.setFailed('Соединение прервано');
-        webrtcService.stopCall();
-        toast('Соединение потеряно', 'error');
-        setTimeout(() => navigation.goBack(), 2000);
-      } else if (state === 'disconnected') {
-        toast('Соединение нестабильно...', 'warning');
-      }
-    };
-
-    // Удалённый поток получен
-    webrtcService.onRemoteStream = () => {
-      callStore.hasRemoteStream = true;
-    };
 
     return () => {
       unsubCallIncoming();
