@@ -70,7 +70,7 @@ fs.writeFileSync('android/gradle.properties', props);
 
 git add package.json android/gradle.properties
 git commit -m "chore: bump version to $NEW_VERSION"
-git tag "v$NEW_VERSION"
+git tag -a "v$NEW_VERSION" -m "release v$NEW_VERSION"
 
 echo ""
 echo "Version bumped to $NEW_VERSION (VERSION_CODE=$NEW_CODE)"
