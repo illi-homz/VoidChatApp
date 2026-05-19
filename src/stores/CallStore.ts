@@ -45,11 +45,9 @@ export class CallStore {
     this.contactId = params.contactId;
     this.contactName = params.contactName;
     this.direction = 'outgoing';
-    try {
-      InCallManager.start({ media: 'audio' });
-    } catch {
-      // ignore — аудио-сессия не критична для звонка
-    }
+    // InCallManager НЕ вызываем здесь — getUserMedia сначала должен получить
+    // доступ к микрофону без конфликта аудио-фокуса. InCallManager запускаем
+    // только при setConnected(), когда WebRTC уже захватил аудиопоток.
   }
 
   /**
@@ -81,17 +79,13 @@ export class CallStore {
     this.status = 'connected';
     this._callStartTime = Date.now();
     this._startDurationTimer();
-    // Остановить рингтон и переключиться в режим разговора
+    // Остановить рингтон и запустить аудио-сессию (после getUserMedia)
     try {
       InCallManager.stopRingtone();
-    } catch {
-      // ignore
-    }
+    } catch {}
     try {
       InCallManager.start({ media: 'audio' });
-    } catch {
-      // ignore — аудио-сессия не критична
-    }
+    } catch {}
   }
 
   /**

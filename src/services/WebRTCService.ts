@@ -5,6 +5,7 @@ import {
   RTCPeerConnection,
   RTCSessionDescription,
   RTCIceCandidate,
+  permissions,
 } from 'react-native-webrtc';
 
 /** ICE-сервер (локальный тип, т.к. библиотечный RTCIceServer не экспортируется). */
@@ -123,8 +124,14 @@ class WebRTCService {
     if (this._localStream) {
       return this._localStream;
     }
-    // Разрешение RECORD_AUDIO запрашивается внутри getUserMedia библиотеки
-    // react-native-webrtc — на Android 13+ появится системный диалог
+    // Явно запрашиваем разрешение через API react-native-webrtc (оно само
+    // вызывает PermissionsAndroid.request). Это гарантирует, что системный
+    // диалог появится до вызова getUserMedia.
+    try {
+      await permissions.request({ name: 'microphone' });
+    } catch {
+      // permissions API может быть недоступен — getUserMedia запросит сам
+    }
     const stream = await mediaDevices.getUserMedia({ audio: true, video: false });
     this._localStream = stream;
     return stream;

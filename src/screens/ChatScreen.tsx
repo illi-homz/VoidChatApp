@@ -312,11 +312,14 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
               contactName={displayName}
               onConfirm={() => {
                 setShowCallConfirm(false);
-                navigation.navigate('Call', {
-                  contactId,
-                  contactName: displayName,
-                  direction: 'outgoing',
-                });
+                // Разделяем закрытие алерта и навигацию чтобы избежать race condition
+                setTimeout(() => {
+                  navigation.navigate('Call', {
+                    contactId,
+                    contactName: displayName,
+                    direction: 'outgoing',
+                  });
+                }, 100);
               }}
               onCancel={() => setShowCallConfirm(false)}
             />
@@ -366,11 +369,13 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
             contactName={displayName}
             onConfirm={() => {
               setShowCallConfirm(false);
-              navigation.navigate('Call', {
-                contactId,
-                contactName: displayName,
-                direction: 'outgoing',
-              });
+              setTimeout(() => {
+                navigation.navigate('Call', {
+                  contactId,
+                  contactName: displayName,
+                  direction: 'outgoing',
+                });
+              }, 100);
             }}
             onCancel={() => setShowCallConfirm(false)}
           />
@@ -420,10 +425,12 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
           contactName={displayName}
           onConfirm={() => {
             setShowCallConfirm(false);
-            navigation.navigate('Call', {
-              contactId,
-              contactName: displayName,
-              direction: 'outgoing',
+            requestAnimationFrame(() => {
+              navigation.navigate('Call', {
+                contactId,
+                contactName: displayName,
+                direction: 'outgoing',
+              });
             });
           }}
           onCancel={() => setShowCallConfirm(false)}
