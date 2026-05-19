@@ -51,6 +51,9 @@ export class CallStore {
    * Воспроизводит рингтон через InCallManager.
    */
   startIncomingCall(params: { callId: string; fromUserId: string; contactName: string }): void {
+    if (this.status !== 'idle') {
+      return; // Уже обрабатываем звонок — игнорируем
+    }
     // ВАЖНО: this.reset() не вызываем — вызывающий код (HomeScreen) сам проверяет
     // статус и гарантирует, что звонок не активен, перед вызовом этого метода.
     this.status = 'ringing';

@@ -78,6 +78,8 @@ class WebRTCService {
 
   private _disconnectedTimer: ReturnType<typeof setTimeout> | null = null;
   private _iceRestartAttempted = false;
+  private _pendingCandidates: RTCIceCandidate[] = [];
+  private _negotiationInProgress: boolean = false;
 
   // ================================================================
   //  Геттеры
@@ -175,12 +177,27 @@ class WebRTCService {
     // Сбрасываем флаги перед новой сессией
     this._disconnectedTimer = null;
     this._iceRestartAttempted = false;
+    this._negotiationInProgress = false;
+    this._pendingCandidates = [];
 
     // --- onicecandidate ---
     pc.onicecandidate = (event: { candidate: RTCIceCandidate | null }) => {
       if (event.candidate && this._onIceCandidate) {
         this._onIceCandidate(JSON.stringify(event.candidate.toJSON()));
       }
+    };
+
+    // --- onicecandidateerror ---
+    pc.onicecandidateerror = (event: any) => {
+      console.warn(
+        '[WebRTC] ICE candidate error:',
+        'errorCode:',
+        event.errorCode || event?.errorCode,
+        'errorText:',
+        event.errorText || event?.errorText,
+        'url:',
+        event.url || event?.url,
+      );
     };
 
     // --- ontrack (удалённый аудиопоток) ---
@@ -202,6 +219,24 @@ class WebRTCService {
         this._startDisconnectedTimer();
       } else if (state === 'failed') {
         this._handleIceRestart();
+      }
+    };
+
+    // --- onnegotiationneeded ---
+    pc.onnegotiationneeded = async () => {
+      if (this._negotiationInProgress) return;
+      this._negotiationInProgress = true;
+      try {
+        const sdpInfo = (await pc.createOffer()) as SdpInfo;
+        const modifiedSdp = this._modifySdpForOpus(sdpInfo.sdp);
+        const desc = { type: 'offer', sdp: modifiedSdp };
+        await pc.setLocalDescription(desc);
+        const jsonSdp = JSON.stringify(desc);
+        this._onRenegotiationNeeded?.(jsonSdp);
+      } catch (e) {
+        console.warn('[WebRTC] negotiationneeded failed:', e);
+      } finally {
+        this._negotiationInProgress = false;
       }
     };
 
@@ -284,6 +319,7 @@ class WebRTCService {
     try {
       const desc = JSON.parse(sdp) as SdpInfo;
       await this._pc?.setRemoteDescription(new RTCSessionDescription(desc));
+      await this._flushPendingCandidates();
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to set remote description';
       this._onError?.(msg);
@@ -298,6 +334,10 @@ class WebRTCService {
     if (!this._pc) return;
     try {
       const iceCandidate = new RTCIceCandidate(JSON.parse(candidate));
+      if (!this._pc.remoteDescription) {
+        this._pendingCandidates.push(iceCandidate);
+        return;
+      }
       await this._pc.addIceCandidate(iceCandidate);
     } catch (e) {
       console.warn('[WebRTC] Failed to add ICE candidate:', e);
@@ -338,6 +378,8 @@ class WebRTCService {
     this._localStream = null;
     this._remoteStream = null;
     this._iceRestartAttempted = false;
+    this._negotiationInProgress = false;
+    this._pendingCandidates = [];
 
     if (this._pc) {
       this._pc.close();
@@ -363,6 +405,7 @@ class WebRTCService {
   async handleRenegotiationOffer(offerSdp: string): Promise<string> {
     const offer = JSON.parse(offerSdp) as SdpInfo;
     await this._pc?.setRemoteDescription(new RTCSessionDescription(offer));
+    await this._flushPendingCandidates();
     const answer = (await this._pc?.createAnswer()) as SdpInfo;
     const modifiedSdp = this._modifySdpForOpus(answer.sdp);
     const desc = { type: 'answer', sdp: modifiedSdp };
@@ -451,6 +494,18 @@ class WebRTCService {
     if (this._disconnectedTimer) {
       clearTimeout(this._disconnectedTimer);
       this._disconnectedTimer = null;
+    }
+  }
+
+  /** Добавляет все накопленные ICE-кандидаты после установки remote description. */
+  private async _flushPendingCandidates(): Promise<void> {
+    while (this._pendingCandidates.length > 0) {
+      const candidate = this._pendingCandidates.shift()!;
+      try {
+        await this._pc?.addIceCandidate(candidate);
+      } catch (e) {
+        console.warn('[WebRTC] Failed to add pending ICE candidate:', e);
+      }
     }
   }
 

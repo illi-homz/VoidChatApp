@@ -1,6 +1,6 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { Contact, User, Message } from '../types';
+import type { Contact, User, Message, CallRecord } from '../types';
 
 function keys(serverId: string) {
   return {
@@ -20,6 +20,7 @@ export class AppStore {
   messages: Map<string, Message[]> = new Map();
   unreadCount: Record<string, number> = {};
   currentServerId: string | null = null;
+  callRecords: CallRecord[] = [];
 
   constructor() {
     makeAutoObservable(this);
@@ -164,6 +165,10 @@ export class AppStore {
   async incrementUnread(contactId: string): Promise<void> {
     this.unreadCount = { ...this.unreadCount, [contactId]: (this.unreadCount[contactId] ?? 0) + 1 };
     await AsyncStorage.setItem(this.KEYS.UNREAD, JSON.stringify(this.unreadCount));
+  }
+
+  addCallRecord(record: CallRecord): void {
+    this.callRecords.push(record);
   }
 
   async clearAll(): Promise<void> {

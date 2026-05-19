@@ -69,6 +69,7 @@ jest.mock('../src/services/socket', () => {
     onCallTimedOut: jest.fn(() => jest.fn()),
     onIceCandidate: jest.fn(() => jest.fn()),
     onCallIncoming: jest.fn(() => jest.fn()),
+    onDisconnected: jest.fn(),
   };
   return { socketService: mockSocket };
 });

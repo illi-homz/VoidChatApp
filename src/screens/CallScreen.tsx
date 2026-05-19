@@ -10,13 +10,14 @@ import { webrtcService } from '../services/WebRTCService';
 import { socketService } from '../services/socket';
 import { useToast } from '../components/Toast';
 import type { RootStackParamList } from '../navigation/types';
+import { appStore } from '../stores/AppStore';
 
 const CallScreenComponent: React.FC = observer(() => {
   console.log('[CallScreen] RENDER');
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'Call'>>();
   const params = route.params ?? ({} as RootStackParamList['Call']);
-  const { contactId, contactName, direction, sdp, callId: routeCallId } = params;
+  const { contactId, contactName, direction } = params;
   const { toast } = useToast();
 
   const endedRef = useRef(false);
@@ -96,7 +97,8 @@ const CallScreenComponent: React.FC = observer(() => {
       initiateOutgoingCall(contactId ?? '', contactName ?? '');
     } else if (direction === 'incoming') {
       console.log('[CallScreen] accepting incoming call');
-      acceptIncomingCall();
+      const incomingParams = params as { sdp: string; callId: string };
+      acceptIncomingCall(incomingParams.sdp, incomingParams.callId);
     }
 
     return () => {
@@ -109,7 +111,7 @@ const CallScreenComponent: React.FC = observer(() => {
       webrtcService.onIceCandidate = null;
       webrtcService.onRemoteStream = null;
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // deps: []
 
   // ---- Сокет-подписки ----
   useEffect(() => {
@@ -161,7 +163,8 @@ const CallScreenComponent: React.FC = observer(() => {
     const unsubEnded = socketService.onCallEnded(data => {
       if (data.callId === callStore.callId && !endedRef.current) {
         endedRef.current = true;
-        callStore.endCall();
+        const record = callStore.endCall();
+        if (record) appStore.addCallRecord(record);
         webrtcService.stopCall();
         const mins = Math.floor(data.duration / 60);
         const secs = data.duration % 60;
@@ -175,6 +178,13 @@ const CallScreenComponent: React.FC = observer(() => {
       if (data.callId === callStore.callId && !endedRef.current) {
         endedRef.current = true;
         callStore.setFailed('Абонент не ответил');
+        appStore.addCallRecord({
+          contactId: callStore.contactId ?? '',
+          direction: callStore.direction,
+          duration: callStore.duration,
+          timestamp: Date.now(),
+          status: 'missed',
+        });
         toast('Нет ответа', 'error');
         setTimeout(() => navigation.goBack(), 2000);
       }
@@ -193,10 +203,27 @@ const CallScreenComponent: React.FC = observer(() => {
     // Мониторинг соединения — через onConnectionState callback
     // (установлен в init useEffect)
 
-    // Удалённый поток — через onRemoteStream callback
-    // (установлен в init useEffect)
+    // Обработка отключения сокета во время звонка
+    const handleDisconnected = () => {
+      if (!endedRef.current) {
+        endedRef.current = true;
+        callStore.setFailed('Соединение с сервером потеряно');
+        appStore.addCallRecord({
+          contactId: callStore.contactId ?? '',
+          direction: callStore.direction,
+          duration: callStore.duration,
+          timestamp: Date.now(),
+          status: 'missed',
+        });
+        webrtcService.stopCall();
+        toast('Соединение прервано', 'error');
+        setTimeout(() => navigation.goBack(), 2000);
+      }
+    };
+    socketService.onDisconnected(handleDisconnected);
 
     return () => {
+      socketService.onDisconnected(null);
       unsubCallIncoming();
       unsubOfferSent();
       unsubAccepted();
@@ -210,7 +237,7 @@ const CallScreenComponent: React.FC = observer(() => {
       webrtcService.onIceCandidate = null;
       webrtcService.onRemoteStream = null;
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // deps: []
 
   // ---- Функция инициации исходящего звонка ----
   const initiateOutgoingCall = async (userId: string, name: string) => {
@@ -237,10 +264,10 @@ const CallScreenComponent: React.FC = observer(() => {
   };
 
   // ---- Функция принятия входящего звонка ----
-  const acceptIncomingCall = async () => {
+  const acceptIncomingCall = async (sdp: string, callId: string) => {
     try {
-      const answerSdp = await webrtcService.createAnswer(sdp ?? '');
-      socketService.sendCallAccept(routeCallId ?? '', answerSdp);
+      const answerSdp = await webrtcService.createAnswer(sdp);
+      socketService.sendCallAccept(callId, answerSdp);
       callStore.setConnected();
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Ошибка подключения';
@@ -254,7 +281,10 @@ const CallScreenComponent: React.FC = observer(() => {
     if (endedRef.current) return;
     endedRef.current = true;
 
-    callStore.endCall();
+    const record = callStore.endCall();
+    if (record) {
+      appStore.addCallRecord(record);
+    }
     if (callStore.callId) {
       socketService.sendCallHangup(callStore.callId);
     }
@@ -373,7 +403,12 @@ const CallScreenComponent: React.FC = observer(() => {
       </View>
 
       <View style={styles.endCallSection}>
-        <TouchableOpacity style={styles.endCallButton} onPress={handleEndCall} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={styles.endCallButton}
+          onPress={handleEndCall}
+          activeOpacity={0.7}
+          accessibilityLabel='Завершить звонок'
+        >
           <CallIcon size={28} color={Colors.textPrimary} />
         </TouchableOpacity>
         {!showControls && !isInactive && <Text style={styles.endCallLabel}>Завершить</Text>}

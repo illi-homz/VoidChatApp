@@ -49,6 +49,11 @@ export const HomeScreen = observer(function HomeScreen({
     sdp: string;
     contactName: string;
   } | null>(null);
+  const incomingCallDataRef = useRef<typeof incomingCallData>(null);
+
+  useEffect(() => {
+    incomingCallDataRef.current = incomingCallData;
+  }, [incomingCallData]);
 
   function animatePress(scaleAnim: Animated.Value): void {
     Animated.spring(scaleAnim, {
@@ -256,7 +261,8 @@ export const HomeScreen = observer(function HomeScreen({
     // ---- Call listeners ----
     socketService.onCallIncoming((data: CallOffer) => {
       // Если у пользователя уже активный звонок — отклонить входящий
-      if (callStore.status !== 'idle') {
+      // (двойная проверка: статус стора + ref для защиты от гонки модалки)
+      if (callStore.status !== 'idle' || incomingCallDataRef.current !== null) {
         socketService.sendCallDecline(data.callId);
         return;
       }

@@ -5,11 +5,17 @@ export type RootStackParamList = {
   AddFriend: undefined;
   ShareId: undefined;
   AddServer: undefined;
-  Call: {
-    contactId: string;
-    contactName: string;
-    direction: 'outgoing' | 'incoming';
-    sdp?: string;
-    callId?: string;
-  };
+  Call:
+    | {
+        contactId: string;
+        contactName: string;
+        direction: 'outgoing';
+      }
+    | {
+        contactId: string;
+        contactName: string;
+        direction: 'incoming';
+        sdp: string;
+        callId: string;
+      };
 };
