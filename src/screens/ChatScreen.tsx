@@ -425,13 +425,13 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
           contactName={displayName}
           onConfirm={() => {
             setShowCallConfirm(false);
-            requestAnimationFrame(() => {
+            setTimeout(() => {
               navigation.navigate('Call', {
                 contactId,
                 contactName: displayName,
                 direction: 'outgoing',
               });
-            });
+            }, 100);
           }}
           onCancel={() => setShowCallConfirm(false)}
         />
