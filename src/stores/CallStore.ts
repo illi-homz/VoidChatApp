@@ -36,7 +36,11 @@ export class CallStore {
     this.contactId = params.contactId;
     this.contactName = params.contactName;
     this.direction = 'outgoing';
-    InCallManager.start({ media: 'audio' });
+    try {
+      InCallManager.start({ media: 'audio' });
+    } catch {
+      // ignore — аудио-сессия не критична для звонка
+    }
   }
 
   /**
@@ -53,7 +57,11 @@ export class CallStore {
     this.contactName = params.contactName;
     this.direction = 'incoming';
     // Воспроизвести рингтон (30 секунд, по умолчанию, без вибрации)
-    InCallManager.startRingtone('_DEFAULT_', [], '', 30);
+    try {
+      InCallManager.startRingtone('_DEFAULT_', [], '', 30);
+    } catch {
+      // ignore — рингтон не критичен
+    }
   }
 
   /**
@@ -65,8 +73,16 @@ export class CallStore {
     this._callStartTime = Date.now();
     this._startDurationTimer();
     // Остановить рингтон и переключиться в режим разговора
-    InCallManager.stopRingtone();
-    InCallManager.start({ media: 'audio' });
+    try {
+      InCallManager.stopRingtone();
+    } catch {
+      // ignore
+    }
+    try {
+      InCallManager.start({ media: 'audio' });
+    } catch {
+      // ignore — аудио-сессия не критична
+    }
   }
 
   /**
@@ -74,7 +90,11 @@ export class CallStore {
    */
   toggleMute(): void {
     this.isMuted = !this.isMuted;
-    InCallManager.setMicrophoneMute(this.isMuted);
+    try {
+      InCallManager.setMicrophoneMute(this.isMuted);
+    } catch {
+      // ignore — WebRTC трек отключается отдельно
+    }
     webrtcService.setMicrophoneEnabled(!this.isMuted);
   }
 
@@ -83,7 +103,11 @@ export class CallStore {
    */
   toggleSpeaker(): void {
     this.isSpeakerOn = !this.isSpeakerOn;
-    InCallManager.setSpeakerphoneOn(this.isSpeakerOn);
+    try {
+      InCallManager.setSpeakerphoneOn(this.isSpeakerOn);
+    } catch {
+      // ignore
+    }
   }
 
   /**
@@ -93,8 +117,16 @@ export class CallStore {
    */
   endCall(_endedBy?: string): CallRecord | null {
     this._stopDurationTimer();
-    InCallManager.stopRingtone();
-    InCallManager.stop();
+    try {
+      InCallManager.stopRingtone();
+    } catch {
+      // ignore
+    }
+    try {
+      InCallManager.stop();
+    } catch {
+      // ignore
+    }
 
     const record: CallRecord | null = this.contactId
       ? {
@@ -116,8 +148,16 @@ export class CallStore {
   setFailed(error: string): void {
     this.status = 'failed';
     this.error = error;
-    InCallManager.stopRingtone();
-    InCallManager.stop();
+    try {
+      InCallManager.stopRingtone();
+    } catch {
+      // ignore
+    }
+    try {
+      InCallManager.stop();
+    } catch {
+      // ignore
+    }
   }
 
   /**

@@ -238,6 +238,11 @@ const CallScreenComponent: React.FC = observer(() => {
 
   // ---- Функция инициации исходящего звонка ----
   const initiateOutgoingCall = async (userId: string, name: string) => {
+    if (!userId) {
+      callStore.setFailed('Некорректный контакт');
+      toast('Ошибка: не указан контакт', 'error');
+      return;
+    }
     try {
       const generatedCallId = `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       callStore.startOutgoingCall({
@@ -248,9 +253,10 @@ const CallScreenComponent: React.FC = observer(() => {
 
       const localSdp = await webrtcService.createOffer();
       socketService.sendCallOffer(userId, localSdp, generatedCallId);
-    } catch {
-      callStore.setFailed('Не удалось начать звонок');
-      toast('Ошибка при создании звонка', 'error');
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Не удалось начать звонок';
+      callStore.setFailed(message);
+      toast(message, 'error');
     }
   };
 
