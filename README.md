@@ -28,7 +28,7 @@ npm run android    # Android
 cd ../voidchat-server && npm install && npm run dev
 ```
 
-Сервер по умолчанию на `ws://127.0.0.1:3001`.
+Сервер по умолчанию на `ws://127.0.0.1:9001`.
 
 ### Деплой на удалённый VPS
 
@@ -38,6 +38,9 @@ cd ../voidchat-server && npm install && npm run dev
 curl -sS https://raw.githubusercontent.com/illi-homz/voidchat-server/main/deploy.sh | bash
 
 Скрипт сам установит Node.js, скачает сервер, соберёт, настроит фаервол и запустит через pm2. После деплоя введите полученный IP:Port на экране добавления сервера в приложении.
+
+После деплоя для обновления сервера используйте `./update.sh` в директории сервера.
+Для полного удаления сервера с VPS — `./uninstall.sh`.
 
 > **Важно:** при первом запуске Android может потребоваться очистка кэша эмулятора:
 > `adb -s emulator-5554 uninstall com.voidchatapp && adb -s emulator-5554 shell pm trim-caches 99999999999`
@@ -162,6 +165,7 @@ class ServerStore {
 | `friend_accept` | `{ targetUserId }` | `HomeScreen` (Accept) | Принять запрос |
 | `friend_decline` | `{ targetUserId }` | `HomeScreen` (Decline) | Отклонить запрос |
 | `message` | `{ to, ciphertext, nonce }` | `ChatScreen` | Отправить сообщение |
+| `messages_read` | `{ from, contactId }` | `ChatScreen` | Уведомить собеседника о прочтении |
 | `get_presence` | `{ userIds }` | Не вызывается (задел) | Проверить статус |
 
 ### Сервер → Клиент
@@ -180,6 +184,7 @@ class ServerStore {
 | `message` | `{ from, ciphertext, nonce, timestamp }` | **ChatScreen** — расшифровка + рендер | Входящее сообщение |
 | `message_sent` | `{ to, ciphertext, nonce, timestamp }` | **ChatScreen** — статус `✓` | Доставлено |
 | `message_failed` | `{ to, reason }` | **ChatScreen** — статус `✗` | Ошибка доставки |
+| `messages_read` | `{ readBy }` | **ChatScreen** | Собеседник прочитал сообщения |
 
 ## E2E шифрование
 
