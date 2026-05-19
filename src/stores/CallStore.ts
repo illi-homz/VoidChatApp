@@ -1,7 +1,16 @@
 import { makeAutoObservable, runInAction } from 'mobx';
-import InCallManager from 'react-native-incall-manager';
 import { webrtcService } from '../services/WebRTCService';
 import type { CallStatus, CallRecord } from '../types';
+
+// InCallManager — опциональный нативный модуль для управления аудио-сессией.
+// Если не залинкован или несовместим — звонок работает без него.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let InCallManager: Record<string, any> | null = null;
+try {
+  InCallManager = require('react-native-incall-manager').default;
+} catch {
+  // InCallManager не доступен — продолжаем без аудио-сессии (try/catch в методах)
+}
 
 export class CallStore {
   // ---- Observable state ----

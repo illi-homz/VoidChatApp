@@ -1,4 +1,3 @@
-import { PermissionsAndroid, Platform } from 'react-native';
 import {
   mediaDevices,
   MediaStream,
@@ -120,36 +119,12 @@ class WebRTCService {
    * Запрашивает доступ к микрофону и возвращает локальный аудиопоток.
    * При повторном вызове возвращает уже существующий поток.
    */
-  /**
-   * Запрашивает runtime-разрешение RECORD_AUDIO на Android 13+ (API 33+).
-   * На более старых версиях разрешение выдаётся при установке.
-   */
-  async requestAudioPermission(): Promise<boolean> {
-    if (Platform.OS !== 'android') return true;
-    try {
-      const granted = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-        {
-          title: 'Доступ к микрофону',
-          message: 'Приложению нужен доступ к микрофону для совершения звонков.',
-          buttonPositive: 'Разрешить',
-          buttonNegative: 'Запретить',
-        },
-      );
-      return granted === PermissionsAndroid.RESULTS.GRANTED;
-    } catch {
-      return false;
-    }
-  }
-
   async startLocalStream(): Promise<MediaStream> {
     if (this._localStream) {
       return this._localStream;
     }
-    const hasPermission = await this.requestAudioPermission();
-    if (!hasPermission) {
-      throw new Error('Нет разрешения на доступ к микрофону');
-    }
+    // Разрешение RECORD_AUDIO запрашивается внутри getUserMedia библиотеки
+    // react-native-webrtc — на Android 13+ появится системный диалог
     const stream = await mediaDevices.getUserMedia({ audio: true, video: false });
     this._localStream = stream;
     return stream;
