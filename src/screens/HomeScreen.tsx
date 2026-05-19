@@ -3,9 +3,9 @@ import { View, Text, FlatList, TouchableOpacity, StyleSheet, Animated } from 're
 import { observer } from 'mobx-react-lite';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
-import type { Contact } from '../types';
+import type { Contact, CallOffer } from '../types';
 import type { BottomSheetAction } from '../components/BottomSheet';
-import { useStore, useServerStore } from '../stores';
+import { useStore, useServerStore, useCallStore } from '../stores';
 import { socketService } from '../services/socket';
 import { ContactItem } from '../components/ContactItem';
 import { BottomSheet } from '../components/BottomSheet';
@@ -17,6 +17,7 @@ import { maskUserId } from '../utils/maskUserId';
 import { Colors } from '../theme';
 import { PirateIcon } from '../components/PirateIcon';
 import { BackButton } from '../components/BackButton';
+import { IncomingCallBanner } from '../components/IncomingCallBanner';
 
 interface HomeScreenProps {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Home'>;
@@ -41,6 +42,13 @@ export const HomeScreen = observer(function HomeScreen({
   const onMessageCleanupRef = useRef<(() => void) | null>(null);
   const [friendBtnScale] = useState(new Animated.Value(1));
   const [shareBtnScale] = useState(new Animated.Value(1));
+  const callStore = useCallStore();
+  const [incomingCallData, setIncomingCallData] = useState<{
+    callId: string;
+    fromUserId: string;
+    sdp: string;
+    contactName: string;
+  } | null>(null);
 
   function animatePress(scaleAnim: Animated.Value): void {
     Animated.spring(scaleAnim, {
@@ -96,6 +104,7 @@ export const HomeScreen = observer(function HomeScreen({
       socketService.offFriendRequestSent();
       socketService.offFriendConfirmed();
       socketService.offKicked();
+      socketService.offCallIncoming();
       onMessageCleanupRef.current?.();
     };
   }, []);
@@ -243,6 +252,40 @@ export const HomeScreen = observer(function HomeScreen({
         });
       }
     });
+
+    // ---- Call listeners ----
+    socketService.onCallIncoming((data: CallOffer) => {
+      // Если у пользователя уже активный звонок — отклонить входящий
+      if (callStore.status !== 'idle') {
+        socketService.sendCallDecline(data.callId);
+        return;
+      }
+
+      const contact = store.contacts.find(c => c.userId === data.fromUserId);
+      // Звонок от незнакомца — автоматически отклонить
+      if (!contact) {
+        socketService.sendCallDecline(data.callId);
+        return;
+      }
+
+      const name = contact.nickname ?? maskUserId(contact.userId);
+
+      callStore.startIncomingCall({
+        callId: data.callId,
+        fromUserId: data.fromUserId,
+        contactName: name,
+      });
+
+      setIncomingCallData({
+        callId: data.callId,
+        fromUserId: data.fromUserId,
+        sdp: data.sdp,
+        contactName: name,
+      });
+    });
+
+    // callAccepted, callDeclined, callEnded, callTimedOut обрабатываются в CallScreen
+    // через независимые подписки (array-based callbacks в socket.ts)
   }
 
   function handleAcceptFriend(request: { fromUserId: string; fromPublicKey: string | null }): void {
@@ -384,6 +427,30 @@ export const HomeScreen = observer(function HomeScreen({
           setClearChatTarget(null);
         }}
       />
+      {incomingCallData && (
+        <IncomingCallBanner
+          visible={true}
+          contactName={incomingCallData.contactName}
+          contactId={incomingCallData.fromUserId}
+          onAccept={async () => {
+            setIncomingCallData(null);
+            navigation.navigate('Call', {
+              contactId: incomingCallData.fromUserId,
+              contactName: incomingCallData.contactName,
+              direction: 'incoming',
+              sdp: incomingCallData.sdp,
+              callId: incomingCallData.callId,
+            });
+          }}
+          onDecline={() => {
+            if (incomingCallData) {
+              socketService.sendCallDecline(incomingCallData.callId);
+              callStore.reset();
+            }
+            setIncomingCallData(null);
+          }}
+        />
+      )}
     </View>
   );
 });

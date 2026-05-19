@@ -52,3 +52,52 @@ export interface ServerConfig {
   name: string;
   url: string;
 }
+
+// ---- Call types ----
+
+export type CallStatus = 'idle' | 'calling' | 'ringing' | 'connected' | 'ended' | 'failed';
+
+export interface CallOffer {
+  callId: string;
+  fromUserId: string;
+  sdp: string;
+}
+
+export interface CallOfferSent {
+  callId: string;
+  targetUserId: string;
+}
+
+export interface CallAnswer {
+  callId: string;
+  sdp: string;
+}
+
+export interface CallIceCandidate {
+  callId: string;
+  candidate: string;
+}
+
+export interface CallEnded {
+  callId: string;
+  duration: number;
+  endedBy: string;
+}
+
+export interface CallDeclined {
+  callId: string;
+  reason: string;
+}
+
+export interface CallTimedOut {
+  callId: string;
+  reason: 'no_answer' | 'offline';
+}
+
+export interface CallRecord {
+  contactId: string;
+  direction: 'outgoing' | 'incoming';
+  duration: number;
+  timestamp: number;
+  status: 'missed' | 'completed' | 'declined';
+}

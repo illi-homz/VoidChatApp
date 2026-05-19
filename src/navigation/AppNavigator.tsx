@@ -8,6 +8,7 @@ import { ChatScreen } from '../screens/ChatScreen';
 import { AddFriendScreen } from '../screens/AddFriendScreen';
 import { AddServerScreen } from '../screens/AddServerScreen';
 import { ShareIdScreen } from '../screens/ShareIdScreen';
+import { CallScreen } from '../screens/CallScreen';
 import { Colors } from '../theme/colors';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -38,6 +39,11 @@ export function AppNavigator({ onReady }: AppNavigatorProps): React.JSX.Element 
         <Stack.Screen name='Welcome' component={WelcomeScreen} options={{ headerShown: false }} />
         <Stack.Screen name='Home' component={HomeScreen} />
         <Stack.Screen name='Chat' component={ChatScreen} options={{ title: '⚓ Чат' }} />
+        <Stack.Screen
+          name='Call'
+          component={CallScreen}
+          options={{ headerShown: false, presentation: 'fullScreenModal' }}
+        />
         <Stack.Screen
           name='AddFriend'
           component={AddFriendScreen}

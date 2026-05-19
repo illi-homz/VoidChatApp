@@ -1,5 +1,17 @@
 import { io, Socket } from 'socket.io-client';
-import type { FriendRequest, ServerMessage, PresenceUpdate, EncryptedPayload } from '../types';
+import type {
+  FriendRequest,
+  ServerMessage,
+  PresenceUpdate,
+  EncryptedPayload,
+  CallOffer,
+  CallOfferSent,
+  CallAnswer,
+  CallIceCandidate,
+  CallEnded,
+  CallDeclined,
+  CallTimedOut,
+} from '../types';
 
 const HEARTBEAT_INTERVAL = 30000;
 
@@ -46,6 +58,22 @@ class SocketService {
     targetPublicKey: string | null;
   }> = [];
   private messageBuffer: ServerMessage[] = [];
+
+  private callIncomingCallbacks: Array<(data: CallOffer) => void> = [];
+  private callOfferSentCallbacks: Array<(data: CallOfferSent) => void> = [];
+  private callAcceptedCallbacks: Array<(data: CallAnswer) => void> = [];
+  private callDeclinedCallbacks: Array<(data: CallDeclined) => void> = [];
+  private callEndedCallbacks: Array<(data: CallEnded) => void> = [];
+  private iceCandidateCallbacks: Array<(data: CallIceCandidate) => void> = [];
+  private callTimedOutCallbacks: Array<(data: CallTimedOut) => void> = [];
+
+  private callIncomingBuffer: CallOffer[] = [];
+  private callOfferSentBuffer: CallOfferSent[] = [];
+  private callAcceptedBuffer: CallAnswer[] = [];
+  private callDeclinedBuffer: CallDeclined[] = [];
+  private callEndedBuffer: CallEnded[] = [];
+  private iceCandidateBuffer: CallIceCandidate[] = [];
+  private callTimedOutBuffer: CallTimedOut[] = [];
 
   connect(serverUrl: string, userId: string, publicKey: string): Promise<void> {
     if (this.socket) {
@@ -190,6 +218,62 @@ class SocketService {
         this.presenceCallback?.(data);
       });
 
+      this.socket.on('call_incoming', (data: CallOffer) => {
+        if (this.callIncomingCallbacks.length > 0) {
+          for (const cb of this.callIncomingCallbacks) cb(data);
+        } else {
+          this.callIncomingBuffer.push(data);
+        }
+      });
+
+      this.socket.on('call_offer_sent', (data: CallOfferSent) => {
+        if (this.callOfferSentCallbacks.length > 0) {
+          for (const cb of this.callOfferSentCallbacks) cb(data);
+        } else {
+          this.callOfferSentBuffer.push(data);
+        }
+      });
+
+      this.socket.on('call_accepted', (data: CallAnswer) => {
+        if (this.callAcceptedCallbacks.length > 0) {
+          for (const cb of this.callAcceptedCallbacks) cb(data);
+        } else {
+          this.callAcceptedBuffer.push(data);
+        }
+      });
+
+      this.socket.on('call_declined', (data: CallDeclined) => {
+        if (this.callDeclinedCallbacks.length > 0) {
+          for (const cb of this.callDeclinedCallbacks) cb(data);
+        } else {
+          this.callDeclinedBuffer.push(data);
+        }
+      });
+
+      this.socket.on('call_ended', (data: CallEnded) => {
+        if (this.callEndedCallbacks.length > 0) {
+          for (const cb of this.callEndedCallbacks) cb(data);
+        } else {
+          this.callEndedBuffer.push(data);
+        }
+      });
+
+      this.socket.on('ice_candidate', (data: CallIceCandidate) => {
+        if (this.iceCandidateCallbacks.length > 0) {
+          for (const cb of this.iceCandidateCallbacks) cb(data);
+        } else {
+          this.iceCandidateBuffer.push(data);
+        }
+      });
+
+      this.socket.on('call_timedout', (data: CallTimedOut) => {
+        if (this.callTimedOutCallbacks.length > 0) {
+          for (const cb of this.callTimedOutCallbacks) cb(data);
+        } else {
+          this.callTimedOutBuffer.push(data);
+        }
+      });
+
       this.socket.on('error', (data: { message: string }) => {
         console.error('Socket error:', data.message);
         this.errorCallback?.(data);
@@ -245,6 +329,20 @@ class SocketService {
     this.disconnectedCallback = null;
     this.kickedCallback = null;
     this.errorCallback = null;
+    this.callIncomingCallbacks = [];
+    this.callIncomingBuffer = [];
+    this.callOfferSentCallbacks = [];
+    this.callOfferSentBuffer = [];
+    this.callAcceptedCallbacks = [];
+    this.callAcceptedBuffer = [];
+    this.callDeclinedCallbacks = [];
+    this.callDeclinedBuffer = [];
+    this.callEndedCallbacks = [];
+    this.callEndedBuffer = [];
+    this.iceCandidateCallbacks = [];
+    this.iceCandidateBuffer = [];
+    this.callTimedOutCallbacks = [];
+    this.callTimedOutBuffer = [];
   }
 
   sendFriendRequest(targetUserId: string): void {
@@ -264,6 +362,26 @@ class SocketService {
     const userId = this.getUserId();
     if (!userId) return;
     this.socket.emit('messages_read', { from: userId, contactId });
+  }
+
+  sendCallOffer(targetUserId: string, sdp: string, callId?: string): void {
+    this.socket?.emit('call_offer', { targetUserId, sdp, callId });
+  }
+
+  sendCallAccept(callId: string, sdp: string): void {
+    this.socket?.emit('call_accept', { callId, sdp });
+  }
+
+  sendCallDecline(callId: string): void {
+    this.socket?.emit('call_decline', { callId });
+  }
+
+  sendCallHangup(callId: string): void {
+    this.socket?.emit('call_hangup', { callId });
+  }
+
+  sendIceCandidate(callId: string, candidate: string): void {
+    this.socket?.emit('ice_candidate', { callId, candidate });
   }
 
   onMessagesRead(callback: ((_: { readBy: string }) => void) | null): void {
@@ -400,6 +518,112 @@ class SocketService {
 
   offPresence(): void {
     this.presenceCallback = null;
+  }
+
+  onCallIncoming(callback: (_: CallOffer) => void): () => void {
+    this.callIncomingCallbacks.push(callback);
+    // Flush buffer to the new callback
+    while (this.callIncomingBuffer.length > 0) {
+      callback(this.callIncomingBuffer.shift()!);
+    }
+    return () => {
+      this.callIncomingCallbacks = this.callIncomingCallbacks.filter(cb => cb !== callback);
+    };
+  }
+
+  offCallIncoming(): void {
+    this.callIncomingCallbacks = [];
+    this.callIncomingBuffer = [];
+  }
+
+  onCallOfferSent(callback: (_: CallOfferSent) => void): () => void {
+    this.callOfferSentCallbacks.push(callback);
+    while (this.callOfferSentBuffer.length > 0) {
+      callback(this.callOfferSentBuffer.shift()!);
+    }
+    return () => {
+      this.callOfferSentCallbacks = this.callOfferSentCallbacks.filter(cb => cb !== callback);
+    };
+  }
+
+  offCallOfferSent(): void {
+    this.callOfferSentCallbacks = [];
+    this.callOfferSentBuffer = [];
+  }
+
+  onCallAccepted(callback: (_: CallAnswer) => void): () => void {
+    this.callAcceptedCallbacks.push(callback);
+    while (this.callAcceptedBuffer.length > 0) {
+      callback(this.callAcceptedBuffer.shift()!);
+    }
+    return () => {
+      this.callAcceptedCallbacks = this.callAcceptedCallbacks.filter(cb => cb !== callback);
+    };
+  }
+
+  offCallAccepted(): void {
+    this.callAcceptedCallbacks = [];
+    this.callAcceptedBuffer = [];
+  }
+
+  onCallDeclined(callback: (_: CallDeclined) => void): () => void {
+    this.callDeclinedCallbacks.push(callback);
+    while (this.callDeclinedBuffer.length > 0) {
+      callback(this.callDeclinedBuffer.shift()!);
+    }
+    return () => {
+      this.callDeclinedCallbacks = this.callDeclinedCallbacks.filter(cb => cb !== callback);
+    };
+  }
+
+  offCallDeclined(): void {
+    this.callDeclinedCallbacks = [];
+    this.callDeclinedBuffer = [];
+  }
+
+  onCallEnded(callback: (_: CallEnded) => void): () => void {
+    this.callEndedCallbacks.push(callback);
+    while (this.callEndedBuffer.length > 0) {
+      callback(this.callEndedBuffer.shift()!);
+    }
+    return () => {
+      this.callEndedCallbacks = this.callEndedCallbacks.filter(cb => cb !== callback);
+    };
+  }
+
+  offCallEnded(): void {
+    this.callEndedCallbacks = [];
+    this.callEndedBuffer = [];
+  }
+
+  onIceCandidate(callback: (_: CallIceCandidate) => void): () => void {
+    this.iceCandidateCallbacks.push(callback);
+    while (this.iceCandidateBuffer.length > 0) {
+      callback(this.iceCandidateBuffer.shift()!);
+    }
+    return () => {
+      this.iceCandidateCallbacks = this.iceCandidateCallbacks.filter(cb => cb !== callback);
+    };
+  }
+
+  offIceCandidate(): void {
+    this.iceCandidateCallbacks = [];
+    this.iceCandidateBuffer = [];
+  }
+
+  onCallTimedOut(callback: (_: CallTimedOut) => void): () => void {
+    this.callTimedOutCallbacks.push(callback);
+    while (this.callTimedOutBuffer.length > 0) {
+      callback(this.callTimedOutBuffer.shift()!);
+    }
+    return () => {
+      this.callTimedOutCallbacks = this.callTimedOutCallbacks.filter(cb => cb !== callback);
+    };
+  }
+
+  offCallTimedOut(): void {
+    this.callTimedOutCallbacks = [];
+    this.callTimedOutBuffer = [];
   }
 
   onPresence(callback: (_: PresenceUpdate) => void): void {

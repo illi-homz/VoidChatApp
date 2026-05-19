@@ -15,12 +15,15 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import type { RootStackParamList } from '../navigation/types';
 import type { Message, ServerMessage } from '../types';
-import { useStore, useServerStore } from '../stores';
+import { useStore, useServerStore, useCallStore } from '../stores';
 import { socketService } from '../services/socket';
 import { deriveSharedSecret, encryptMessage, decryptMessage } from '../services/crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { Colors } from '../theme/colors';
 import { BackButton } from '../components/BackButton';
+import { CallButton } from '../components/CallButton';
+import { CallConfirmAlert } from '../components/CallConfirmAlert';
+import { useToast } from '../components/Toast';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -40,6 +43,8 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
   const { bottom } = useSafeAreaInsets();
   const store = useStore();
   const serverStore = useServerStore();
+  const callStore = useCallStore();
+  const { toast } = useToast();
   const [messages, setMessages] = useState<MessageExt[]>(() =>
     store.getMessages(contactId).map(m => ({
       ...m,
@@ -51,6 +56,8 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
   const sharedSecretRef = useRef<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [showCallConfirm, setShowCallConfirm] = useState(false);
+  const displayName = store.contacts.find(c => c.userId === contactId)?.nickname ?? contactName;
 
   // На Android 15+ adjustResize игнорируется из-за edge-to-edge.
   // Используем Keyboard.addListener для ручного отступа.
@@ -69,11 +76,21 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
   }, []);
 
   useEffect(() => {
-    const contact = store.contacts.find(c => c.userId === contactId);
-    const displayName = contact?.nickname ?? contactName;
     navigation.setOptions({
       title: displayName,
       headerLeft: () => <BackButton onPress={() => navigation.goBack()} />,
+      headerRight: () => (
+        <CallButton
+          contactName={displayName}
+          onPress={() => {
+            if (callStore.status !== 'idle') {
+              toast('Уже есть активный звонок', 'error');
+              return;
+            }
+            setShowCallConfirm(true);
+          }}
+        />
+      ),
     });
     initializeChat();
 
@@ -254,7 +271,62 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
   if (Platform.OS === 'android') {
     if (Platform.Version >= 35) {
       return (
-        <View style={[styles.container, { paddingBottom: keyboardHeight }]}>
+        <>
+          <View style={[styles.container, { paddingBottom: keyboardHeight }]}>
+            <FlatList
+              ref={flatListRef}
+              data={messages}
+              renderItem={renderMessage}
+              keyExtractor={item => item.id}
+              style={{ flex: 1 }}
+              contentContainerStyle={styles.messagesList}
+              onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
+            />
+
+            <View style={[styles.inputContainer, { paddingBottom: bottom }]}>
+              <TextInput
+                style={styles.input}
+                value={inputText}
+                onChangeText={setInputText}
+                placeholder='Написать послание...'
+                placeholderTextColor={Colors.textMuted}
+                multiline
+                maxLength={1000}
+              />
+              <TouchableOpacity
+                style={[
+                  styles.sendButton,
+                  (!inputText.trim() || !isSecretReady) && styles.sendButtonDisabled,
+                ]}
+                onPress={sendMessage}
+                disabled={!inputText.trim() || !isSecretReady}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.sendButtonText}>🚀</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          {showCallConfirm && (
+            <CallConfirmAlert
+              visible={showCallConfirm}
+              contactName={displayName}
+              onConfirm={() => {
+                setShowCallConfirm(false);
+                navigation.navigate('Call', {
+                  contactId,
+                  contactName: displayName,
+                  direction: 'outgoing',
+                });
+              }}
+              onCancel={() => setShowCallConfirm(false)}
+            />
+          )}
+        </>
+      );
+    }
+    return (
+      <>
+        <View style={styles.container}>
           <FlatList
             ref={flatListRef}
             data={messages}
@@ -265,7 +337,7 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
             onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
           />
 
-          <View style={[styles.inputContainer, { paddingBottom: bottom }]}>
+          <View style={styles.inputContainer}>
             <TextInput
               style={styles.input}
               value={inputText}
@@ -288,10 +360,28 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
             </TouchableOpacity>
           </View>
         </View>
-      );
-    }
-    return (
-      <View style={styles.container}>
+        {showCallConfirm && (
+          <CallConfirmAlert
+            visible={showCallConfirm}
+            contactName={displayName}
+            onConfirm={() => {
+              setShowCallConfirm(false);
+              navigation.navigate('Call', {
+                contactId,
+                contactName: displayName,
+                direction: 'outgoing',
+              });
+            }}
+            onCancel={() => setShowCallConfirm(false)}
+          />
+        )}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <KeyboardAvoidingView style={styles.container} behavior='padding' keyboardVerticalOffset={90}>
         <FlatList
           ref={flatListRef}
           data={messages}
@@ -319,49 +409,27 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
             ]}
             onPress={sendMessage}
             disabled={!inputText.trim() || !isSecretReady}
-            activeOpacity={0.7}
           >
             <Text style={styles.sendButtonText}>🚀</Text>
           </TouchableOpacity>
         </View>
-      </View>
-    );
-  }
-
-  return (
-    <KeyboardAvoidingView style={styles.container} behavior='padding' keyboardVerticalOffset={90}>
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        renderItem={renderMessage}
-        keyExtractor={item => item.id}
-        style={{ flex: 1 }}
-        contentContainerStyle={styles.messagesList}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
-      />
-
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.input}
-          value={inputText}
-          onChangeText={setInputText}
-          placeholder='Написать послание...'
-          placeholderTextColor={Colors.textMuted}
-          multiline
-          maxLength={1000}
+      </KeyboardAvoidingView>
+      {showCallConfirm && (
+        <CallConfirmAlert
+          visible={showCallConfirm}
+          contactName={displayName}
+          onConfirm={() => {
+            setShowCallConfirm(false);
+            navigation.navigate('Call', {
+              contactId,
+              contactName: displayName,
+              direction: 'outgoing',
+            });
+          }}
+          onCancel={() => setShowCallConfirm(false)}
         />
-        <TouchableOpacity
-          style={[
-            styles.sendButton,
-            (!inputText.trim() || !isSecretReady) && styles.sendButtonDisabled,
-          ]}
-          onPress={sendMessage}
-          disabled={!inputText.trim() || !isSecretReady}
-        >
-          <Text style={styles.sendButtonText}>🚀</Text>
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+      )}
+    </>
   );
 }
 
