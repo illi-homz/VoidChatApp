@@ -54,6 +54,43 @@ const CallScreenComponent: React.FC = observer(() => {
     endedRef.current = false;
     console.log('[CallScreen] EFFECT started, direction=', direction, 'contactId=', contactId);
 
+    // Устанавливаем callbacks WebRTC ДО создания PeerConnection,
+    // чтобы не потерять ICE candidates, которые генерируются сразу
+    webrtcService.onIceCandidate = candidate => {
+      if (callStore.callId) {
+        socketService.sendIceCandidate(callStore.callId, candidate);
+      }
+    };
+    webrtcService.onRenegotiationNeeded = sdp => {
+      if (callStore.callId && callStore.contactId) {
+        socketService.sendCallOffer(callStore.contactId, sdp, callStore.callId);
+      }
+    };
+    webrtcService.onError = error => {
+      if (!endedRef.current) {
+        endedRef.current = true;
+        callStore.setFailed(error);
+        webrtcService.stopCall();
+        toast(error || 'Ошибка соединения', 'error');
+        setTimeout(() => navigation.goBack(), 2000);
+      }
+    };
+    webrtcService.onConnectionState = state => {
+      if (state === 'failed' && !endedRef.current) {
+        endedRef.current = true;
+        callStore.setFailed('Соединение прервано');
+        webrtcService.stopCall();
+        toast('Соединение потеряно', 'error');
+        setTimeout(() => navigation.goBack(), 2000);
+      } else if (state === 'disconnected') {
+        toast('Соединение нестабильно...', 'warning');
+      }
+    };
+    webrtcService.onRemoteStream = () => {
+      callStore.hasRemoteStream = true;
+    };
+
+    // Теперь запускаем звонок
     if (direction === 'outgoing') {
       console.log('[CallScreen] starting outgoing call');
       initiateOutgoingCall(contactId ?? '', contactName ?? '');
@@ -66,6 +103,11 @@ const CallScreenComponent: React.FC = observer(() => {
       console.log('[CallScreen] EFFECT cleanup');
       webrtcService.stopCall();
       callStore.reset();
+      webrtcService.onError = null;
+      webrtcService.onConnectionState = null;
+      webrtcService.onRenegotiationNeeded = null;
+      webrtcService.onIceCandidate = null;
+      webrtcService.onRemoteStream = null;
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -145,21 +187,14 @@ const CallScreenComponent: React.FC = observer(() => {
       }
     });
 
-    // ICE candidate от WebRTC → отправить через сокет
-    webrtcService.onIceCandidate = candidate => {
-      if (callStore.callId) {
-        socketService.sendIceCandidate(callStore.callId, candidate);
-      }
-    };
+    // Ошибка WebRTC — обрабатывается через onError callback
+    // (установлен в init useEffect ДО создания PeerConnection)
 
-    // Renegotiation (ICE restart)
-    webrtcService.onRenegotiationNeeded = sdp => {
-      if (callStore.callId && callStore.contactId) {
-        socketService.sendCallOffer(callStore.contactId, sdp, callStore.callId);
-      }
-    };
+    // Мониторинг соединения — через onConnectionState callback
+    // (установлен в init useEffect)
 
-    // Ошибка WebRTC
+    // Удалённый поток — через onRemoteStream callback
+    // (установлен в init useEffect)
     webrtcService.onError = error => {
       if (!endedRef.current) {
         endedRef.current = true;
