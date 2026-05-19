@@ -59,7 +59,12 @@ curl -sS https://raw.githubusercontent.com/illi-homz/voidchat-server/main/deploy
 
 ```
 src/
-├── components/          # (пусто) — сюда выносить переиспользуемые UI
+├── components/          # Переиспользуемые UI
+│   ├── CallButton           # Кнопка звонка в ChatScreen
+│   ├── CallConfirmAlert     # Диалог завершения звонка
+│   ├── CallIcon             # Иконка звонка в контактах
+│   ├── CallRecordMessage    # Сообщение-запись в истории чата
+│   └── IncomingCallBanner   # Баннер входящего звонка (HomeScreen)
 ├── hooks/               # (пусто) — сюда выносить кастомные хуки
 ├── utils/               # (пусто) — сюда выносить утилиты
 ├── navigation/
@@ -69,21 +74,24 @@ src/
 │   ├── WelcomeScreen    # Выбор/добавление сервера
 │   ├── HomeScreen       # Список контактов, обработка запросов дружбы
 │   ├── ChatScreen       # E2E-чат с индикацией доставки сообщений
+│   ├── CallScreen       # Экран голосового звонка (fullScreenModal)
 │   ├── AddFriendScreen  # Отправка запроса дружбы (ждёт подтверждения сервера), кнопка вставки из буфера
 │   ├── AddServerScreen  # Добавление нового сервера (название + URL, генерация keypair)
 │   └── ShareIdScreen    # QR-код + текст для шаринга ID
 ├── services/
 │   ├── crypto.ts        # tweetnacl: X25519 + XSalsa20-Poly1305 (pure JS)
 │   ├── socket.ts        # Socket.IO клиент + heartbeat (30с) + все события
-│   └── storage.ts       # AsyncStorage (in-memory cache для синхронного чтения)
+│   ├── storage.ts       # AsyncStorage (in-memory cache для синхронного чтения)
+│   └── WebRTCService.ts # P2P WebRTC (Opus 32kbps + RED/FEC), STUN/TURN
 ├── stores/
-│   ├── AppStore.ts      # MobX store (user, contacts, messages, unread)
+│   ├── AppStore.ts      # MobX store (user, contacts, messages, unread, callRecords)
 │   ├── ServerStore.ts   # MobX store (список серверов, активный сервер)
+│   ├── CallStore.ts     # MobX store (состояние звонка, длительность, ошибки)
 │   └── index.tsx        # StoreProvider + useStore() + useServerStore()
 ├── theme/
 │   └── colors.ts        # Централизованные цвета (10 токенов)
 └── types/
-    ├── index.ts          # Contact, Message, User, FriendRequest, ServerMessage, ServerConfig
+    ├── index.ts          # Contact, Message, User, FriendRequest, ServerMessage, ServerConfig, CallRecord
     └── navigation.ts     # Типы для navigation prop
 ```
 
@@ -99,6 +107,7 @@ src/
 | QR | react-native-qrcode-svg | Генерация QR для обмена ID |
 | Навигация | @react-navigation/native-stack | Stack-навигация (6 экранов) |
 | Случайные числа | react-native-get-random-values | Полифилл crypto.getRandomValues для Hermes |
+| WebRTC | react-native-webrtc 124.0.7 | P2P голосовые звонки (Opus 32kbps + RED/FEC) |
 | Стилизация | StyleSheet + централизованные токены | Тёмная тема |
 
 ## Состояние (MobX)
@@ -177,6 +186,11 @@ class ServerStore {
 | `message` | `{ to, ciphertext, nonce }` | `ChatScreen` | Отправить сообщение |
 | `messages_read` | `{ from, contactId }` | `ChatScreen` | Уведомить собеседника о прочтении |
 | `get_presence` | `{ userIds }` | Не вызывается (задел) | Проверить статус |
+| `call_offer` | `{ targetUserId, sdp, callId? }` | **CallScreen** / renegotiation | Инициация звонка или ICE restart |
+| `call_accept` | `{ callId, sdp }` | **CallScreen** | Принятие звонка / renegotiation answer |
+| `call_decline` | `{ callId }` | **CallScreen** / **IncomingCallBanner** | Отклонение звонка |
+| `call_hangup` | `{ callId }` | **CallScreen** | Завершение звонка |
+| `ice_candidate` | `{ callId, candidate }` | **WebRTCService** | ICE кандидат |
 
 ### Сервер → Клиент
 
@@ -195,6 +209,13 @@ class ServerStore {
 | `message_sent` | `{ to, ciphertext, nonce, timestamp }` | **ChatScreen** — статус `✓` | Доставлено |
 | `message_failed` | `{ to, reason }` | **ChatScreen** — статус `✗` | Ошибка доставки |
 | `messages_read` | `{ readBy }` | **ChatScreen** | Собеседник прочитал сообщения |
+| `call_incoming` | `{ callId, fromUserId, sdp }` | **IncomingCallBanner** / **CallScreen** | Входящий звонок (или ре-офер при ICE restart) |
+| `call_offer_sent` | `{ callId, targetUserId }` | **CallScreen** | Подтверждение отправки offer |
+| `call_accepted` | `{ callId, sdp }` | **CallScreen** | Звонок принят / renegotiation answer |
+| `call_declined` | `{ callId, reason }` | **CallScreen** | Звонок отклонён |
+| `call_ended` | `{ callId, duration, endedBy }` | **CallScreen** / **CallStore** | Звонок завершён удалённо |
+| `call_timedout` | `{ callId, reason }` | **CallScreen** | Таймаут звонка (60 сек без ответа) |
+| `ice_candidate` | `{ callId, candidate }` | **WebRTCService** | ICE кандидат от удалённой стороны |
 
 ## E2E шифрование
 
@@ -263,6 +284,7 @@ class ServerStore {
 | `clearListeners()` убивал колбэки других экранов | Заменён на точечные `off*` методы + cleanup ref для `onMessage` |
 | Один сервер на всё приложение (`SERVER_URL` в конфиге) | ServerStore + AddServerScreen: мультисерверная архитектура, каждый сервер свой userId/keypair/data |
 | Не было push-уведомлений о новых сообщениях | NotificationBanner — полупрозрачный баннер сверху при получении сообщения вне активного чата |
+| Звонки не работали — 12 критических/значительных багов | Исправлено 14 багов: ICE buffering, negotiationneeded, userActiveCall, graceful shutdown, rate-limit, двойные уведомления, потеря CallRecord, гонка входящих звонков и др. Версия v0.1.7 |
 
 ### Текущие
 
@@ -277,6 +299,7 @@ class ServerStore {
 | Сервер в отдельном репозитории | Можно добавить как submodule |
 | `@react-native-clipboard/clipboard` не установлен | Используется `Clipboard` из `react-native` (deprecated). Установить community-пакет при upgrade RN |
 | Нет возможности удалить сервер из приложения | Метод `serverStore.remove()` есть, не вызывается из UI |
+| История звонков не персистится в AsyncStorage | Только in-memory в AppStore.callRecords |
 
 ## Зависимости (ключевые)
 
@@ -291,5 +314,8 @@ react-native-get-random-values ^1.11.0 — полифилл crypto для Hermes
 react-native-qrcode-svg ^6.3.14 — QR-коды
 uuid       ^10.0.0   — генерация ID
 ```
+
+react-native-webrtc ^124.0.7 — P2P WebRTC голосовые звонки
+react-native-incall-manager ^4.2.1 — аудио-сессия (отключён, try/catch)
 
 (Удалены: `react-native-mmkv`, `libsodium-wrappers`)
