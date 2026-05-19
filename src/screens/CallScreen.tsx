@@ -64,10 +64,8 @@ const CallScreenComponent: React.FC = observer(() => {
 
     return () => {
       console.log('[CallScreen] EFFECT cleanup');
-      if (!endedRef.current) {
-        webrtcService.stopCall();
-        callStore.reset();
-      }
+      webrtcService.stopCall();
+      callStore.reset();
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -82,6 +80,13 @@ const CallScreenComponent: React.FC = observer(() => {
             socketService.sendCallAccept(data.callId, answerSdp);
           })
           .catch(() => {});
+      }
+    });
+
+    // Синхронизируем callId с серверным (если сервер не использовал наш)
+    const unsubOfferSent = socketService.onCallOfferSent(data => {
+      if (callStore.status === 'calling' && callStore.callId !== data.callId) {
+        callStore.callId = data.callId;
       }
     });
 
@@ -185,6 +190,7 @@ const CallScreenComponent: React.FC = observer(() => {
 
     return () => {
       unsubCallIncoming();
+      unsubOfferSent();
       unsubAccepted();
       unsubDeclined();
       unsubEnded();
