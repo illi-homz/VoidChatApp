@@ -72,6 +72,11 @@ class WebRTCService {
   private _iceServers: IceServer[] = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+    {
+      urls: ['turn:138.16.224.63:3478'],
+      username: 'voidchat',
+      credential: 'turn_secret_key_change_me',
+    },
   ];
 
   // ---- Вспомогательное состояние ----
