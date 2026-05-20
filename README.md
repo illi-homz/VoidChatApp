@@ -107,7 +107,7 @@ src/
 | QR | react-native-qrcode-svg | Генерация QR для обмена ID |
 | Навигация | @react-navigation/native-stack | Stack-навигация (6 экранов) |
 | Случайные числа | react-native-get-random-values | Полифилл crypto.getRandomValues для Hermes |
-| WebRTC | react-native-webrtc 124.0.7 | P2P голосовые звонки (Opus 32kbps + RED/FEC) |
+| WebRTC | react-native-webrtc 124.0.7 | P2P голосовые звонки с TURN relay (Opus 32kbps + RED/FEC) |
 | Стилизация | StyleSheet + централизованные токены | Тёмная тема |
 
 ## Состояние (MobX)
@@ -299,7 +299,6 @@ class ServerStore {
 | Сервер в отдельном репозитории | Можно добавить как submodule |
 | `@react-native-clipboard/clipboard` не установлен | Используется `Clipboard` из `react-native` (deprecated). Установить community-пакет при upgrade RN |
 | Нет возможности удалить сервер из приложения | Метод `serverStore.remove()` есть, не вызывается из UI |
-| История звонков не персистится в AsyncStorage | Только in-memory в AppStore.callRecords |
 
 ## Зависимости (ключевые)
 
