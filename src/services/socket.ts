@@ -13,6 +13,8 @@ import type {
   CallTimedOut,
 } from '../types';
 
+import { webrtcService } from './WebRTCService';
+
 const HEARTBEAT_INTERVAL = 30000;
 
 class SocketService {
@@ -113,6 +115,11 @@ class SocketService {
         this.startHeartbeat();
         this.connectedCallback?.();
         resolve();
+
+        // Асинхронно загружаем TURN-конфигурацию для пробоя NAT через WebRTC.
+        // Не блокируем connect — звонки начнут работать сразу с STUN,
+        // а TURN подтянется позже для пользователей за NAT.
+        webrtcService.fetchTurnConfig(serverUrl).catch(() => {});
       });
 
       this.socket.on('connect_error', (err: Error) => {

@@ -114,6 +114,41 @@ class WebRTCService {
     this._iceServers.push(...servers);
   }
 
+  /**
+   * Загружает TURN-конфигурацию с сервера и добавляет TURN-серверы
+   * в список ICE-серверов для пробоя NAT.
+   *
+   * Вызывается автоматически после успешного подключения к серверу.
+   * TURN не критичен для звонков — при ошибке продолжаем с STUN.
+   *
+   * @param serverUrl — URL сервера (ws:// или wss://)
+   */
+  async fetchTurnConfig(serverUrl: string): Promise<void> {
+    try {
+      // Убираем ws(s):// и получаем базовый URL для HTTP
+      const baseUrl = serverUrl.replace(/^ws/, 'http');
+      const response = await fetch(`${baseUrl}/turn-config`);
+      if (!response.ok) {
+        console.warn('[WebRTC] TURN config returned', response.status);
+        return;
+      }
+      const config = await response.json();
+      if (config && config.urls) {
+        this.addIceServers([
+          {
+            urls: config.urls,
+            username: config.username,
+            credential: config.credential,
+          },
+        ]);
+        console.log('[WebRTC] TURN config loaded successfully');
+      }
+    } catch {
+      // TURN не критичен для звонков — продолжаем без него
+      console.warn('[WebRTC] Failed to fetch TURN config');
+    }
+  }
+
   // ================================================================
   //  Захват микрофона
   // ================================================================
