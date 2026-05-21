@@ -10,6 +10,7 @@ import {
   View,
   Clipboard,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
 import { useServerStore, useStore } from '../stores';
@@ -66,6 +67,7 @@ function PasteIcon(): React.JSX.Element {
 }
 
 export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX.Element {
+  const insets = useSafeAreaInsets();
   const serverStore = useServerStore();
   const appStore = useStore();
   const { toast } = useToast();
@@ -140,7 +142,7 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <Text style={styles.title}>⚓ Новый порт</Text>

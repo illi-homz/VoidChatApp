@@ -7,8 +7,8 @@ import {
   Modal,
   Animated,
   ActivityIndicator,
-  Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import { Colors } from '../theme/colors';
 
@@ -54,6 +54,7 @@ export function QrScannerModal({
 
   // Анимация зелёной вспышки на рамке сканирования
   const flashAnim = useRef(new Animated.Value(0)).current;
+  const insets = useSafeAreaInsets();
 
   // Локальный флаг «пользователь отклонил разрешение»
   const [permissionDenied, setPermissionDenied] = useState(false);
@@ -241,7 +242,7 @@ export function QrScannerModal({
 
         {/* Кнопка закрытия (✕) в правом верхнем углу */}
         <TouchableOpacity
-          style={styles.closeButton}
+          style={[styles.closeButton, { top: insets.top + 12 }]}
           onPress={onClose}
           activeOpacity={0.7}
           accessibilityLabel='Закрыть сканер'
@@ -251,7 +252,7 @@ export function QrScannerModal({
         </TouchableOpacity>
 
         {/* Заголовок в верхней части */}
-        <Text style={styles.titleText}>Сканирование QR</Text>
+        <Text style={[styles.titleText, { top: insets.top + 12 }]}>Сканирование QR</Text>
       </View>
     </View>
   );
@@ -360,7 +361,6 @@ const styles = StyleSheet.create({
   // Кнопка закрытия
   closeButton: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 60 : 20,
     right: 20,
     width: 40,
     height: 40,
@@ -380,7 +380,6 @@ const styles = StyleSheet.create({
   // Заголовок
   titleText: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 60 : 20,
     left: 0,
     right: 0,
     textAlign: 'center',

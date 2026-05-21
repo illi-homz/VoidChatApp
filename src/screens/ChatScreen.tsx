@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,9 +6,10 @@ import {
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  KeyboardAvoidingView,
-  Keyboard,
   Platform,
+  Keyboard,
+  Dimensions,
+  KeyboardAvoidingView,
 } from 'react-native';
 
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -40,7 +41,7 @@ interface MessageExt extends Message {
 
 export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.Element {
   const { contactId, contactName } = route.params;
-  const { bottom } = useSafeAreaInsets();
+  const insets = useSafeAreaInsets();
   const store = useStore();
   const serverStore = useServerStore();
   const callStore = useCallStore();
@@ -55,25 +56,15 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
   const [isSecretReady, setIsSecretReady] = useState(false);
   const sharedSecretRef = useRef<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const initialIdsRef = useRef<Set<string> | null>(null);
   const [showCallConfirm, setShowCallConfirm] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const displayName = store.contacts.find(c => c.userId === contactId)?.nickname ?? contactName;
 
-  // На Android 15+ adjustResize игнорируется из-за edge-to-edge.
-  // Используем Keyboard.addListener для ручного отступа.
-  useEffect(() => {
-    if (Platform.OS !== 'android' || Platform.Version < 35) return;
-    const showSub = Keyboard.addListener('keyboardDidShow', e => {
-      setKeyboardHeight(e.endCoordinates.height);
-    });
-    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
-      setKeyboardHeight(0);
-    });
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
+  // Запоминаем ID сообщений, которые уже были в чате при открытии
+  if (initialIdsRef.current === null && messages.length > 0) {
+    initialIdsRef.current = new Set(messages.map(m => m.id));
+  }
 
   useEffect(() => {
     navigation.setOptions({
@@ -134,6 +125,22 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
       }),
     );
   }, [isSecretReady]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const showSub = Keyboard.addListener('keyboardDidShow', e => {
+      const { screenY } = e.endCoordinates;
+      const screenHeight = Dimensions.get('screen').height;
+      setKeyboardHeight(screenHeight - screenY);
+    });
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardHeight(0);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   function initializeChat(): void {
     const user = store.user;
@@ -238,187 +245,97 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
 
   function renderMessage({ item }: { item: MessageExt }): React.JSX.Element {
     const isMe = item.from === 'me';
+    const isNew = initialIdsRef.current && !initialIdsRef.current.has(item.id);
 
-    return (
-      <Animated.View entering={FadeInDown.duration(250)}>
-        <View style={[styles.messageBubble, isMe ? styles.myMessage : styles.theirMessage]}>
-          <Text style={styles.messageText}>{item.ciphertext}</Text>
-          <View style={styles.messageFooter}>
-            <Text style={styles.messageTime}>{formatTime(item.timestamp)}</Text>
-            {isMe && item.status && (
-              <Text
-                style={[
-                  styles.statusIcon,
-                  item.status === 'failed' && styles.statusFailed,
-                  item.status === 'sent' && styles.statusSent,
-                ]}
-              >
-                {item.status === 'pending'
-                  ? '⚓'
-                  : item.status === 'sent'
-                    ? '✓'
-                    : item.status === 'read'
-                      ? '✓✓'
-                      : '✗'}
-              </Text>
-            )}
-          </View>
-        </View>
-      </Animated.View>
-    );
-  }
-
-  if (Platform.OS === 'android') {
-    if (Platform.Version >= 35) {
-      return (
-        <>
-          <View style={[styles.container, { paddingBottom: keyboardHeight }]}>
-            <FlatList
-              ref={flatListRef}
-              data={messages}
-              renderItem={renderMessage}
-              keyExtractor={item => item.id}
-              style={{ flex: 1 }}
-              contentContainerStyle={styles.messagesList}
-              onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
-            />
-
-            <View style={[styles.inputContainer, { paddingBottom: bottom }]}>
-              <TextInput
-                style={styles.input}
-                value={inputText}
-                onChangeText={setInputText}
-                placeholder='Написать послание...'
-                placeholderTextColor={Colors.textMuted}
-                multiline
-                maxLength={1000}
-              />
-              <TouchableOpacity
-                style={[
-                  styles.sendButton,
-                  (!inputText.trim() || !isSecretReady) && styles.sendButtonDisabled,
-                ]}
-                onPress={sendMessage}
-                disabled={!inputText.trim() || !isSecretReady}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.sendButtonText}>🚀</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-          {showCallConfirm && (
-            <CallConfirmAlert
-              visible={showCallConfirm}
-              contactName={displayName}
-              onConfirm={() => {
-                setShowCallConfirm(false);
-                // Разделяем закрытие алерта и навигацию чтобы избежать race condition
-                setTimeout(() => {
-                  navigation.navigate('Call', {
-                    contactId,
-                    contactName: displayName,
-                    direction: 'outgoing',
-                  });
-                }, 100);
-              }}
-              onCancel={() => setShowCallConfirm(false)}
-            />
-          )}
-        </>
-      );
-    }
-    return (
-      <>
-        <View style={styles.container}>
-          <FlatList
-            ref={flatListRef}
-            data={messages}
-            renderItem={renderMessage}
-            keyExtractor={item => item.id}
-            style={{ flex: 1 }}
-            contentContainerStyle={styles.messagesList}
-            onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
-          />
-
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              value={inputText}
-              onChangeText={setInputText}
-              placeholder='Написать послание...'
-              placeholderTextColor={Colors.textMuted}
-              multiline
-              maxLength={1000}
-            />
-            <TouchableOpacity
+    const content = (
+      <View style={[styles.messageBubble, isMe ? styles.myMessage : styles.theirMessage]}>
+        <Text style={styles.messageText}>{item.ciphertext}</Text>
+        <View style={styles.messageFooter}>
+          <Text style={styles.messageTime}>{formatTime(item.timestamp)}</Text>
+          {isMe && item.status && (
+            <Text
               style={[
-                styles.sendButton,
-                (!inputText.trim() || !isSecretReady) && styles.sendButtonDisabled,
+                styles.statusIcon,
+                item.status === 'failed' && styles.statusFailed,
+                item.status === 'sent' && styles.statusSent,
               ]}
-              onPress={sendMessage}
-              disabled={!inputText.trim() || !isSecretReady}
-              activeOpacity={0.7}
             >
-              <Text style={styles.sendButtonText}>🚀</Text>
-            </TouchableOpacity>
-          </View>
+              {item.status === 'pending'
+                ? '⚓'
+                : item.status === 'sent'
+                  ? '✓'
+                  : item.status === 'read'
+                    ? '✓✓'
+                    : '✗'}
+            </Text>
+          )}
         </View>
-        {showCallConfirm && (
-          <CallConfirmAlert
-            visible={showCallConfirm}
-            contactName={displayName}
-            onConfirm={() => {
-              setShowCallConfirm(false);
-              setTimeout(() => {
-                navigation.navigate('Call', {
-                  contactId,
-                  contactName: displayName,
-                  direction: 'outgoing',
-                });
-              }, 100);
-            }}
-            onCancel={() => setShowCallConfirm(false)}
-          />
-        )}
-      </>
+      </View>
     );
+
+    if (isNew) {
+      return <Animated.View entering={FadeInDown.duration(250)}>{content}</Animated.View>;
+    }
+    return content;
   }
+
+  const reversedMessages = useMemo(() => [...messages].reverse(), [messages]);
+
+  const chatContent = (
+    <>
+      <FlatList
+        ref={flatListRef}
+        data={reversedMessages}
+        renderItem={renderMessage}
+        keyExtractor={item => item.id}
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.messagesList}
+        showsVerticalScrollIndicator={false}
+        inverted
+      />
+      <View style={styles.inputContainer}>
+        <TextInput
+          style={styles.input}
+          value={inputText}
+          onChangeText={setInputText}
+          placeholder='Написать послание...'
+          placeholderTextColor={Colors.textMuted}
+          multiline
+          maxLength={1000}
+        />
+        <TouchableOpacity
+          style={[
+            styles.sendButton,
+            (!inputText.trim() || !isSecretReady) && styles.sendButtonDisabled,
+          ]}
+          onPress={sendMessage}
+          disabled={!inputText.trim() || !isSecretReady}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.sendButtonText}>🚀</Text>
+        </TouchableOpacity>
+      </View>
+    </>
+  );
 
   return (
     <>
-      <KeyboardAvoidingView style={styles.container} behavior='padding' keyboardVerticalOffset={90}>
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          renderItem={renderMessage}
-          keyExtractor={item => item.id}
-          style={{ flex: 1 }}
-          contentContainerStyle={styles.messagesList}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
-        />
-
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.input}
-            value={inputText}
-            onChangeText={setInputText}
-            placeholder='Написать послание...'
-            placeholderTextColor={Colors.textMuted}
-            multiline
-            maxLength={1000}
-          />
-          <TouchableOpacity
-            style={[
-              styles.sendButton,
-              (!inputText.trim() || !isSecretReady) && styles.sendButtonDisabled,
-            ]}
-            onPress={sendMessage}
-            disabled={!inputText.trim() || !isSecretReady}
-          >
-            <Text style={styles.sendButtonText}>🚀</Text>
-          </TouchableOpacity>
+      {Platform.OS === 'android' ? (
+        <View
+          style={[
+            styles.container,
+            { paddingBottom: keyboardHeight > 0 ? keyboardHeight : Math.max(insets.bottom, 48) },
+          ]}
+        >
+          {chatContent}
         </View>
-      </KeyboardAvoidingView>
+      ) : (
+        <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 48) }]}>
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior='padding' keyboardVerticalOffset={90}>
+            {chatContent}
+          </KeyboardAvoidingView>
+        </View>
+      )}
       {showCallConfirm && (
         <CallConfirmAlert
           visible={showCallConfirm}

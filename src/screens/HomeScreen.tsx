@@ -1,5 +1,6 @@
 import React, { useEffect, useCallback, useState, useRef } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { observer } from 'mobx-react-lite';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
@@ -42,6 +43,7 @@ export const HomeScreen = observer(function HomeScreen({
   const onMessageCleanupRef = useRef<(() => void) | null>(null);
   const [friendBtnScale] = useState(new Animated.Value(1));
   const [shareBtnScale] = useState(new Animated.Value(1));
+  const insets = useSafeAreaInsets();
   const callStore = useCallStore();
   const [incomingCallData, setIncomingCallData] = useState<{
     callId: string;
@@ -384,7 +386,7 @@ export const HomeScreen = observer(function HomeScreen({
   );
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingBottom: insets.bottom }]}>
       {store.contacts.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>Команда пуста</Text>
@@ -546,6 +548,7 @@ const styles = StyleSheet.create({
   list: {
     paddingHorizontal: 16,
     paddingTop: 8,
+    paddingBottom: 16,
   },
   emptyContainer: {
     flex: 1,

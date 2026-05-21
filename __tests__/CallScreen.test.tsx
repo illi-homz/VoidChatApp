@@ -101,6 +101,7 @@ jest.mock('mobx-react-lite', () => ({
 }));
 
 import React from 'react';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import TestRenderer from 'react-test-renderer';
 import { CallScreen } from '../src/screens/CallScreen';
 import { callStore } from '../src/stores/CallStore';
@@ -110,11 +111,19 @@ describe('CallScreen', () => {
     callStore.reset();
   });
 
+  function renderWithProvider(element: React.ReactElement) {
+    return TestRenderer.create(
+      <SafeAreaProvider initialMetrics={{ frame: { x: 0, y: 0, width: 414, height: 896 }, insets: { top: 47, left: 0, bottom: 34, right: 0 } }}>
+        {element}
+      </SafeAreaProvider>,
+    );
+  }
+
   it('renders without crashing for outgoing call', async () => {
     let tree: TestRenderer.ReactTestRenderer;
 
     await TestRenderer.act(() => {
-      tree = TestRenderer.create(<CallScreen />);
+      tree = renderWithProvider(<CallScreen />);
     });
 
     expect(tree!).toBeDefined();
@@ -132,7 +141,7 @@ describe('CallScreen', () => {
     let tree: TestRenderer.ReactTestRenderer;
 
     await TestRenderer.act(() => {
-      tree = TestRenderer.create(<CallScreen />);
+      tree = renderWithProvider(<CallScreen />);
     });
 
     // Ищем кнопку с accessibilityLabel "Завершить звонок"

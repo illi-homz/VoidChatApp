@@ -8,7 +8,6 @@ import { StoreProvider } from './src/stores';
 import { ToastProvider } from './src/components/Toast';
 import { NotificationProvider } from './src/components/NotificationBanner';
 import { SplashScreen } from './src/components/SplashScreen';
-import { Colors } from './src/theme/colors';
 
 function App(): React.JSX.Element {
   const [splashVisible, setSplashVisible] = useState(true);
@@ -30,7 +29,7 @@ function App(): React.JSX.Element {
       <StoreProvider>
         <ToastProvider>
           <NotificationProvider>
-            <StatusBar barStyle="light-content" backgroundColor={Colors.background} translucent />
+            <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
             <AppNavigator onReady={handleNavigationReady} />
             {splashVisible && (
               <SplashScreen

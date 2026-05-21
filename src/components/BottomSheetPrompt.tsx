@@ -12,8 +12,8 @@ import {
   Dimensions,
   Easing,
   Keyboard,
-  Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../theme/colors';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
@@ -35,6 +35,7 @@ export function BottomSheetPrompt({
   const [localVisible, setLocalVisible] = useState(false);
   const [nickname, setNickname] = useState(currentNickname);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const insets = useSafeAreaInsets();
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const inputRef = useRef<TextInput>(null);
 
@@ -130,7 +131,7 @@ export function BottomSheetPrompt({
             styles.sheet,
             {
               transform: [{ translateY }],
-              paddingBottom: keyboardHeight + (Platform.OS === 'ios' ? 34 : 20),
+              paddingBottom: keyboardHeight + insets.bottom + 20,
             },
           ]}
           {...panResponder.panHandlers}
@@ -196,7 +197,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 16,
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
   },
   title: {
     fontSize: 18,

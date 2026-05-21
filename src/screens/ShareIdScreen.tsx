@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Share, Clipboard } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { observer } from 'mobx-react-lite';
 import QRCode from 'react-native-qrcode-svg';
 import { useStore } from '../stores';
@@ -7,6 +8,7 @@ import { useToast } from '../components/Toast';
 import { Colors } from '../theme/colors';
 
 export const ShareIdScreen = observer(function ShareIdScreen(): React.JSX.Element {
+  const insets = useSafeAreaInsets();
   const store = useStore();
   const { toast } = useToast();
 
@@ -32,14 +34,21 @@ export const ShareIdScreen = observer(function ShareIdScreen(): React.JSX.Elemen
 
   if (!store.user) {
     return (
-      <View style={styles.container}>
+      <View
+        style={[
+          styles.container,
+          { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 },
+        ]}
+      >
         <Text style={styles.errorText}>Пользователь не найден</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View
+      style={[styles.container, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 }]}
+    >
       <Text style={styles.title}>🏴 Каперское свидетельство</Text>
       <Text style={styles.subtitle}>Покажи этот свиток соратникам</Text>
 

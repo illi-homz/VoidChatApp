@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../theme/colors';
 
 type ToastType = 'success' | 'error' | 'info';
@@ -38,6 +39,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }): Reac
   const translateY = useRef(new Animated.Value(-120)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const insets = useSafeAreaInsets();
 
   const hideToast = useCallback(() => {
     Animated.parallel([
@@ -99,7 +101,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }): Reac
     <ToastContext.Provider value={{ show }}>
       {children}
       {toast !== null && (
-        <View style={styles.toastOverlay} pointerEvents='box-none'>
+        <View style={[styles.toastOverlay, { paddingTop: insets.top }]} pointerEvents='box-none'>
           <Animated.View
             style={[
               styles.toast,

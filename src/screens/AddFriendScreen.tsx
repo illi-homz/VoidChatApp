@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Clipboard,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
 import type { Contact } from '../types';
@@ -22,6 +23,7 @@ interface AddFriendScreenProps {
 }
 
 export function AddFriendScreen({ navigation }: AddFriendScreenProps): React.JSX.Element {
+  const insets = useSafeAreaInsets();
   const store = useStore();
   const { toast } = useToast();
   const [friendId, setFriendId] = useState('');
@@ -123,7 +125,9 @@ export function AddFriendScreen({ navigation }: AddFriendScreenProps): React.JSX
   }
 
   return (
-    <View style={styles.container}>
+    <View
+      style={[styles.container, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 }]}
+    >
       <Text style={styles.title}>🏴 Вербовка</Text>
       <Text style={styles.description}>Введи ID пирата, чтобы завербовать его в команду</Text>
 

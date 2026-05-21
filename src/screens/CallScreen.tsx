@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Animated, StatusBar } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { observer } from 'mobx-react-lite';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -16,9 +17,14 @@ const CallScreenComponent: React.FC = observer(() => {
   console.log('[CallScreen] RENDER');
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'Call'>>();
-  const params = route.params ?? ({} as RootStackParamList['Call']);
+  if (!route.params) return null;
+  const params = route.params;
   const { contactId, contactName, direction } = params;
+  const insets = useSafeAreaInsets();
   const { toast } = useToast();
+
+  const MIN_TOP_INSET = 60;
+  const MIN_BOTTOM_INSET = 60;
 
   const endedRef = useRef(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -194,9 +200,7 @@ const CallScreenComponent: React.FC = observer(() => {
     const unsubIce = socketService.onIceCandidate(data => {
       const myCallId = callStore.callId;
       if (!data.callId) {
-        console.warn(
-          '[CallScreen] ⚠️ ICE candidate received with NO callId, dropping',
-        );
+        console.warn('[CallScreen] ⚠️ ICE candidate received with NO callId, dropping');
         return;
       }
       if (data.callId !== myCallId) {
@@ -209,9 +213,7 @@ const CallScreenComponent: React.FC = observer(() => {
         );
         return;
       }
-      console.log(
-        '[CallScreen] 📨 ICE candidate accepted (callId match), forwarding to WebRTC',
-      );
+      console.log('[CallScreen] 📨 ICE candidate accepted (callId match), forwarding to WebRTC');
       webrtcService.addIceCandidate(data.candidate);
     });
 
@@ -360,7 +362,7 @@ const CallScreenComponent: React.FC = observer(() => {
       <StatusBar barStyle='light-content' backgroundColor='transparent' translucent />
       {isInactive && <View style={styles.inactiveOverlay} />}
 
-      <View style={styles.topSection}>
+      <View style={[styles.topSection, { paddingTop: Math.max(insets.top + 16, MIN_TOP_INSET) }]}>
         <Text style={styles.contactName}>{contactDisplayName}</Text>
         {statusText && (
           <Text
@@ -420,7 +422,12 @@ const CallScreenComponent: React.FC = observer(() => {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.endCallSection}>
+      <View
+        style={[
+          styles.endCallSection,
+          { paddingBottom: Math.max(insets.bottom + 24, MIN_BOTTOM_INSET) },
+        ]}
+      >
         <TouchableOpacity
           style={styles.endCallButton}
           onPress={handleEndCall}
@@ -440,7 +447,7 @@ export const CallScreen = CallScreenComponent;
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   inactiveOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
-  topSection: { alignItems: 'center', paddingTop: 60 },
+  topSection: { alignItems: 'center' },
   contactName: { color: Colors.text, fontSize: 24, fontWeight: '700' },
   statusText: { color: Colors.primary, fontSize: 16, marginTop: 8 },
   statusTextFailed: { color: Colors.error },
@@ -493,7 +500,7 @@ const styles = StyleSheet.create({
   controlButtonActive: { borderColor: Colors.primary, backgroundColor: Colors.surface },
   controlLabel: { fontSize: 12, color: Colors.textSecondary, marginTop: 4 },
   controlLabelActive: { color: Colors.primary },
-  endCallSection: { alignItems: 'center', paddingBottom: 60 },
+  endCallSection: { alignItems: 'center' },
   endCallButton: {
     width: 64,
     height: 64,
