@@ -192,9 +192,27 @@ const CallScreenComponent: React.FC = observer(() => {
 
     // ICE candidate от другой стороны
     const unsubIce = socketService.onIceCandidate(data => {
-      if (data.callId === callStore.callId) {
-        webrtcService.addIceCandidate(data.candidate);
+      const myCallId = callStore.callId;
+      if (!data.callId) {
+        console.warn(
+          '[CallScreen] ⚠️ ICE candidate received with NO callId, dropping',
+        );
+        return;
       }
+      if (data.callId !== myCallId) {
+        console.warn(
+          '[CallScreen] ⚠️ ICE candidate callId mismatch: received=' +
+            data.callId +
+            ', mine=' +
+            (myCallId || 'null') +
+            ', dropping',
+        );
+        return;
+      }
+      console.log(
+        '[CallScreen] 📨 ICE candidate accepted (callId match), forwarding to WebRTC',
+      );
+      webrtcService.addIceCandidate(data.candidate);
     });
 
     // Ошибка WebRTC — обрабатывается через onError callback

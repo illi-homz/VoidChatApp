@@ -23,6 +23,24 @@ declare const __DEV__: boolean;
 
 const DEFAULT_PORT = '9001';
 
+/**
+ * Очищает ввод IP: убирает http://, порт, путь, нецифровые символы.
+ * Форматирует как IP: проставляет точки между октетами, макс 4 сегмента по 3 цифры.
+ */
+function formatIpInput(text: string): string {
+  // Убираем http:// или https://
+  let clean = text.replace(/^https?:\/\//, '');
+  // Убираем порт и путь (всё после / или :)
+  clean = clean.split(/[/:]/)[0];
+  // Оставляем только цифры и точки
+  clean = clean.replace(/[^\d.]/g, '');
+  // Разбиваем по точкам, макс 4 сегмента
+  const segments = clean.split('.').slice(0, 4);
+  // Каждый сегмент — макс 3 цифры
+  const formatted = segments.map(s => s.slice(0, 3)).join('.');
+  return formatted;
+}
+
 interface AddServerScreenProps {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AddServer'>;
 }
@@ -68,7 +86,7 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
     Clipboard.getString()
       .then(text => {
         if (text) {
-          setIp(text.trim());
+          setIp(formatIpInput(text));
         }
       })
       .catch(() => {
@@ -148,8 +166,8 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
           <TextInput
             style={styles.input}
             value={ip}
-            onChangeText={setIp}
-            placeholder='IP (например: 138.16.224.63)'
+            onChangeText={text => setIp(formatIpInput(text))}
+            placeholder='IP или домен (например: 192.168.1.100)'
             placeholderTextColor={Colors.textMuted}
             autoCapitalize='none'
             autoCorrect={false}

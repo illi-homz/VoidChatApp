@@ -27,8 +27,10 @@ interface SdpInfo {
  */
 interface PcEventHandlers extends RTCPeerConnection {
   onicecandidate: ((event: { candidate: RTCIceCandidate | null }) => void) | null;
+  onicecandidateerror: ((event: any) => void) | null;
   ontrack: ((event: { streams: MediaStream[]; track: MediaStreamTrack | null }) => void) | null;
   onconnectionstatechange: (() => void) | null;
+  onnegotiationneeded: (() => void) | null;
 }
 
 /** Состояния соединения, о которых сервис уведомляет через _onConnectionState. */
@@ -72,11 +74,37 @@ class WebRTCService {
   private _iceServers: IceServer[] = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
     {
-      urls: ['turn:138.16.224.63:3478'],
+      urls: 'turn:your-server.com:3478',
       username: 'voidchat',
       credential: 'turn_secret_key_change_me',
     },
+    {
+      urls: 'turn:your-server.com:3478?transport=tcp',
+      username: 'voidchat',
+      credential: 'turn_secret_key_change_me',
+    },
+    // --- Публичный TURN (запасной, раскомментируй если свой coturn недоступен) ---
+    // OpenRelay: бесплатный TURN relay, до 50GB/мес
+    // https://www.metered.ca/tools/openrelay/
+    // {
+    //   urls: 'turn:openrelay.metered.ca:80',
+    //   username: 'openrelayproject',
+    //   credential: 'openrelayproject',
+    // },
+    // {
+    //   urls: 'turn:openrelay.metered.ca:443',
+    //   username: 'openrelayproject',
+    //   credential: 'openrelayproject',
+    // },
+    // {
+    //   urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+    //   username: 'openrelayproject',
+    //   credential: 'openrelayproject',
+    // },
   ];
 
   // ---- Вспомогательное состояние ----
@@ -85,6 +113,8 @@ class WebRTCService {
   private _iceRestartAttempted = false;
   private _pendingCandidates: RTCIceCandidate[] = [];
   private _negotiationInProgress: boolean = false;
+  private _callInSetup: boolean = false;
+  private _earlyCandidates: string[] = [];
 
   // ================================================================
   //  Геттеры
@@ -131,7 +161,7 @@ class WebRTCService {
   async fetchTurnConfig(serverUrl: string): Promise<void> {
     try {
       // Убираем ws(s):// и получаем базовый URL для HTTP
-      const baseUrl = serverUrl.replace(/^ws/, 'http');
+      const baseUrl = serverUrl.replace(/^ws(s?):\/\//, 'http$1://');
       const response = await fetch(`${baseUrl}/turn-config`);
       if (!response.ok) {
         console.warn('[WebRTC] TURN config returned', response.status);
@@ -199,44 +229,62 @@ class WebRTCService {
    */
   private async createPeerConnection(): Promise<PcEventHandlers> {
     await this.startLocalStream();
+    this._callInSetup = true;
 
+    // Для отладки TURN: раскомментируй iceTransportPolicy ниже чтобы
+    // форсировать relay-only (звонки только через TURN-сервер).
+    // Если relay-only работает — значит TURN ок, проблема в ICE-согласовании.
+    // Если нет — TURN сервер недоступен.
     const pc = new RTCPeerConnection({
       iceServers: this._iceServers,
-      bundlePolicy: 'balanced',
+      bundlePolicy: 'max-bundle',
       rtcpMuxPolicy: 'require',
       iceTransportPolicy: 'all',
+      // iceTransportPolicy: 'relay', // ← раскомментируй для теста TURN
     }) as PcEventHandlers;
+    console.log(
+      '[WebRTC] PeerConnection created with',
+      this._iceServers.length,
+      'ICE servers:',
+      this._iceServers.map(s => (Array.isArray(s.urls) ? s.urls.join(', ') : s.urls)).join(' | '),
+    );
 
-    // Добавляем локальный аудиотрек
-    if (this._localStream) {
-      this._localStream.getTracks().forEach(track => {
-        pc.addTrack(track, this._localStream!);
-      });
-    }
+    // Сохраняем pre-PC кандидаты ДО сброса буфера
+    const pendingEarly = this._earlyCandidates;
 
     // Сбрасываем флаги перед новой сессией
     this._disconnectedTimer = null;
     this._iceRestartAttempted = false;
     this._negotiationInProgress = false;
     this._pendingCandidates = [];
+    this._earlyCandidates = [];
 
     // --- onicecandidate ---
     pc.onicecandidate = (event: { candidate: RTCIceCandidate | null }) => {
-      if (event.candidate && this._onIceCandidate) {
-        this._onIceCandidate(JSON.stringify(event.candidate.toJSON()));
+      if (event.candidate) {
+        const json = event.candidate.toJSON();
+        // Тип кандидата (host/srflx/relay) лежит внутри candidate-строки: "candidate:... typ host"
+        const candidateStr = (json as any).candidate || '';
+        const typeMatch = candidateStr.match(/ typ (\S+)/);
+        const candidateType = typeMatch ? typeMatch[1] : 'unknown';
+        const addrMatch = candidateStr.match(/ (\d+\.\d+\.\d+\.\d+) /);
+        const address = addrMatch ? addrMatch[1] : '(n/a)';
+        console.log(`[WebRTC] 🧊 ICE candidate: ${candidateType}, addr=${address}`);
+        if (this._onIceCandidate) {
+          this._onIceCandidate(JSON.stringify(json));
+        }
+      } else {
+        console.log('[WebRTC] ✅ ICE candidate gathering complete');
       }
     };
 
     // --- onicecandidateerror ---
     pc.onicecandidateerror = (event: any) => {
+      const errCode = event.errorCode || event?.errorCode;
+      const errText = event.errorText || event?.errorText;
+      const errUrl = event.url || event?.url;
       console.warn(
-        '[WebRTC] ICE candidate error:',
-        'errorCode:',
-        event.errorCode || event?.errorCode,
-        'errorText:',
-        event.errorText || event?.errorText,
-        'url:',
-        event.url || event?.url,
+        `[WebRTC] ❌ ICE candidate error (code=${errCode}, text=${errText}, url=${errUrl})`,
       );
     };
 
@@ -244,6 +292,8 @@ class WebRTCService {
     pc.ontrack = (event: { streams: MediaStream[]; track: MediaStreamTrack | null }) => {
       if (event.streams && event.streams[0]) {
         this._remoteStream = event.streams[0];
+        const trackCount = event.streams[0].getTracks?.()?.length ?? 1;
+        console.log('[WebRTC] Remote stream received, tracks:', trackCount);
         this._onRemoteStream?.(this._remoteStream);
       }
     };
@@ -251,6 +301,7 @@ class WebRTCService {
     // --- onconnectionstatechange ---
     pc.onconnectionstatechange = () => {
       const state = pc.connectionState;
+      console.log('[WebRTC] Connection state changed:', state);
       this._onConnectionState?.(state);
 
       if (state === 'connected') {
@@ -264,7 +315,7 @@ class WebRTCService {
 
     // --- onnegotiationneeded ---
     pc.onnegotiationneeded = async () => {
-      if (this._negotiationInProgress) return;
+      if (this._callInSetup || this._negotiationInProgress) return;
       this._negotiationInProgress = true;
       try {
         const sdpInfo = (await pc.createOffer()) as SdpInfo;
@@ -280,7 +331,23 @@ class WebRTCService {
       }
     };
 
+    // Добавляем локальный аудиотрек
+    if (this._localStream) {
+      this._localStream.getTracks().forEach(track => {
+        pc.addTrack(track, this._localStream!);
+      });
+    }
+
     this._pc = pc;
+
+    // Сбрасываем pre-PC буфер: кандидаты пришли до того как PC был готов
+    if (pendingEarly.length > 0) {
+      console.log('[WebRTC] 🔄 Flushing ' + pendingEarly.length + ' early ICE candidates');
+      for (const c of pendingEarly) {
+        await this.addIceCandidate(c);
+      }
+    }
+
     return pc;
   }
 
@@ -309,8 +376,10 @@ class WebRTCService {
       const modifiedSdp = this._modifySdpForOpus(sdpInfo.sdp);
       const desc = { type: 'offer', sdp: modifiedSdp };
       await pc.setLocalDescription(desc);
+      this._callInSetup = false;
       return JSON.stringify(desc);
     } catch (e) {
+      this._callInSetup = false;
       const msg = e instanceof Error ? e.message : 'Failed to create offer';
       this._onError?.(msg);
       throw e;
@@ -333,13 +402,16 @@ class WebRTCService {
       const pc = await this.createPeerConnection();
       const offer = JSON.parse(offerSdp) as SdpInfo;
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      await this._flushPendingCandidates();
 
       const answer = (await pc.createAnswer()) as SdpInfo;
       const modifiedSdp = this._modifySdpForOpus(answer.sdp);
       const desc = { type: 'answer', sdp: modifiedSdp };
       await pc.setLocalDescription(desc);
+      this._callInSetup = false;
       return JSON.stringify(desc);
     } catch (e) {
+      this._callInSetup = false;
       const msg = e instanceof Error ? e.message : 'Failed to create answer';
       this._onError?.(msg);
       throw e;
@@ -371,13 +443,31 @@ class WebRTCService {
    * Добавляет ICE candidate от удалённой стороны.
    */
   async addIceCandidate(candidate: string): Promise<void> {
-    if (!this._pc) return;
+    if (!this._pc) {
+      console.log(
+        '[WebRTC] 🗄️ addIceCandidate: buffering for later (PC not ready yet), total buffered=' +
+          (this._earlyCandidates.length + 1),
+      );
+      this._earlyCandidates.push(candidate);
+      return;
+    }
     try {
       const iceCandidate = new RTCIceCandidate(JSON.parse(candidate));
       if (!this._pc.remoteDescription) {
+        const pcState = this._pc.connectionState;
+        const iceState = this._pc.iceConnectionState;
+        console.log(
+          '[WebRTC] 📥 ICE candidate buffered (no remoteDescription), connState=' +
+            pcState +
+            ', iceState=' +
+            iceState +
+            ', pending=' +
+            (this._pendingCandidates.length + 1),
+        );
         this._pendingCandidates.push(iceCandidate);
         return;
       }
+      console.log('[WebRTC] 📥 ICE candidate added, connState=' + this._pc.connectionState);
       await this._pc.addIceCandidate(iceCandidate);
     } catch (e) {
       console.warn('[WebRTC] Failed to add ICE candidate:', e);
@@ -419,7 +509,9 @@ class WebRTCService {
     this._remoteStream = null;
     this._iceRestartAttempted = false;
     this._negotiationInProgress = false;
+    this._callInSetup = false;
     this._pendingCandidates = [];
+    this._earlyCandidates = [];
 
     if (this._pc) {
       this._pc.close();
