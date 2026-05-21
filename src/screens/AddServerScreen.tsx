@@ -25,21 +25,19 @@ declare const __DEV__: boolean;
 const DEFAULT_PORT = '9001';
 
 /**
- * Очищает ввод IP: убирает http://, порт, путь, нецифровые символы.
- * Форматирует как IP: проставляет точки между октетами, макс 4 сегмента по 3 цифры.
+ * Очищает ввод адреса сервера: убирает http://, https://, порт, путь.
+ * Поддерживает как IP-адреса, так и доменные имена.
  */
-function formatIpInput(text: string): string {
+function formatServerAddress(text: string): string {
   // Убираем http:// или https://
   let clean = text.replace(/^https?:\/\//, '');
   // Убираем порт и путь (всё после / или :)
   clean = clean.split(/[/:]/)[0];
-  // Оставляем только цифры и точки
-  clean = clean.replace(/[^\d.]/g, '');
-  // Разбиваем по точкам, макс 4 сегмента
-  const segments = clean.split('.').slice(0, 4);
-  // Каждый сегмент — макс 3 цифры
-  const formatted = segments.map(s => s.slice(0, 3)).join('.');
-  return formatted;
+  // Убираем только недопустимые символы (оставляем буквы, цифры, точки, дефисы)
+  clean = clean.replace(/[^a-zA-Z0-9.-]/g, '');
+  // Для IP-адресов: макс 4 сегмента по 3 цифры
+  // Для доменов: оставляем как есть
+  return clean;
 }
 
 interface AddServerScreenProps {
@@ -88,7 +86,7 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
     Clipboard.getString()
       .then(text => {
         if (text) {
-          setIp(formatIpInput(text));
+          setIp(formatServerAddress(text));
         }
       })
       .catch(() => {
@@ -110,6 +108,8 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
       return;
     }
 
+    // По умолчанию используем HTTP (для IP-адресов без домена).
+    // Если нужен HTTPS — настройте домен и DNS, затем укажите https:// вручную.
     const serverUrl = `http://${trimmedIp}:${trimmedPort}`;
 
     setIsConnecting(true);
@@ -168,12 +168,12 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
           <TextInput
             style={styles.input}
             value={ip}
-            onChangeText={text => setIp(formatIpInput(text))}
-            placeholder='IP или домен (например: 192.168.1.100)'
+            onChangeText={text => setIp(formatServerAddress(text))}
+            placeholder='IP или домен (например: void4217.com)'
             placeholderTextColor={Colors.textMuted}
             autoCapitalize='none'
             autoCorrect={false}
-            keyboardType='decimal-pad'
+            keyboardType='default'
             editable={!isConnecting}
           />
           {ip.length > 0 && !isConnecting && <ClearButton onPress={() => setIp('')} />}

@@ -1,5 +1,6 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Keychain from 'react-native-keychain';
 import type { Contact, User, Message, CallRecord } from '../types';
 
 function keys(serverId: string) {
@@ -41,9 +42,13 @@ export class AppStore {
       AsyncStorage.getItem(k.UNREAD),
     ]);
 
+    let parsedUser: User | null = null;
+
     runInAction(() => {
       if (userData) {
-        this.user = JSON.parse(userData);
+        parsedUser = JSON.parse(userData);
+        // Сначала используем данные как есть (включая privateKey из AsyncStorage для миграции)
+        this.user = { ...parsedUser };
       } else {
         this.user = null;
       }
@@ -68,18 +73,62 @@ export class AppStore {
       }
       this.presenceMap = {};
       this.activeChatId = null;
+      // isReady выставляем ПОСЛЕ Keychain
+    });
+
+    // Загружаем privateKey из Keychain (или мигрируем старый)
+    if (parsedUser) {
+      try {
+        const credentials = await Keychain.getGenericPassword({
+          service: `voidchat_${serverId}`,
+        });
+        if (credentials && credentials.password) {
+          // Ключ уже в Keychain — используем его
+          runInAction(() => {
+            if (this.user) {
+              this.user.privateKey = credentials.password;
+            }
+          });
+        } else if (parsedUser.privateKey) {
+          // Миграция: переносим ключ из AsyncStorage в Keychain
+          await Keychain.setGenericPassword(serverId, parsedUser.privateKey, {
+            service: `voidchat_${serverId}`,
+          });
+          // privateKey уже в this.user из parsedUser
+        }
+      } catch {
+        console.warn('[Keychain] Failed to load private key, using AsyncStorage value');
+      }
+    }
+
+    runInAction(() => {
       this.isReady = true;
     });
   }
 
   async saveUser(user: User): Promise<void> {
     this.user = user;
-    await AsyncStorage.setItem(this.KEYS.USER, JSON.stringify(user));
+    // Сохраняем публичные данные (userId, publicKey) в AsyncStorage
+    await AsyncStorage.setItem(
+      this.KEYS.USER,
+      JSON.stringify({ userId: user.userId, publicKey: user.publicKey }),
+    );
+    // Сохраняем приватный ключ в Keychain (Android Keystore / iOS Keychain)
+    if (user.privateKey) {
+      await Keychain.setGenericPassword(this.currentServerId || 'default', user.privateKey, {
+        service: `voidchat_${this.currentServerId || 'default'}`,
+      });
+    }
   }
 
   async clearUser(): Promise<void> {
     this.user = null;
-    await AsyncStorage.removeItem(this.KEYS.USER);
+    await Promise.all([
+      AsyncStorage.removeItem(this.KEYS.USER),
+      this.currentServerId
+        ? Keychain.resetGenericPassword({ service: `voidchat_${this.currentServerId}` })
+        : Promise.resolve(),
+    ]);
   }
 
   async addContact(contact: Contact): Promise<void> {
@@ -181,6 +230,9 @@ export class AppStore {
       AsyncStorage.removeItem(this.KEYS.CONTACTS),
       AsyncStorage.removeItem(this.KEYS.MESSAGES),
       AsyncStorage.removeItem(this.KEYS.UNREAD),
+      this.currentServerId
+        ? Keychain.resetGenericPassword({ service: `voidchat_${this.currentServerId}` })
+        : Promise.resolve(),
     ]);
   }
 
@@ -191,6 +243,7 @@ export class AppStore {
       AsyncStorage.removeItem(k.CONTACTS),
       AsyncStorage.removeItem(k.MESSAGES),
       AsyncStorage.removeItem(k.UNREAD),
+      Keychain.resetGenericPassword({ service: `voidchat_${serverId}` }),
     ]);
   }
 
