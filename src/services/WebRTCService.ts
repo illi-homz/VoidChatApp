@@ -77,34 +77,6 @@ class WebRTCService {
     { urls: 'stun:stun2.l.google.com:19302' },
     { urls: 'stun:stun3.l.google.com:19302' },
     { urls: 'stun:stun4.l.google.com:19302' },
-    {
-      urls: 'turn:your-server.com:3478',
-      username: 'voidchat',
-      credential: 'turn_secret_key_change_me',
-    },
-    {
-      urls: 'turn:your-server.com:3478?transport=tcp',
-      username: 'voidchat',
-      credential: 'turn_secret_key_change_me',
-    },
-    // --- Публичный TURN (запасной, раскомментируй если свой coturn недоступен) ---
-    // OpenRelay: бесплатный TURN relay, до 50GB/мес
-    // https://www.metered.ca/tools/openrelay/
-    // {
-    //   urls: 'turn:openrelay.metered.ca:80',
-    //   username: 'openrelayproject',
-    //   credential: 'openrelayproject',
-    // },
-    // {
-    //   urls: 'turn:openrelay.metered.ca:443',
-    //   username: 'openrelayproject',
-    //   credential: 'openrelayproject',
-    // },
-    // {
-    //   urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-    //   username: 'openrelayproject',
-    //   credential: 'openrelayproject',
-    // },
   ];
 
   // ---- Вспомогательное состояние ----
