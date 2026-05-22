@@ -49,10 +49,33 @@ jobs:
       - name: List APK files
         run: find android/app/build/outputs -name "*.apk" -type f
 
+      - name: Locate APK
+        id: apk
+        run: |
+          APK=$(find android/app/build/outputs -name "VoidChatApp-*.apk" -type f | head -1)
+          if [ -z "$APK" ]; then
+            echo "❌ APK not found!"
+            exit 1
+          fi
+          echo "path=$APK" >> $GITHUB_OUTPUT
+          echo "name=$(basename "$APK")" >> $GITHUB_OUTPUT
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            android/app/build/outputs/apk/release/VoidChatApp-*.apk
+          files: ${{ steps.apk.outputs.path }}
           generate_release_notes: true
-          fail_on_unmatched_files: false
+
+      - name: Telegram notification
+        continue-on-error: true
+        uses: appleboy/telegram-action@v1.0.1
+        with:
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          message: |
+            🚀 <b>VoidChatApp ${{ github.ref_name }} released!</b>
+            
+            📦 ${{ steps.apk.outputs.name }}
+            ⏱ <a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}">Сборка</a>
+          document: ${{ steps.apk.outputs.path }}
+          format: html
