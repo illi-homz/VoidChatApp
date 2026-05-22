@@ -12,7 +12,8 @@
     "test": "jest",
     "release:patch": "bash scripts/bump-version.sh patch",
     "release:minor": "bash scripts/bump-version.sh minor",
-    "release:major": "bash scripts/bump-version.sh major"
+    "release:major": "bash scripts/bump-version.sh major",
+    "release:publish": "bash scripts/publish-release.sh"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^3.0.2",

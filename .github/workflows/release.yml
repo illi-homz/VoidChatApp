@@ -19,26 +19,43 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check if release already exists
+        id: check_release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${{ github.ref_name }}" --json assets 2>/dev/null | grep -q '"name":.*\.apk'; then
+            echo "APK already published, skipping build"
+            echo "skip_build=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip_build=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Set up JDK 17
+        if: steps.check_release.outputs.skip_build != 'true'
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
       - name: Set up Node.js
+        if: steps.check_release.outputs.skip_build != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22.11.0
           cache: 'npm'
 
       - name: Install dependencies
+        if: steps.check_release.outputs.skip_build != 'true'
         run: npm ci
 
       - name: Decode keystore
+        if: steps.check_release.outputs.skip_build != 'true'
         run: |
           echo "${{ secrets.ANDROID_SIGNING_KEY }}" | base64 -d > android/app/release.keystore
 
       - name: Build Android APK (release)
+        if: steps.check_release.outputs.skip_build != 'true'
         run: |
           cd android && ./gradlew assembleRelease
         env:
@@ -47,9 +64,11 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
       - name: List APK files
+        if: steps.check_release.outputs.skip_build != 'true'
         run: find android/app/build/outputs -name "*.apk" -type f
 
       - name: Locate APK
+        if: steps.check_release.outputs.skip_build != 'true'
         id: apk
         run: |
           APK=$(find android/app/build/outputs -name "VoidChatApp-*.apk" -type f | head -1)
@@ -61,6 +80,7 @@ jobs:
           echo "name=$(basename "$APK")" >> $GITHUB_OUTPUT
 
       - name: Create Release
+        if: steps.check_release.outputs.skip_build != 'true'
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
@@ -76,36 +96,42 @@ jobs:
           APK_NAME: ${{ steps.apk.outputs.name }}
           TAG: ${{ github.ref_name }}
           GH_TOKEN: ${{ github.token }}
+          SKIP: ${{ steps.check_release.outputs.skip_build }}
         run: |
-          # Fetch release notes
           NOTES=$(gh release view "${TAG}" --json body --jq '.body' 2>/dev/null || echo "")
           if [ -n "$NOTES" ]; then
-            # Convert markdown bold to HTML bold
             NOTES=$(echo "$NOTES" | sed 's/\*\*\([^*]*\)\*\*/<b>\1<\/b>/g')
-            # Truncate to 900 chars
             if [ ${#NOTES} -gt 900 ]; then
               NOTES="${NOTES:0:900}..."
             fi
           fi
 
-          # Write caption to file (actual newlines, not %0A)
           {
             printf '<b>🚀 VoidChatApp %s released!</b>\n' "${TAG}"
-            printf '📦 %s\n' "${APK_NAME}"
+            if [ -n "${APK_NAME}" ]; then
+              printf '📦 %s\n' "${APK_NAME}"
+            fi
             printf '\n'
             if [ -n "$NOTES" ]; then
               printf '<b>📋 Что нового:</b>\n'
-              printf '%s\n' "${NOTES}"
+              printf '%s\n' "$NOTES"
               printf '\n'
             fi
             printf '🔗 <a href="https://github.com/%s/releases/tag/%s">Открыть релиз</a>\n' \
               "${GITHUB_REPOSITORY}" "${TAG}"
           } > caption.txt
 
-          # Send ONE message: document with HTML caption
-          curl -s -S -X POST \
-            -F "chat_id=${TELEGRAM_CHAT_ID}" \
-            -F "document=@${APK_PATH}" \
-            -F "caption=<caption.txt" \
-            -F "parse_mode=HTML" \
-            "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendDocument" || echo "curl exit code: $?"
+          if [ -n "${APK_PATH}" ] && [ -f "${APK_PATH}" ]; then
+            curl -s -S -X POST \
+              -F "chat_id=${TELEGRAM_CHAT_ID}" \
+              -F "document=@${APK_PATH}" \
+              -F "caption=<caption.txt" \
+              -F "parse_mode=HTML" \
+              "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendDocument" || echo "curl exit code: $?"
+          else
+            curl -s -S -X POST \
+              -F "chat_id=${TELEGRAM_CHAT_ID}" \
+              -F "text=<caption.txt" \
+              -F "parse_mode=HTML" \
+              "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" || echo "curl exit code: $?"
+          fi
