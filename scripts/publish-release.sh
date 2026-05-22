@@ -87,9 +87,10 @@ fi
 APK_NAME="$(basename "$APK")"
 info "APK at: $APK"
 
-# ── Step 8: Push tag first (gh release needs it on remote) ────────────
-info "Pushing tag $TAG..."
-git push origin "$TAG"
+# ── Step 8: Push main branch first ────────────────────────────────────
+cd "$ROOT"
+info "Pushing main branch..."
+git push origin main
 
 # ── Step 9: GitHub Release ───────────────────────────────────────────
 cd "$ROOT"
@@ -102,7 +103,16 @@ else
 fi
 info "GitHub Release ready"
 
-# ── Step 10: Telegram notification ───────────────────────────────────
+# ── Step 10: Push tag (triggers CI, but release already exists) ──────
+info "Pushing tag $TAG..."
+if ! git ls-remote --tags origin | grep -qE "refs/tags/$TAG$"; then
+  git push origin "$TAG"
+  info "Tag $TAG pushed to remote"
+else
+  info "Tag $TAG already exists on remote (created by gh release in step 9)"
+fi
+
+# ── Step 11: Telegram notification ───────────────────────────────────
 if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
   info "Sending Telegram notification..."
 
@@ -117,14 +127,18 @@ if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
   REPO="illi-homz/VoidChatApp"
 
   {
-    printf '<b>🚀 VoidChatApp %s released!</b>\n' "$TAG"
-    printf '📦 %s\n' "$APK_NAME"
+    printf '<b>🧪🧪🧪 ТЕСТОВАЯ СБОРКА 🧪🧪🧪</b>\n'
     printf '\n'
-    if [ -n "$NOTES" ]; then
-      printf '<b>📋 Что нового:</b>\n'
-      printf '%s\n' "$NOTES"
-      printf '\n'
-    fi
+    printf '<b>🚀 Привет, команда VoidChat!</b> 👋👋👋\n'
+    printf '\n'
+    printf 'Это тестовый релиз для проверки пайплайна выката! 🛠️🔧\n'
+    printf '\n'
+    printf 'Проверяем, что Telegram шлёт ТОЛЬКО ОДИН РАЗ (без дубля от CI)! 🤞🤞🤞\n'
+    printf '\n'
+    printf '🔥 Всем удачи, релизим! 🚀🚀🚀\n'
+    printf '\n'
+    printf '<i>P.S. Это сообщение скоро исчезнет, как и баги после деплоя</i> 😎✨\n'
+    printf '\n'
     printf '🔗 <a href="https://github.com/%s/releases/tag/%s">Открыть релиз</a>\n' \
       "$REPO" "$TAG"
   } > /tmp/voidchat_caption.txt
@@ -139,7 +153,7 @@ else
   warn "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set — skipping notification"
 fi
 
-# ── Step 11: Push main branch ────────────────────────────────────────
+# ── Step 12: Push main (no-op, main already pushed in step 8) ──────
 info "Pushing main branch..."
 git push origin main
 info "Done! Release v$VERSION published successfully."
