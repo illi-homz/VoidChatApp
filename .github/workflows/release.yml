@@ -88,6 +88,7 @@ jobs:
           generate_release_notes: true
 
       - name: Send Telegram notification
+        if: steps.check_release.outputs.skip_build != 'true'
         continue-on-error: true
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
