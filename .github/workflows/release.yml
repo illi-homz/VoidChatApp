@@ -79,28 +79,33 @@ jobs:
         run: |
           # Fetch release notes
           NOTES=$(gh release view "${TAG}" --json body --jq '.body' 2>/dev/null || echo "")
-
-          # Convert markdown bold (**text**) to HTML bold (<b>text</b>)
-          NOTES=$(echo "$NOTES" | sed 's/\*\*\(.*\)\*\*/<b>\1<\/b>/g')
-
-          # Truncate to 900 chars to fit caption limit
-          if [ ${#NOTES} -gt 900 ]; then
-            NOTES="${NOTES:0:900}..."
-          fi
-
-          # Build caption (max 1024 chars for Telegram sendDocument)
-          CAPTION="<b>🚀 VoidChatApp ${TAG} released!</b>"
-          CAPTION="${CAPTION}%0A📦 ${APK_NAME}"
-          CAPTION="${CAPTION}%0A%0A"
           if [ -n "$NOTES" ]; then
-            CAPTION="${CAPTION}<b>📋 Что нового:</b>%0A${NOTES}%0A%0A"
+            # Convert markdown bold to HTML bold
+            NOTES=$(echo "$NOTES" | sed 's/\*\*\([^*]*\)\*\*/<b>\1<\/b>/g')
+            # Truncate to 900 chars
+            if [ ${#NOTES} -gt 900 ]; then
+              NOTES="${NOTES:0:900}..."
+            fi
           fi
-          CAPTION="${CAPTION}🔗 <a href=\"https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}\">Открыть релиз</a>"
+
+          # Write caption to file (actual newlines, not %0A)
+          {
+            printf '<b>🚀 VoidChatApp %s released!</b>\n' "${TAG}"
+            printf '📦 %s\n' "${APK_NAME}"
+            printf '\n'
+            if [ -n "$NOTES" ]; then
+              printf '<b>📋 Что нового:</b>\n'
+              printf '%s\n' "${NOTES}"
+              printf '\n'
+            fi
+            printf '🔗 <a href="https://github.com/%s/releases/tag/%s">Открыть релиз</a>\n' \
+              "${GITHUB_REPOSITORY}" "${TAG}"
+          } > caption.txt
 
           # Send ONE message: document with HTML caption
-          curl -s -f -X POST \
+          curl -s -S -X POST \
             -F "chat_id=${TELEGRAM_CHAT_ID}" \
             -F "document=@${APK_PATH}" \
-            -F "caption=${CAPTION}" \
+            -F "caption=<caption.txt" \
             -F "parse_mode=HTML" \
-            "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendDocument"
+            "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendDocument" || echo "curl exit code: $?"
