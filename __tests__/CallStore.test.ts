@@ -2,14 +2,14 @@
  * @format
  */
 
-// Мок для react-native-incall-manager (используется CallStore)
-jest.mock('react-native-incall-manager', () => ({
-  start: jest.fn(),
-  stop: jest.fn(),
-  startRingtone: jest.fn(),
-  stopRingtone: jest.fn(),
-  setMicrophoneMute: jest.fn(),
-  setSpeakerphoneOn: jest.fn(),
+// Мок для AudioRouter (используется CallStore)
+jest.mock('../src/services/AudioRouter', () => ({
+  audioRouter: {
+    setSpeakerphoneOn: jest.fn(),
+    startAudioSession: jest.fn(),
+    stopAudioSession: jest.fn(),
+    setMicrophoneMute: jest.fn(),
+  },
 }));
 
 // Мок для WebRTCService

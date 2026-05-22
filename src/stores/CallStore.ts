@@ -2,10 +2,7 @@ import { makeAutoObservable, runInAction } from 'mobx';
 import { webrtcService } from '../services/WebRTCService';
 import type { CallStatus, CallRecord } from '../types';
 
-// InCallManager — отключён. Все вызовы аудио-сессии через WebRTC.
-// Нативные модули InCallManager нестабильны на RN 0.85.
-// Mute/speaker управляются через WebRTCService.setMicrophoneEnabled().
-const InCallManager: Record<string, any> | null = null;
+import { audioRouter } from '../services/AudioRouter';
 
 export class CallStore {
   // ---- Observable state ----
@@ -31,7 +28,7 @@ export class CallStore {
   /**
    * Начать исходящий звонок.
    * Устанавливает статус 'calling', сохраняет callId, contactId, contactName, direction.
-   * Активирует IncallManager для аудио-режима.
+   * Активирует AudioRouter для аудио-режима.
    */
   startOutgoingCall(params: { callId: string; contactId: string; contactName: string }): void {
     this.reset();
@@ -40,15 +37,14 @@ export class CallStore {
     this.contactId = params.contactId;
     this.contactName = params.contactName;
     this.direction = 'outgoing';
-    // InCallManager НЕ вызываем здесь — getUserMedia сначала должен получить
-    // доступ к микрофону без конфликта аудио-фокуса. InCallManager запускаем
+    // AudioRouter НЕ вызываем здесь — getUserMedia сначала должен получить
+    // доступ к микрофону без конфликта аудио-фокуса. AudioRouter запускаем
     // только при setConnected(), когда WebRTC уже захватил аудиопоток.
   }
 
   /**
    * Получен входящий звонок.
    * Устанавливает статус 'ringing', сохраняет данные.
-   * Воспроизводит рингтон через InCallManager.
    */
   startIncomingCall(params: { callId: string; fromUserId: string; contactName: string }): void {
     if (this.status !== 'idle') {
@@ -61,12 +57,7 @@ export class CallStore {
     this.contactId = params.fromUserId;
     this.contactName = params.contactName;
     this.direction = 'incoming';
-    // Воспроизвести рингтон (30 секунд, по умолчанию, без вибрации)
-    try {
-      InCallManager.startRingtone('_DEFAULT_', [], '', 30);
-    } catch {
-      // ignore — рингтон не критичен
-    }
+    // Аудио-сессия будет запущена при setConnected() после getUserMedia
   }
 
   /**
@@ -77,13 +68,9 @@ export class CallStore {
     this.status = 'connected';
     this._callStartTime = Date.now();
     this._startDurationTimer();
-    // Остановить рингтон и запустить аудио-сессию (после getUserMedia)
-    try {
-      InCallManager.stopRingtone();
-    } catch {}
-    try {
-      InCallManager.start({ media: 'audio' });
-    } catch {}
+    // Запустить аудио-сессию (после getUserMedia): режим разговора, аудио-фокус, макс. громкость
+    audioRouter.startAudioSession();
+    audioRouter.setSpeakerphoneOn(this.isSpeakerOn);
   }
 
   /**
@@ -91,11 +78,7 @@ export class CallStore {
    */
   toggleMute(): void {
     this.isMuted = !this.isMuted;
-    try {
-      InCallManager.setMicrophoneMute(this.isMuted);
-    } catch {
-      // ignore — WebRTC трек отключается отдельно
-    }
+    audioRouter.setMicrophoneMute(this.isMuted);
     webrtcService.setMicrophoneEnabled(!this.isMuted);
   }
 
@@ -104,30 +87,17 @@ export class CallStore {
    */
   toggleSpeaker(): void {
     this.isSpeakerOn = !this.isSpeakerOn;
-    try {
-      InCallManager.setSpeakerphoneOn(this.isSpeakerOn);
-    } catch {
-      // ignore
-    }
+    audioRouter.setSpeakerphoneOn(this.isSpeakerOn);
   }
 
   /**
    * Завершить звонок.
-   * Останавливает таймер, IncallManager, сбрасывает состояние.
+   * Останавливает таймер, AudioRouter, сбрасывает состояние.
    * Возвращает CallRecord для сохранения (если нужно).
    */
   endCall(_endedBy?: string): CallRecord | null {
     this._stopDurationTimer();
-    try {
-      InCallManager.stopRingtone();
-    } catch {
-      // ignore
-    }
-    try {
-      InCallManager.stop();
-    } catch {
-      // ignore
-    }
+    audioRouter.stopAudioSession();
 
     const record: CallRecord | null = this.contactId
       ? {
@@ -149,16 +119,7 @@ export class CallStore {
   setFailed(error: string): void {
     this.status = 'failed';
     this.error = error;
-    try {
-      InCallManager.stopRingtone();
-    } catch {
-      // ignore
-    }
-    try {
-      InCallManager.stop();
-    } catch {
-      // ignore
-    }
+    audioRouter.stopAudioSession();
   }
 
   /**
@@ -184,12 +145,7 @@ export class CallStore {
     this.error = null;
     this.direction = 'outgoing';
     this._callStartTime = 0;
-    try {
-      InCallManager.stopRingtone();
-      InCallManager.stop();
-    } catch {
-      // ignore
-    }
+    audioRouter.stopAudioSession();
   }
 
   // ---- Приватные методы ----
