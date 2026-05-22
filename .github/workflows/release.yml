@@ -71,11 +71,11 @@ jobs:
         run: |
           # Small pause to let GitHub finish generating release notes
           sleep 2
-          gh release view "${{ github.ref_name }}" --json body --jq '.body' > /tmp/release_notes.md
+          gh release view "${{ github.ref_name }}" --json body --jq '.body' > release_notes.md
           # Truncate to ~1500 chars to stay within Telegram limits.
           # Use head -c (safe for ASCII-only release notes).
-          NOTES=$(head -c 1500 /tmp/release_notes.md)
-          if [ "$(wc -c < /tmp/release_notes.md)" -gt 1500 ]; then
+          NOTES=$(head -c 1500 release_notes.md)
+          if [ "$(wc -c < release_notes.md)" -gt 1500 ]; then
             NOTES="${NOTES}..."
           fi
           # Fallback for empty release notes
@@ -88,7 +88,7 @@ jobs:
             printf '📦 %s\n\n' "$APK_NAME"
             printf '📋 <b>Что нового:</b>\n'
             printf '%s\n' "$NOTES"
-          } > /tmp/telegram_message.txt
+          } > telegram_message.txt
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
@@ -100,6 +100,6 @@ jobs:
         with:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          message_file: /tmp/telegram_message.txt
+          message_file: telegram_message.txt
           document: ${{ steps.apk.outputs.path }}
           format: html
