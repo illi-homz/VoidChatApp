@@ -87,7 +87,11 @@ fi
 APK_NAME="$(basename "$APK")"
 info "APK at: $APK"
 
-# ── Step 8: GitHub Release ───────────────────────────────────────────
+# ── Step 8: Push tag first (gh release needs it on remote) ────────────
+info "Pushing tag $TAG..."
+git push origin "$TAG"
+
+# ── Step 9: GitHub Release ───────────────────────────────────────────
 cd "$ROOT"
 if gh release view "$TAG" > /dev/null 2>&1; then
   info "Release $TAG already exists — uploading APK"
@@ -98,7 +102,7 @@ else
 fi
 info "GitHub Release ready"
 
-# ── Step 9: Telegram notification ────────────────────────────────────
+# ── Step 10: Telegram notification ───────────────────────────────────
 if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
   info "Sending Telegram notification..."
 
@@ -135,7 +139,7 @@ else
   warn "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set — skipping notification"
 fi
 
-# ── Step 10: Push tags ───────────────────────────────────────────────
-info "Pushing tags..."
-git push --follow-tags
+# ── Step 11: Push main branch ────────────────────────────────────────
+info "Pushing main branch..."
+git push origin main
 info "Done! Release v$VERSION published successfully."
