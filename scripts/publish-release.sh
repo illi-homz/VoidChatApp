@@ -87,9 +87,10 @@ fi
 APK_NAME="$(basename "$APK")"
 info "APK at: $APK"
 
-# ── Step 8: Push tag first (gh release needs it on remote) ────────────
-info "Pushing tag $TAG..."
-git push origin "$TAG"
+# ── Step 8: Push main branch first ────────────────────────────────────
+cd "$ROOT"
+info "Pushing main branch..."
+git push origin main
 
 # ── Step 9: GitHub Release ───────────────────────────────────────────
 cd "$ROOT"
@@ -102,7 +103,16 @@ else
 fi
 info "GitHub Release ready"
 
-# ── Step 10: Telegram notification ───────────────────────────────────
+# ── Step 10: Push tag (triggers CI, but release already exists) ──────
+info "Pushing tag $TAG..."
+if ! git ls-remote --tags origin | grep -qE "refs/tags/$TAG$"; then
+  git push origin "$TAG"
+  info "Tag $TAG pushed to remote"
+else
+  info "Tag $TAG already exists on remote (created by gh release in step 9)"
+fi
+
+# ── Step 11: Telegram notification ───────────────────────────────────
 if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
   info "Sending Telegram notification..."
 
@@ -132,14 +142,14 @@ if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
   curl -s -S -X POST \
     -F "chat_id=${TELEGRAM_CHAT_ID}" \
     -F "document=@${APK}" \
-    -F "caption=</tmp/voidchat_caption.txt" \
+    -F "caption=</tmp/voidchat_caption.txt>" \
     -F "parse_mode=HTML" \
     "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" || warn "Telegram notification failed (non-fatal)"
 else
   warn "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set — skipping notification"
 fi
 
-# ── Step 11: Push main branch ────────────────────────────────────────
+# ── Step 12: Push main (no-op, main already pushed in step 8) ────────
 info "Pushing main branch..."
 git push origin main
 info "Done! Release v$VERSION published successfully."
