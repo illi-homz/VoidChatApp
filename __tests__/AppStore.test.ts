@@ -153,4 +153,82 @@ describe('AppStore.markMessagesRead', () => {
     expect(parsed[contactId][1].read).toBe(false);
     expect(parsed[contactId][1].from).toBe('other-user');
   });
+
+  // =====================================================================
+  // AppStore.deleteMessages
+  // =====================================================================
+
+  describe('AppStore.deleteMessages', () => {
+    const makeMsg = (
+      id: string,
+      from: string,
+      read = false,
+      ts = Date.now(),
+    ): Message => ({
+      id,
+      from,
+      ciphertext: `enc_${id}`,
+      nonce: `nonce_${id}`,
+      timestamp: ts,
+      read,
+    });
+
+    it('should remove specified messages from the store', async () => {
+      const contactId = 'user-1';
+      const messages: Message[] = [
+        makeMsg('m1', 'me'),
+        makeMsg('m2', 'other'),
+        makeMsg('m3', 'me'),
+        makeMsg('m4', 'other'),
+      ];
+      store.messages.set(contactId, messages);
+
+      await store.deleteMessages(contactId, ['m2', 'm3']);
+
+      const remaining = store.messages.get(contactId)!;
+      expect(remaining).toHaveLength(2);
+      expect(remaining[0].id).toBe('m1');
+      expect(remaining[1].id).toBe('m4');
+    });
+
+    it('should persist to AsyncStorage', async () => {
+      const contactId = 'user-2';
+      store.messages.set(contactId, [makeMsg('m1', 'me'), makeMsg('m2', 'other')]);
+
+      await store.deleteMessages(contactId, ['m1']);
+
+      expect(AsyncStorage.setItem).toHaveBeenCalledTimes(1);
+      expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+        'test-server_chat_messages',
+        expect.any(String),
+      );
+      const [, json] = (AsyncStorage.setItem as jest.Mock).mock.calls[0];
+      const parsed = JSON.parse(json as string);
+      expect(parsed[contactId]).toHaveLength(1);
+      expect(parsed[contactId][0].id).toBe('m2');
+    });
+
+    it('should do nothing if contactId does not exist', async () => {
+      await store.deleteMessages('non-existent', ['m1']);
+      expect(AsyncStorage.setItem).not.toHaveBeenCalled();
+    });
+
+    it('should do nothing with empty messageIds array', async () => {
+      store.messages.set('user-3', [makeMsg('m1', 'me')]);
+      await store.deleteMessages('user-3', []);
+      expect(store.messages.get('user-3')).toHaveLength(1);
+      expect(AsyncStorage.setItem).not.toHaveBeenCalled();
+    });
+
+    it('should handle deleting all messages', async () => {
+      const contactId = 'user-4';
+      store.messages.set(contactId, [makeMsg('m1', 'me'), makeMsg('m2', 'other')]);
+
+      await store.deleteMessages(contactId, ['m1', 'm2']);
+
+      const remaining = store.messages.get(contactId)!;
+      expect(remaining).toHaveLength(0);
+      expect(AsyncStorage.setItem).toHaveBeenCalled();
+    });
+  });
 });

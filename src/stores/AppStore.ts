@@ -204,6 +204,21 @@ export class AppStore {
     );
   }
 
+  async deleteMessages(contactId: string, messageIds: string[]): Promise<void> {
+    const existing = this.messages.get(contactId);
+    if (!existing || existing.length === 0) return;
+    if (messageIds.length === 0) return;
+
+    const idSet = new Set(messageIds);
+    const filtered = existing.filter(m => !idSet.has(m.id));
+    this.messages.set(contactId, filtered);
+
+    await AsyncStorage.setItem(
+      this.KEYS.MESSAGES,
+      JSON.stringify(Object.fromEntries(this.messages)),
+    );
+  }
+
   async markAsRead(contactId: string): Promise<void> {
     if (this.unreadCount[contactId] !== undefined) {
       this.unreadCount = { ...this.unreadCount, [contactId]: 0 };

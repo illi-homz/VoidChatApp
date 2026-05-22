@@ -10,6 +10,7 @@ import {
   Keyboard,
   Dimensions,
   KeyboardAvoidingView,
+  Clipboard,
 } from 'react-native';
 
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -26,8 +27,9 @@ import { CallButton } from '../components/CallButton';
 import { CallConfirmAlert } from '../components/CallConfirmAlert';
 import { StatusIcon } from '../components/StatusIcon';
 import { useToast } from '../components/Toast';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeInLeft, FadeInUp, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { selectionStore } from '../stores/SelectionStore';
 
 interface ChatScreenProps {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Chat'>;
@@ -61,6 +63,14 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
   const [showCallConfirm, setShowCallConfirm] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const displayName = store.contacts.find(c => c.userId === contactId)?.nickname ?? contactName;
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const selectedIdsRef = useRef(selectedIds);
+  selectedIdsRef.current = selectedIds;
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  const contactIdRef = useRef(contactId);
+  contactIdRef.current = contactId;
 
   // Запоминаем ID сообщений, которые уже были в чате при открытии
   if (initialIdsRef.current === null && messages.length > 0) {
@@ -70,6 +80,7 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
   useEffect(() => {
     navigation.setOptions({
       title: displayName,
+      headerShown: true,
       headerLeft: () => <BackButton onPress={() => navigation.goBack()} />,
       headerRight: () => (
         <CallButton
@@ -220,6 +231,73 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
     );
   }
 
+  function handleMessageLongPress(item: MessageExt): void {
+    if (!selectionMode) {
+      setSelectionMode(true);
+      setSelectedIds(new Set([item.id]));
+      selectionStore.show(1, {
+        onClose: () => exitSelectionMode(),
+        onCopy: () => handleCopySelected(),
+        onDelete: () => handleDeleteSelected(),
+      });
+    } else {
+      toggleSelection(item.id);
+    }
+  }
+
+  function handleMessagePress(item: MessageExt): void {
+    if (selectionMode) {
+      toggleSelection(item.id);
+    }
+  }
+
+  function toggleSelection(id: string): void {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      selectionStore.updateCount(next.size);
+      if (next.size === 0) {
+        selectionStore.hide();
+        setSelectionMode(false);
+      }
+      return next;
+    });
+  }
+
+  function exitSelectionMode(): void {
+    selectionStore.hide();
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  }
+
+  function handleCopySelected(): void {
+    const text = messagesRef.current
+      .filter(m => selectedIdsRef.current.has(m.id))
+      .map(m => m.ciphertext)
+      .join('\n');
+    if (text) {
+      Clipboard.setString(text);
+      toast('Скопировано в буфер обмена', 'success');
+    }
+    exitSelectionMode();
+  }
+
+  async function handleDeleteSelected(): Promise<void> {
+    const ids = [...selectedIdsRef.current];
+    try {
+      await store.deleteMessages(contactId, ids);
+      setMessages(prev => prev.filter(m => !ids.includes(m.id)));
+      toast('Сообщения удалены', 'success');
+    } catch {
+      toast('Ошибка при удалении сообщений', 'error');
+    }
+    exitSelectionMode();
+  }
+
   function sendMessage(): void {
     if (!inputText.trim() || !sharedSecretRef.current) return;
 
@@ -250,21 +328,44 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
   function renderMessage({ item }: { item: MessageExt }): React.JSX.Element {
     const isMe = item.from === 'me';
     const isNew = initialIdsRef.current && !initialIdsRef.current.has(item.id);
+    const isSelected = selectedIds.has(item.id);
 
-    const content = (
-      <View style={[styles.messageBubble, isMe ? styles.myMessage : styles.theirMessage]}>
-        <Text style={styles.messageText}>{item.ciphertext}</Text>
-        <View style={styles.messageFooter}>
-          <Text style={styles.messageTime}>{formatTime(item.timestamp)}</Text>
-          {isMe && item.status && <StatusIcon status={item.status} />}
-        </View>
-      </View>
+    const bubble = (
+      <TouchableOpacity
+        activeOpacity={selectionMode ? 0.7 : 1}
+        onLongPress={() => handleMessageLongPress(item)}
+        onPress={() => handleMessagePress(item)}
+        delayLongPress={400}
+        style={[
+          styles.messageRow,
+          isMe ? styles.messageRowMine : styles.messageRowTheirs,
+          isSelected && styles.messageRowSelected,
+        ]}
+      >
+        {selectionMode && (
+          <Animated.View entering={FadeInLeft.duration(200)} style={styles.selectionMarker}>
+            <View style={[styles.selectionCircle, isSelected && styles.selectionCircleSelected]}>
+              {isSelected && <Text style={styles.selectionCheckmark}>✓</Text>}
+            </View>
+          </Animated.View>
+        )}
+
+        <Animated.View style={styles.messageWrap} exiting={FadeOut}>
+          <View style={[styles.messageBubble, isMe ? styles.myMessage : styles.theirMessage]}>
+            <Text style={styles.messageText}>{item.ciphertext}</Text>
+            <View style={styles.messageFooter}>
+              <Text style={styles.messageTime}>{formatTime(item.timestamp)}</Text>
+              {isMe && item.status && <StatusIcon status={item.status} />}
+            </View>
+          </View>
+        </Animated.View>
+      </TouchableOpacity>
     );
 
     if (isNew) {
-      return <Animated.View entering={FadeInDown.duration(250)}>{content}</Animated.View>;
+      return <Animated.View entering={FadeInDown.duration(250)}>{bubble}</Animated.View>;
     }
-    return content;
+    return bubble;
   }
 
   const reversedMessages = useMemo(() => [...messages].reverse(), [messages]);
@@ -276,9 +377,11 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
         data={reversedMessages}
         renderItem={renderMessage}
         keyExtractor={item => item.id}
+        extraData={selectedIds}
         style={{ flex: 1 }}
         contentContainerStyle={styles.messagesList}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps={'handled'}
         inverted
       />
       <View style={styles.inputContainer}>
@@ -355,13 +458,16 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     flexGrow: 1,
     justifyContent: 'flex-end',
+    rowGap: 4,
+  },
+  messageWrap: {
+    flex: 1,
   },
   messageBubble: {
     maxWidth: '80%',
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 16,
-    marginBottom: 8,
   },
   myMessage: {
     backgroundColor: Colors.surface,
@@ -429,5 +535,43 @@ const styles = StyleSheet.create({
     color: '#000',
     fontSize: 15,
     fontWeight: '600',
+  },
+  messageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  messageRowMine: {
+    justifyContent: 'flex-end',
+  },
+  messageRowTheirs: {
+    justifyContent: 'flex-start',
+  },
+  selectionMarker: {
+    width: 32,
+  },
+  selectionCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  selectionCircleSelected: {
+    backgroundColor: Colors.primary,
+  },
+  selectionCheckmark: {
+    color: '#000',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  messageRowSelected: {
+    backgroundColor: 'rgba(255, 215, 0, 0.10)',
+    borderRadius: 16,
+    marginHorizontal: -16,
+    paddingHorizontal: 16,
   },
 });
