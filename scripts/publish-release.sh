@@ -99,7 +99,7 @@ if gh release view "$TAG" > /dev/null 2>&1; then
   gh release upload "$TAG" "$APK" --clobber
 else
   info "Creating GitHub Release $TAG..."
-  gh release create "$TAG" "$APK" --generate-notes
+  gh release create "$TAG" "$APK" --generate-notes --target main
 fi
 info "GitHub Release ready"
 
