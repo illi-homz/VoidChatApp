@@ -61,10 +61,38 @@ jobs:
           echo "name=$(basename "$APK")" >> $GITHUB_OUTPUT
 
       - name: Create Release
+        id: create_release
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ steps.apk.outputs.path }}
           generate_release_notes: true
+
+      - name: Fetch release notes and compose message
+        run: |
+          # Small pause to let GitHub finish generating release notes
+          sleep 2
+          gh release view "${{ github.ref_name }}" --json body --jq '.body' > /tmp/release_notes.md
+          # Truncate to ~1500 chars to stay within Telegram limits.
+          # Use head -c (safe for ASCII-only release notes).
+          NOTES=$(head -c 1500 /tmp/release_notes.md)
+          if [ "$(wc -c < /tmp/release_notes.md)" -gt 1500 ]; then
+            NOTES="${NOTES}..."
+          fi
+          # Fallback for empty release notes
+          if [ -z "$NOTES" ]; then
+            NOTES="(нет описания)"
+          fi
+          # Write full message to file
+          {
+            printf '🚀 <b>VoidChatApp %s released!</b>\n\n' "$TAG"
+            printf '📦 %s\n\n' "$APK_NAME"
+            printf '📋 <b>Что нового:</b>\n'
+            printf '%s\n' "$NOTES"
+          } > /tmp/telegram_message.txt
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          APK_NAME: ${{ steps.apk.outputs.name }}
 
       - name: Telegram notification
         continue-on-error: true
@@ -72,10 +100,6 @@ jobs:
         with:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          message: |
-            🚀 <b>VoidChatApp ${{ github.ref_name }} released!</b>
-            
-            📦 ${{ steps.apk.outputs.name }}
-            ⏱ <a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}">Сборка</a>
+          message_file: /tmp/telegram_message.txt
           document: ${{ steps.apk.outputs.path }}
           format: html
