@@ -211,6 +211,28 @@ export class AppStore {
     }
   }
 
+  async markMessagesRead(contactId: string): Promise<void> {
+    const messages = this.messages.get(contactId);
+    if (!messages || messages.length === 0) return;
+
+    let changed = false;
+    const updated = messages.map(m => {
+      if (m.from === 'me' && !m.read) {
+        changed = true;
+        return { ...m, read: true };
+      }
+      return m;
+    });
+
+    if (changed) {
+      this.messages.set(contactId, updated);
+      await AsyncStorage.setItem(
+        this.KEYS.MESSAGES,
+        JSON.stringify(Object.fromEntries(this.messages)),
+      );
+    }
+  }
+
   async incrementUnread(contactId: string): Promise<void> {
     this.unreadCount = { ...this.unreadCount, [contactId]: (this.unreadCount[contactId] ?? 0) + 1 };
     await AsyncStorage.setItem(this.KEYS.UNREAD, JSON.stringify(this.unreadCount));

@@ -24,6 +24,7 @@ import { Colors } from '../theme/colors';
 import { BackButton } from '../components/BackButton';
 import { CallButton } from '../components/CallButton';
 import { CallConfirmAlert } from '../components/CallConfirmAlert';
+import { StatusIcon } from '../components/StatusIcon';
 import { useToast } from '../components/Toast';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -49,7 +50,7 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
   const [messages, setMessages] = useState<MessageExt[]>(() =>
     store.getMessages(contactId).map(m => ({
       ...m,
-      status: m.from === 'me' ? ('sent' as const) : undefined,
+      status: m.from === 'me' ? (m.read ? ('read' as const) : ('sent' as const)) : undefined,
     })),
   );
   const [inputText, setInputText] = useState('');
@@ -174,7 +175,7 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
         ciphertext: decrypted,
         nonce: serverMessage.nonce,
         timestamp: serverMessage.timestamp,
-        read: true,
+        read: false,
       };
 
       setMessages(prev => [...prev, message]);
@@ -203,6 +204,9 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
         m.from === 'me' && m.status === 'sent' ? { ...m, status: 'read' as const } : m,
       ),
     );
+    store
+      .markMessagesRead(contactId)
+      .catch(e => console.error('Failed to persist read status:', e));
   }
 
   function handleMessageFailed(data: { to: string; nonce: string; reason: string }): void {
@@ -229,7 +233,7 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
       ciphertext: inputText.trim(),
       nonce: payload.nonce,
       timestamp: Date.now(),
-      read: true,
+      read: false,
       status: 'pending',
     };
 
@@ -240,7 +244,7 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
 
   function formatTime(timestamp: number): string {
     const date = new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
   }
 
   function renderMessage({ item }: { item: MessageExt }): React.JSX.Element {
@@ -252,23 +256,7 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
         <Text style={styles.messageText}>{item.ciphertext}</Text>
         <View style={styles.messageFooter}>
           <Text style={styles.messageTime}>{formatTime(item.timestamp)}</Text>
-          {isMe && item.status && (
-            <Text
-              style={[
-                styles.statusIcon,
-                item.status === 'failed' && styles.statusFailed,
-                item.status === 'sent' && styles.statusSent,
-              ]}
-            >
-              {item.status === 'pending'
-                ? '⚓'
-                : item.status === 'sent'
-                  ? '✓'
-                  : item.status === 'read'
-                    ? '✓✓'
-                    : '✗'}
-            </Text>
-          )}
+          {isMe && item.status && <StatusIcon status={item.status} />}
         </View>
       </View>
     );
@@ -405,16 +393,6 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontSize: 10,
     fontStyle: 'italic',
-  },
-  statusIcon: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-  },
-  statusSent: {
-    color: Colors.primary,
-  },
-  statusFailed: {
-    color: Colors.error,
   },
   inputContainer: {
     flexDirection: 'row',
