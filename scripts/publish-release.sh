@@ -21,6 +21,14 @@ if ! git diff --quiet; then
   error "Working directory is not clean. Commit or stash changes first."
 fi
 
+# ── Load .env if present ─────────────────────────────────────────────
+if [ -f "$ROOT/.env" ]; then
+  set -a
+  . "$ROOT/.env"
+  set +a
+  info "Loaded .env file"
+fi
+
 # ── Step 1: Check gh CLI ─────────────────────────────────────────────
 if ! command -v gh &> /dev/null; then
   warn "GitHub CLI (gh) is not installed."
