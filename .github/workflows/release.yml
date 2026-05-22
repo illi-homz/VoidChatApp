@@ -67,39 +67,40 @@ jobs:
           files: ${{ steps.apk.outputs.path }}
           generate_release_notes: true
 
-      - name: Fetch release notes and compose message
-        run: |
-          # Small pause to let GitHub finish generating release notes
-          sleep 2
-          gh release view "${{ github.ref_name }}" --json body --jq '.body' > release_notes.md
-          # Truncate to ~1500 chars to stay within Telegram limits.
-          # Use head -c (safe for ASCII-only release notes).
-          NOTES=$(head -c 1500 release_notes.md)
-          if [ "$(wc -c < release_notes.md)" -gt 1500 ]; then
-            NOTES="${NOTES}..."
-          fi
-          # Fallback for empty release notes
-          if [ -z "$NOTES" ]; then
-            NOTES="(нет описания)"
-          fi
-          # Write full message to file
-          {
-            printf '🚀 <b>VoidChatApp %s released!</b>\n\n' "$TAG"
-            printf '📦 %s\n\n' "$APK_NAME"
-            printf '📋 <b>Что нового:</b>\n'
-            printf '%s\n' "$NOTES"
-          } > telegram_message.txt
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-          APK_NAME: ${{ steps.apk.outputs.name }}
-
-      - name: Telegram notification
+      - name: Send Telegram notification
         continue-on-error: true
-        uses: appleboy/telegram-action@v1.0.1
-        with:
-          to: ${{ secrets.TELEGRAM_CHAT_ID }}
-          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          message_file: telegram_message.txt
-          document: ${{ steps.apk.outputs.path }}
-          format: html
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          APK_PATH: ${{ steps.apk.outputs.path }}
+          APK_NAME: ${{ steps.apk.outputs.name }}
+          TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Fetch release notes
+          NOTES=$(gh release view "${TAG}" --json body --jq '.body' 2>/dev/null || echo "")
+
+          # Convert markdown bold (**text**) to HTML bold (<b>text</b>)
+          NOTES=$(echo "$NOTES" | sed 's/\*\*\(.*\)\*\*/<b>\1<\/b>/g')
+
+          # Truncate to 900 chars to fit caption limit
+          if [ ${#NOTES} -gt 900 ]; then
+            NOTES="${NOTES:0:900}..."
+          fi
+
+          # Build caption (max 1024 chars for Telegram sendDocument)
+          CAPTION="<b>🚀 VoidChatApp ${TAG} released!</b>"
+          CAPTION="${CAPTION}%0A📦 ${APK_NAME}"
+          CAPTION="${CAPTION}%0A%0A"
+          if [ -n "$NOTES" ]; then
+            CAPTION="${CAPTION}<b>📋 Что нового:</b>%0A${NOTES}%0A%0A"
+          fi
+          CAPTION="${CAPTION}🔗 <a href=\"https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}\">Открыть релиз</a>"
+
+          # Send ONE message: document with HTML caption
+          curl -s -f -X POST \
+            -F "chat_id=${TELEGRAM_CHAT_ID}" \
+            -F "document=@${APK_PATH}" \
+            -F "caption=${CAPTION}" \
+            -F "parse_mode=HTML" \
+            "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendDocument"
