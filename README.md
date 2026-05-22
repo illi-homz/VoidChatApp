@@ -315,6 +315,6 @@ uuid       ^10.0.0   — генерация ID
 ```
 
 react-native-webrtc ^124.0.7 — P2P WebRTC голосовые звонки
-react-native-incall-manager ^4.2.1 — аудио-сессия (отключён, try/catch)
+AudioRouterModule (собственный Android native module) — управление аудио-маршрутизацией (speaker/earpiece), аудио-фокус, громкость
 
 (Удалены: `react-native-mmkv`, `libsodium-wrappers`)
