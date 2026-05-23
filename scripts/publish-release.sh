@@ -136,18 +136,22 @@ fi
 if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
   info "Sending Telegram notification..."
 
-  NOTES=$(gh release view "$TAG" --json body --jq '.body' 2>/dev/null || echo "")
-  if [ -n "$NOTES" ]; then
+  # Читаем release notes напрямую из RELEASE_NOTES.md
+  NOTES_FILE="$ROOT/RELEASE_NOTES.md"
+  if [ -f "$NOTES_FILE" ]; then
     # Конвертируем markdown → HTML для Telegram
-    NOTES=$(echo "$NOTES" \
-      | sed 's/### \(.*\)/<b>\1<\/b>/g' \
-      | sed 's/\*\*\([^*]*\)\*\*/<b>\1<\/b>/g' \
-      | sed 's/\*\([^*]*\)\*/<i>\1<\/i>/g' \
-      | sed 's/^[-*] /• /g' \
-      | sed 's/^# //g')
+    NOTES=$(sed \
+      -e 's/### \(.*\)/<b>\1<\/b>/g' \
+      -e 's/\*\*\([^*]*\)\*\*/<b>\1<\/b>/g' \
+      -e 's/\*\([^*]*\)\*/<i>\1<\/i>/g' \
+      -e 's/^[-*] /• /g' \
+      -e 's/^# //g' \
+      "$NOTES_FILE")
     if [ ${#NOTES} -gt 900 ]; then
       NOTES="${NOTES:0:900}..."
     fi
+  else
+    NOTES=""
   fi
 
   REPO="illi-homz/VoidChatApp"

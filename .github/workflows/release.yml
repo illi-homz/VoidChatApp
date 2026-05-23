@@ -81,11 +81,21 @@ jobs:
 
       - name: Create Release
         if: steps.check_release.outputs.skip_build != 'true'
-        id: create_release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: ${{ steps.apk.outputs.path }}
-          generate_release_notes: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APK_PATH="${{ steps.apk.outputs.path }}"
+          TAG="${{ github.ref_name }}"
+
+          if [ -f "RELEASE_NOTES.md" ]; then
+            gh release create "${TAG}" "${APK_PATH}" \
+              --target "main" \
+              --notes-file "RELEASE_NOTES.md"
+          else
+            gh release create "${TAG}" "${APK_PATH}" \
+              --target "main" \
+              --generate-notes
+          fi
 
       - name: Send Telegram notification
         if: steps.check_release.outputs.skip_build != 'true'
@@ -97,28 +107,33 @@ jobs:
           APK_NAME: ${{ steps.apk.outputs.name }}
           TAG: ${{ github.ref_name }}
           GH_TOKEN: ${{ github.token }}
-          SKIP: ${{ steps.check_release.outputs.skip_build }}
         run: |
-          NOTES=$(gh release view "${TAG}" --json body --jq '.body' 2>/dev/null || echo "")
-          if [ -n "$NOTES" ]; then
-            NOTES=$(echo "$NOTES" | sed 's/\*\*\([^*]*\)\*\*/<b>\1<\/b>/g')
+          # Читаем release notes напрямую из RELEASE_NOTES.md
+          if [ -f "RELEASE_NOTES.md" ]; then
+            NOTES=$(sed \
+              -e 's/### \(.*\)/<b>\1<\/b>/g' \
+              -e 's/\*\*\([^*]*\)\*\*/<b>\1<\/b>/g' \
+              -e 's/\*\([^*]*\)\*/<i>\1<\/i>/g' \
+              -e 's/^[-*] /• /g' \
+              -e 's/^# //g' \
+              "RELEASE_NOTES.md")
             if [ ${#NOTES} -gt 900 ]; then
               NOTES="${NOTES:0:900}..."
             fi
+          else
+            NOTES=""
           fi
 
           {
-            printf '<b>🚀 VoidChatApp %s released!</b>\n' "${TAG}"
-            if [ -n "${APK_NAME}" ]; then
-              printf '📦 %s\n' "${APK_NAME}"
-            fi
+            printf '<b>🚀 VoidChatApp %s</b>\n' "${TAG}"
             printf '\n'
             if [ -n "$NOTES" ]; then
               printf '<b>📋 Что нового:</b>\n'
               printf '%s\n' "$NOTES"
               printf '\n'
             fi
-            printf '🔗 <a href="https://github.com/%s/releases/tag/%s">Открыть релиз</a>\n' \
+            printf '📦 <code>%s</code>\n' "${APK_NAME}"
+            printf '🔗 <a href="https://github.com/%s/releases/tag/%s">Полный список изменений</a>\n' \
               "${GITHUB_REPOSITORY}" "${TAG}"
           } > caption.txt
 
@@ -129,10 +144,4 @@ jobs:
               -F "caption=<caption.txt" \
               -F "parse_mode=HTML" \
               "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendDocument" || echo "curl exit code: $?"
-          else
-            curl -s -S -X POST \
-              -F "chat_id=${TELEGRAM_CHAT_ID}" \
-              -F "text=<caption.txt" \
-              -F "parse_mode=HTML" \
-              "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" || echo "curl exit code: $?"
           fi
