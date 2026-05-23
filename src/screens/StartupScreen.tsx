@@ -85,7 +85,7 @@ export const StartupScreen = observer(function StartupScreen({ navigation }: Sta
           setTimeout(() => {
             socketService.disconnect();
             reject(new Error('Превышено время ожидания подключения'));
-          }, 10000),
+          }, 30000),
         ),
       ]);
 

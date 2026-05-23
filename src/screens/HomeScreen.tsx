@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { observer } from 'mobx-react-lite';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
-import type { Contact, CallOffer } from '../types';
+import type { Contact, CallOffer, CallEnded, CallTimedOut } from '../types';
 import type { BottomSheetAction } from '../components/BottomSheet';
 import { useStore, useServerStore, useCallStore } from '../stores';
 import { useAppStateReconnect } from '../hooks/useAppStateReconnect';
@@ -93,6 +93,8 @@ export const HomeScreen = observer(function HomeScreen({
       socketService.offFriendConfirmed();
       socketService.offKicked();
       socketService.offCallIncoming();
+      socketService.offCallEnded();
+      socketService.offCallTimedOut();
       onMessageCleanupRef.current?.();
     };
   }, [serverStore.activeServerId]);
@@ -234,6 +236,12 @@ export const HomeScreen = observer(function HomeScreen({
 
     // ---- Call listeners ----
     socketService.onCallIncoming((data: CallOffer) => {
+      // Если это renegotiation для существующего звонка — игнорировать
+      // (CallScreen обрабатывает re-offer)
+      if (data.callId && callStore.callId && data.callId === callStore.callId) {
+        return;
+      }
+
       // Если у пользователя уже активный звонок — отклонить входящий
       // (двойная проверка: статус стора + ref для защиты от гонки модалки)
       if (callStore.status !== 'idle' || incomingCallDataRef.current !== null) {
@@ -262,6 +270,21 @@ export const HomeScreen = observer(function HomeScreen({
         sdp: data.sdp,
         contactName: name,
       });
+    });
+
+    // Скрыть баннер если звонок завершён до ответа (пока баннер ещё висит)
+    socketService.onCallEnded((data: CallEnded) => {
+      if (incomingCallDataRef.current && data.callId === incomingCallDataRef.current.callId) {
+        setIncomingCallData(null);
+        callStore.reset();
+      }
+    });
+
+    socketService.onCallTimedOut((data: CallTimedOut) => {
+      if (incomingCallDataRef.current && data.callId === incomingCallDataRef.current.callId) {
+        setIncomingCallData(null);
+        callStore.reset();
+      }
     });
 
     // callAccepted, callDeclined, callEnded, callTimedOut обрабатываются в CallScreen

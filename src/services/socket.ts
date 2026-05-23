@@ -26,7 +26,7 @@ class SocketService {
   connectedAt: number | null = null;
   _connected: boolean = false;
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
+  private maxReconnectAttempts = 15;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
@@ -156,7 +156,7 @@ class SocketService {
         reconnection: true,
         reconnectionAttempts: this.maxReconnectAttempts,
         reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
+        reconnectionDelayMax: 30000,
       });
 
       this.socket.on('connect', () => {
@@ -175,10 +175,13 @@ class SocketService {
         this.connectedCallback?.();
         resolve();
 
-        // Асинхронно загружаем TURN-конфигурацию для пробоя NAT через WebRTC.
-        // Не блокируем connect — звонки начнут работать сразу с STUN,
-        // а TURN подтянется позже для пользователей за NAT.
-        webrtcService.fetchTurnConfig(serverUrl).catch(() => {});
+        // Предзагрузка TURN-конфигурации с таймаутом 5 секунд.
+        // Не блокируем connect — если TURN не загрузится, звонки продолжают
+        // работать с STUN (включая российские STUN-серверы).
+        Promise.race([
+          webrtcService.fetchTurnConfig(serverUrl),
+          new Promise<void>(resolve => setTimeout(resolve, 5000)),
+        ]).catch(() => {});
       });
 
       this.socket.on('connect_error', (err: Error) => {

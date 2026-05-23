@@ -64,6 +64,10 @@ export function AddFriendScreen({ navigation }: AddFriendScreenProps): React.JSX
     };
     store.addContact(newContact);
 
+    if (data.targetPublicKey === null) {
+      toast('Ключ пользователя будет получен после подтверждения', 'info');
+    }
+
     toast('Запрос дружбы отправлен', 'success');
     navigation.goBack();
   }
@@ -96,7 +100,7 @@ export function AddFriendScreen({ navigation }: AddFriendScreenProps): React.JSX
         setIsLoading(false);
         toast('Пользователь не в сети или не отвечает', 'error');
       }
-    }, 5000);
+    }, 20000);
   }
 
   async function sendFriendRequest(): Promise<void> {
@@ -126,9 +130,7 @@ export function AddFriendScreen({ navigation }: AddFriendScreenProps): React.JSX
   }
 
   return (
-    <View
-      style={[styles.container, { paddingTop: 16, paddingBottom: insets.bottom + 16 }]}
-    >
+    <View style={[styles.container, { paddingTop: 16, paddingBottom: insets.bottom + 16 }]}>
       <Text style={styles.title}>Добавить контакт</Text>
       <Text style={styles.description}>Введи ID пользователя, чтобы добавить его в контакты</Text>
 

@@ -32,6 +32,7 @@ export function ContactItem({
       <View style={styles.contactInfo}>
         <Text style={styles.contactName}>{contact.nickname ?? maskUserId(contact.userId)}</Text>
         <Text style={styles.contactId}>ID: {maskUserId(contact.userId)}</Text>
+        {!contact.publicKey && <Text style={styles.pendingKeyText}>(ключ ожидается)</Text>}
       </View>
       {unread != null && unread > 0 ? (
         <View style={styles.badge}>
@@ -108,5 +109,10 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 11,
     fontWeight: '700',
+  },
+  pendingKeyText: {
+    color: '#999',
+    fontSize: 12,
+    fontStyle: 'italic',
   },
 });
