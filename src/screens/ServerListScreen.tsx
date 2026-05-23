@@ -8,28 +8,30 @@ import {
   FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRoute } from '@react-navigation/native';
 import { observer } from 'mobx-react-lite';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RouteProp } from '@react-navigation/native';
 import type { RootStackParamList } from '../navigation/types';
 import type { ServerConfig } from '../types';
 import type { BottomSheetAction } from '../components/BottomSheet';
 import { useStore, useServerStore } from '../stores';
-import { maskUserId } from '../utils/maskUserId';
 import { socketService } from '../services/socket';
 import { useToast } from '../components/Toast';
 import { BottomSheet } from '../components/BottomSheet';
 import { BottomSheetPrompt } from '../components/BottomSheetPrompt';
 import { Colors } from '../theme/colors';
 
-interface WelcomeScreenProps {
-  navigation: NativeStackNavigationProp<RootStackParamList, 'Welcome'>;
+interface ServerListScreenProps {
+  navigation: NativeStackNavigationProp<RootStackParamList, 'ServerList'>;
 }
 
-export const WelcomeScreen = observer(function WelcomeScreen({
+export const ServerListScreen = observer(function ServerListScreen({
   navigation,
-}: WelcomeScreenProps): React.JSX.Element {
+}: ServerListScreenProps) {
   const appStore = useStore();
   const serverStore = useServerStore();
+  const route = useRoute<RouteProp<RootStackParamList, 'ServerList'>>();
   const { toast } = useToast();
   const [connectingId, setConnectingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -40,48 +42,23 @@ export const WelcomeScreen = observer(function WelcomeScreen({
     actions: BottomSheetAction[];
   }>({ actions: [] });
   const [renameServer, setRenameServer] = useState<ServerConfig | null>(null);
-
-  const onMessageCleanupRef = useRef<(() => void) | null>(null);
-
-  useEffect(() => {
-    if (socketService.isConnected() && serverStore.activeServerId) {
-      // Очищаем предыдущий listener если был
-      onMessageCleanupRef.current?.();
-
-      const cleanup = socketService.onMessage(data => {
-        const message = {
-          id: data.nonce,
-          from: data.from,
-          ciphertext: data.ciphertext,
-          nonce: data.nonce,
-          timestamp: data.timestamp,
-          read: false,
-        };
-        appStore.addMessage(data.from, message);
-        appStore.incrementUnread(data.from);
-        serverStore.incrementServerUnread(serverStore.activeServerId!);
-
-        const contact = appStore.contacts.find(c => c.userId === data.from);
-        const displayName = contact?.nickname ?? maskUserId(data.from);
-        toast(`Новое сообщение от ${displayName}`, 'info');
-      });
-      onMessageCleanupRef.current = cleanup;
-    }
-
-    return () => {
-      onMessageCleanupRef.current?.();
-      onMessageCleanupRef.current = null;
-    };
-  }, []);
+  const errorMessage = route.params?.errorMessage;
+  // ref для защиты от повторного сабмита (при StrictMode)
+  const connectingRef = useRef(false);
 
   useEffect(() => {
-    if (!serverStore.isReady) return;
-
-    // Если нет серверов — сразу переходим к добавлению
-    if (serverStore.servers.length === 0) {
-      navigation.replace('AddServer');
-    }
-  }, [serverStore.isReady, serverStore.servers.length, navigation]);
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity
+          style={styles.addHeaderButton}
+          onPress={() => navigation.navigate('AddServer')}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.addHeaderButtonText}>+</Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation]);
 
   function showSheet(config: {
     title?: string;
@@ -93,18 +70,23 @@ export const WelcomeScreen = observer(function WelcomeScreen({
   }
 
   async function handleConnect(server: ServerConfig): Promise<void> {
-    // Если уже подключены к этому серверу — просто переходим на Home
+    // Защита от повторного вызова
+    if (connectingRef.current) return;
+    connectingRef.current = true;
+
+    // Если уже подключены к этому серверу — просто переходим
     const connectedUrl = socketService.getConnectedUrl();
     if (
       connectedUrl === server.url &&
       serverStore.activeServerId === server.id &&
       appStore.isReady
     ) {
+      connectingRef.current = false;
       navigation.replace('Home');
       return;
     }
 
-    // Если подключены к другому серверу — дисконнектимся
+    // Если подключены к другому — дисконнектимся
     if (socketService.isConnected()) {
       socketService.disconnect();
     }
@@ -120,10 +102,11 @@ export const WelcomeScreen = observer(function WelcomeScreen({
           'error',
         );
         setConnectingId(null);
+        connectingRef.current = false;
         return;
       }
 
-      serverStore.setActive(server.id);
+      await serverStore.setActive(server.id);
       await socketService.connect(server.url, appStore.user.userId, appStore.user.publicKey);
       navigation.replace('Home');
     } catch (e) {
@@ -131,6 +114,7 @@ export const WelcomeScreen = observer(function WelcomeScreen({
       toast('Не удалось подключиться к серверу', 'error');
     } finally {
       setConnectingId(null);
+      connectingRef.current = false;
     }
   }
 
@@ -161,8 +145,7 @@ export const WelcomeScreen = observer(function WelcomeScreen({
               try {
                 await serverStore.remove(server.id);
                 toast('Порт удалён', 'success');
-              } catch (e) {
-                console.error('Delete server error:', e instanceof Error ? e.message : e);
+              } catch {
                 toast('Ошибка при удалении порта', 'error');
               } finally {
                 setDeletingId(null);
@@ -196,19 +179,13 @@ export const WelcomeScreen = observer(function WelcomeScreen({
     });
   }
 
-  if (!serverStore.isReady) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <ActivityIndicator size='large' color={Colors.primary} />
-        <Text style={styles.statusText}>Загрузка карт...</Text>
-      </SafeAreaView>
-    );
-  }
-
   return (
-    <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>☠ VOID CHAT</Text>
-      <Text style={styles.subtitle}>Выбери порт для входа</Text>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      {errorMessage && (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorBannerText}>⚠️ {errorMessage}</Text>
+        </View>
+      )}
 
       <FlatList
         data={serverStore.servers}
@@ -258,13 +235,6 @@ export const WelcomeScreen = observer(function WelcomeScreen({
         }
       />
 
-      <TouchableOpacity
-        style={styles.addButton}
-        onPress={() => navigation.navigate('AddServer')}
-        activeOpacity={0.7}
-      >
-        <Text style={styles.addButtonText}>+ Добавить порт</Text>
-      </TouchableOpacity>
       <BottomSheet
         visible={sheetVisible}
         title={sheetConfig.title}
@@ -288,19 +258,18 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     padding: 20,
   },
-  title: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    color: Colors.textPrimary,
-    textAlign: 'center',
-    marginTop: 40,
-    marginBottom: 8,
+  errorBanner: {
+    backgroundColor: 'rgba(255,68,68,0.15)',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: Colors.error,
   },
-  subtitle: {
-    fontSize: 16,
-    color: Colors.textSecondary,
+  errorBannerText: {
+    color: Colors.error,
+    fontSize: 14,
     textAlign: 'center',
-    marginBottom: 30,
   },
   list: {
     flexGrow: 1,
@@ -364,24 +333,20 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     fontSize: 16,
   },
-  statusText: {
-    color: Colors.textSecondary,
-    marginLeft: 8,
-    fontSize: 14,
-    marginTop: 12,
-  },
-  addButton: {
+  addHeaderButton: {
     backgroundColor: Colors.primary,
-    borderRadius: 12,
-    paddingVertical: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    borderWidth: 1.5,
+    borderColor: Colors.primaryDark,
   },
-  addButtonText: {
+  addHeaderButtonText: {
     color: '#000',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 22,
+    fontWeight: '700',
+    lineHeight: 24,
   },
 });

@@ -1,5 +1,5 @@
 import React, { useEffect, useCallback, useState, useRef } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { observer } from 'mobx-react-lite';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -16,8 +16,6 @@ import { useNotification } from '../components/NotificationBanner';
 import { ConfirmAlert } from '../components/ConfirmAlert';
 import { maskUserId } from '../utils/maskUserId';
 import { Colors } from '../theme';
-import { PirateIcon } from '../components/PirateIcon';
-import { BackButton } from '../components/BackButton';
 import { IncomingCallBanner } from '../components/IncomingCallBanner';
 
 interface HomeScreenProps {
@@ -41,8 +39,6 @@ export const HomeScreen = observer(function HomeScreen({
   const [clearChatConfirmVisible, setClearChatConfirmVisible] = useState(false);
   const [clearChatTarget, setClearChatTarget] = useState<Contact | null>(null);
   const onMessageCleanupRef = useRef<(() => void) | null>(null);
-  const [friendBtnScale] = useState(new Animated.Value(1));
-  const [shareBtnScale] = useState(new Animated.Value(1));
   const insets = useSafeAreaInsets();
   const callStore = useCallStore();
   const [incomingCallData, setIncomingCallData] = useState<{
@@ -56,24 +52,6 @@ export const HomeScreen = observer(function HomeScreen({
   useEffect(() => {
     incomingCallDataRef.current = incomingCallData;
   }, [incomingCallData]);
-
-  function animatePress(scaleAnim: Animated.Value): void {
-    Animated.spring(scaleAnim, {
-      toValue: 0.92,
-      useNativeDriver: true,
-      friction: 8,
-      tension: 100,
-    }).start();
-  }
-
-  function animateRelease(scaleAnim: Animated.Value): void {
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      useNativeDriver: true,
-      friction: 8,
-      tension: 100,
-    }).start();
-  }
 
   function showSheet(config: {
     title?: string;
@@ -93,7 +71,7 @@ export const HomeScreen = observer(function HomeScreen({
           text: 'OK',
           onPress: () => {
             socketService.disconnect();
-            navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
+            navigation.reset({ index: 0, routes: [{ name: 'ServerList' }] });
           },
         },
       ],
@@ -119,32 +97,20 @@ export const HomeScreen = observer(function HomeScreen({
   useEffect(() => {
     navigation.setOptions({
       title: serverStore.activeServer?.name ?? 'VoidChat',
-      headerLeft: () => <BackButton onPress={handleGoBack} />,
       headerRight: () => (
-        <View style={styles.headerButtons}>
-          <Animated.View style={{ transform: [{ scale: friendBtnScale }] }}>
-            <TouchableOpacity
-              style={styles.headerButton}
-              onPress={() => navigation.navigate('AddFriend')}
-              onPressIn={() => animatePress(friendBtnScale)}
-              onPressOut={() => animateRelease(friendBtnScale)}
-              activeOpacity={1}
-            >
-              <PirateIcon variant='ship' size={20} color='#000' />
-            </TouchableOpacity>
-          </Animated.View>
-          <Animated.View style={{ transform: [{ scale: shareBtnScale }] }}>
-            <TouchableOpacity
-              style={styles.headerButton}
-              onPress={() => navigation.navigate('ShareId')}
-              onPressIn={() => animatePress(shareBtnScale)}
-              onPressOut={() => animateRelease(shareBtnScale)}
-              activeOpacity={1}
-            >
-              <PirateIcon variant='scroll' size={20} color='#000' />
-            </TouchableOpacity>
-          </Animated.View>
-        </View>
+        <TouchableOpacity
+          style={styles.settingsButton}
+          onPress={() => navigation.navigate('Settings')}
+          activeOpacity={0.7}
+        >
+          <View style={styles.gearIcon}>
+            <View style={styles.gearCircle} />
+            <View style={styles.gearSpoke1} />
+            <View style={styles.gearSpoke2} />
+            <View style={styles.gearSpoke3} />
+            <View style={styles.gearSpoke4} />
+          </View>
+        </TouchableOpacity>
       ),
     });
   }, [navigation, serverStore.activeServer?.name]);
@@ -364,10 +330,6 @@ export const HomeScreen = observer(function HomeScreen({
     setClearChatTarget(null);
   }
 
-  function handleGoBack(): void {
-    navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
-  }
-
   function openChat(contact: Contact): void {
     navigation.navigate('Chat', {
       contactId: contact.userId,
@@ -468,82 +430,60 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  headerButtons: {
-    flexDirection: 'row',
-    gap: 8,
-    flexShrink: 0,
-  },
-  headerButton: {
-    backgroundColor: Colors.primary,
+  settingsButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: Colors.primary,
     borderWidth: 1.5,
-    borderColor: Colors.primaryDark,
+    borderColor: Colors.primaryDark || '#B8960F',
   },
-  personPlusIcon: {
-    width: 18,
-    height: 18,
+  gearIcon: {
+    width: 22,
+    height: 22,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  personHead: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.textPrimary,
-  },
-  personBody: {
-    width: 12,
-    height: 7,
-    borderTopLeftRadius: 6,
-    borderTopRightRadius: 6,
-    backgroundColor: Colors.textPrimary,
-    marginTop: 1,
-  },
-  plusIcon: {
-    position: 'absolute',
-    bottom: 0,
-    right: -2,
+  gearCircle: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: Colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: Colors.surface,
-  },
-  plusLineH: {
-    width: 5,
-    height: 1.5,
-    backgroundColor: Colors.textPrimary,
-    borderRadius: 1,
+    backgroundColor: '#000',
     position: 'absolute',
+    zIndex: 1,
   },
-  plusLineV: {
-    width: 1.5,
-    height: 5,
-    backgroundColor: Colors.textPrimary,
-    borderRadius: 1,
+  gearSpoke1: {
     position: 'absolute',
-  },
-  idCardIcon: {
-    width: 18,
+    width: 4,
     height: 18,
-    borderRadius: 3,
-    borderWidth: 2,
-    borderColor: Colors.textPrimary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 3,
+    borderRadius: 2,
+    backgroundColor: '#000',
   },
-  idCardLine: {
-    width: 12,
-    height: 2,
-    backgroundColor: Colors.textPrimary,
-    borderRadius: 1,
+  gearSpoke2: {
+    position: 'absolute',
+    width: 4,
+    height: 18,
+    borderRadius: 2,
+    backgroundColor: '#000',
+    transform: [{ rotate: '45deg' }],
+  },
+  gearSpoke3: {
+    position: 'absolute',
+    width: 4,
+    height: 18,
+    borderRadius: 2,
+    backgroundColor: '#000',
+    transform: [{ rotate: '90deg' }],
+  },
+  gearSpoke4: {
+    position: 'absolute',
+    width: 4,
+    height: 18,
+    borderRadius: 2,
+    backgroundColor: '#000',
+    transform: [{ rotate: '135deg' }],
   },
   list: {
     paddingHorizontal: 16,

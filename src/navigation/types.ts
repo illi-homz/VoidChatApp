@@ -1,9 +1,10 @@
 export type RootStackParamList = {
-  Welcome: undefined;
+  Startup: undefined;
   Home: undefined;
+  Settings: undefined;
+  ServerList: { errorMessage?: string } | undefined;
   Chat: { contactId: string; contactName: string };
   AddFriend: undefined;
-  ShareId: undefined;
   AddServer: undefined;
   Call:
     | {

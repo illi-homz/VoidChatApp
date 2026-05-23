@@ -3,12 +3,13 @@ import { View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { RootStackParamList } from './types';
-import { WelcomeScreen } from '../screens/WelcomeScreen';
+import { StartupScreen } from '../screens/StartupScreen';
 import { HomeScreen } from '../screens/HomeScreen';
 import { ChatScreen } from '../screens/ChatScreen';
+import { SettingsScreen } from '../screens/SettingsScreen';
+import { ServerListScreen } from '../screens/ServerListScreen';
 import { AddFriendScreen } from '../screens/AddFriendScreen';
 import { AddServerScreen } from '../screens/AddServerScreen';
-import { ShareIdScreen } from '../screens/ShareIdScreen';
 import { CallScreen } from '../screens/CallScreen';
 import { Colors } from '../theme/colors';
 import { SelectionOverlay } from '../components/SelectionOverlay';
@@ -24,7 +25,7 @@ export function AppNavigator({ onReady }: AppNavigatorProps): React.JSX.Element 
     <View style={{ flex: 1 }}>
       <NavigationContainer onReady={onReady}>
         <Stack.Navigator
-          initialRouteName='Welcome'
+          initialRouteName='Startup'
           screenOptions={{
             headerStyle: {
               backgroundColor: Colors.surface,
@@ -39,9 +40,19 @@ export function AppNavigator({ onReady }: AppNavigatorProps): React.JSX.Element 
             },
           }}
         >
-          <Stack.Screen name='Welcome' component={WelcomeScreen} options={{ headerShown: false }} />
+          <Stack.Screen name='Startup' component={StartupScreen} options={{ headerShown: false }} />
           <Stack.Screen name='Home' component={HomeScreen} />
           <Stack.Screen name='Chat' component={ChatScreen} options={{ title: '⚓ Чат' }} />
+          <Stack.Screen
+            name='Settings'
+            component={SettingsScreen}
+            options={{ title: 'Настройки' }}
+          />
+          <Stack.Screen
+            name='ServerList'
+            component={ServerListScreen}
+            options={{ title: 'Порты' }}
+          />
           <Stack.Screen
             name='Call'
             component={CallScreen}
@@ -57,7 +68,6 @@ export function AppNavigator({ onReady }: AppNavigatorProps): React.JSX.Element 
             component={AddServerScreen}
             options={{ title: 'Новый порт' }}
           />
-          <Stack.Screen name='ShareId' component={ShareIdScreen} options={{ title: 'Каперское' }} />
         </Stack.Navigator>
       </NavigationContainer>
       <SelectionOverlay />

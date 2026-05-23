@@ -123,7 +123,7 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
       const serverConfig = { id: serverId, name: trimmedName, url: serverUrl };
 
       await serverStore.add(serverConfig);
-      serverStore.setActive(serverId);
+      await serverStore.setActive(serverId);
 
       await appStore.load(serverId);
       await appStore.saveUser({ userId: newUserId, publicKey, privateKey });

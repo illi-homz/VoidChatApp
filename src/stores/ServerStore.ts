@@ -6,6 +6,7 @@ import { socketService } from '../services/socket';
 
 const STORAGE_KEY = 'servers';
 const SERVER_UNREAD_KEY = 'server_unread';
+const LAST_SERVER_KEY = 'last_server_id';
 
 export class ServerStore {
   servers: ServerConfig[] = [];
@@ -24,9 +25,10 @@ export class ServerStore {
   }
 
   async load(): Promise<void> {
-    const [data, unreadData] = await Promise.all([
+    const [data, unreadData, lastServerId] = await Promise.all([
       AsyncStorage.getItem(STORAGE_KEY),
       AsyncStorage.getItem(SERVER_UNREAD_KEY),
+      AsyncStorage.getItem(LAST_SERVER_KEY),
     ]);
     runInAction(() => {
       if (data) {
@@ -34,6 +36,9 @@ export class ServerStore {
       }
       if (unreadData) {
         this.serverUnread = JSON.parse(unreadData);
+      }
+      if (lastServerId && this.servers.some(s => s.id === lastServerId)) {
+        this.activeServerId = lastServerId;
       }
       this.isReady = true;
       this.serverUnreadLoaded = true;
@@ -61,19 +66,25 @@ export class ServerStore {
       this.activeServerId = this.servers[0]?.id ?? null;
     }
 
-    // 4. Удаляем unread-данные для этого сервера
+    // 4. Если активный сервер не выбран — удаляем сохранённый last_server_id
+    if (!this.activeServerId) {
+      await AsyncStorage.removeItem(LAST_SERVER_KEY);
+    }
+
+    // 5. Удаляем unread-данные для этого сервера
     const { [serverId]: _removed, ...rest } = this.serverUnread;
     this.serverUnread = rest;
 
-    // 5. Сохраняем обновлённые данные
+    // 6. Сохраняем обновлённые данные
     await Promise.all([
       AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(this.servers)),
       AsyncStorage.setItem(SERVER_UNREAD_KEY, JSON.stringify(this.serverUnread)),
     ]);
   }
 
-  setActive(serverId: string): void {
+  async setActive(serverId: string): Promise<void> {
     this.activeServerId = serverId;
+    await AsyncStorage.setItem(LAST_SERVER_KEY, serverId);
   }
 
   async rename(serverId: string, newName: string): Promise<void> {
