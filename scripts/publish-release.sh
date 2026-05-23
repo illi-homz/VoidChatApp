@@ -94,12 +94,32 @@ git push origin main
 
 # ── Step 9: GitHub Release ───────────────────────────────────────────
 cd "$ROOT"
+RELEASE_NOTES_FILE="$ROOT/RELEASE_NOTES.md"
+RELEASE_ARGS=("$TAG" "$APK" "--target" "main")
+if [ -f "$RELEASE_NOTES_FILE" ]; then
+  RELEASE_ARGS+=("--notes-file" "$RELEASE_NOTES_FILE")
+  info "Using release notes from RELEASE_NOTES.md"
+else
+  RELEASE_ARGS+=("--generate-notes")
+fi
+
 if gh release view "$TAG" > /dev/null 2>&1; then
   info "Release $TAG already exists — uploading APK"
   gh release upload "$TAG" "$APK" --clobber
+  # Если релиз уже существует и есть файл с заметками — обновляем тело релиза
+  if [ -f "$RELEASE_NOTES_FILE" ]; then
+    gh release edit "$TAG" --notes-file "$RELEASE_NOTES_FILE"
+    info "Release notes updated"
+  fi
 else
   info "Creating GitHub Release $TAG..."
-  gh release create "$TAG" "$APK" --generate-notes --target main
+  gh release create "${RELEASE_ARGS[@]}"
+fi
+
+# Если использовали RELEASE_NOTES.md — удаляем, чтобы не засорять историю
+if [ -f "$RELEASE_NOTES_FILE" ]; then
+  rm "$RELEASE_NOTES_FILE"
+  info "RELEASE_NOTES.md cleaned up"
 fi
 info "GitHub Release ready"
 
