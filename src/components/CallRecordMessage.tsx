@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Colors } from '../theme/colors';
-import { CallIcon } from './CallIcon';
+import { Icon } from './Icon';
 
 interface CallRecordMessageProps {
   direction: 'outgoing' | 'incoming';
@@ -55,13 +55,11 @@ export function CallRecordMessage({
       <View style={[styles.bubble, { borderColor: color + '40' }]}>
         {/* Иконка */}
         <View style={[styles.iconWrap, isMissed && styles.iconWrapMissed]}>
-          {direction === 'outgoing' ? (
-            <CallIcon size={14} color={iconColor} />
-          ) : (
-            <View style={{ transform: [{ scaleX: -1 }] }}>
-              <CallIcon size={14} color={iconColor} />
-            </View>
-          )}
+          <Icon
+            name={direction === 'outgoing' ? 'phone-outgoing' : 'phone-incoming'}
+            size={14}
+            color={iconColor}
+          />
         </View>
 
         {/* Текст */}

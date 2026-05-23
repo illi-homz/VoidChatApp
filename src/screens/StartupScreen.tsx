@@ -7,6 +7,7 @@ import type { RootStackParamList } from '../navigation/types';
 import { useStore, useServerStore } from '../stores';
 import { socketService } from '../services/socket';
 import { Colors } from '../theme/colors';
+import { Icon } from '../components/Icon';
 
 interface StartupScreenProps {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Startup'>;
@@ -105,7 +106,9 @@ export const StartupScreen = observer(function StartupScreen({ navigation }: Sta
   }
 
   function handleSwitchServer() {
-    navigation.replace('ServerList', { errorMessage: 'Сервер недоступен. Выберите другой порт.' });
+    navigation.replace('ServerList', {
+      errorMessage: 'Сервер недоступен. Выберите другой сервер.',
+    });
   }
 
   // RENDER STATES
@@ -113,7 +116,7 @@ export const StartupScreen = observer(function StartupScreen({ navigation }: Sta
   if (status === 'loading' || status === 'connecting') {
     return (
       <SafeAreaView style={styles.container}>
-        <Text style={styles.logo}>☠ VOID CHAT</Text>
+        <Text style={styles.logo}>VOID CHAT</Text>
         <ActivityIndicator size='large' color={Colors.primary} style={styles.spinner} />
         <Text style={styles.statusText}>
           {status === 'loading' ? 'Загрузка...' : `Подключение к ${serverName}...`}
@@ -124,8 +127,8 @@ export const StartupScreen = observer(function StartupScreen({ navigation }: Sta
 
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.logo}>☠ VOID CHAT</Text>
-      <Text style={styles.errorIcon}>⚠️</Text>
+      <Text style={styles.logo}>VOID CHAT</Text>
+      <Icon name='triangle-alert' size={48} color={Colors.error} />
       <Text style={styles.errorTitle}>Ошибка подключения</Text>
       <Text style={styles.errorText}>{errorMessage}</Text>
 
@@ -166,9 +169,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   errorIcon: {
-    fontSize: 48,
     marginBottom: 16,
-  },
+  } as const,
   errorTitle: {
     fontSize: 20,
     fontWeight: '700',

@@ -17,6 +17,7 @@ import { socketService } from '../services/socket';
 import { useToast } from '../components/Toast';
 import { QrScannerModal } from '../components/QrScannerModal';
 import { Colors } from '../theme/colors';
+import { Icon } from '../components/Icon';
 
 interface AddFriendScreenProps {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AddFriend'>;
@@ -128,8 +129,8 @@ export function AddFriendScreen({ navigation }: AddFriendScreenProps): React.JSX
     <View
       style={[styles.container, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 }]}
     >
-      <Text style={styles.title}>🏴 Вербовка</Text>
-      <Text style={styles.description}>Введи ID пирата, чтобы завербовать его в команду</Text>
+      <Text style={styles.title}>Добавить контакт</Text>
+      <Text style={styles.description}>Введи ID пользователя, чтобы добавить его в контакты</Text>
 
       <View style={styles.inputRow}>
         <TextInput
@@ -149,13 +150,7 @@ export function AddFriendScreen({ navigation }: AddFriendScreenProps): React.JSX
           disabled={isLoading}
           activeOpacity={0.7}
         >
-          <View style={styles.pasteIcon}>
-            <View style={styles.pasteIconClip} />
-            <View style={styles.pasteIconBody}>
-              <View style={styles.pasteIconLine} />
-              <View style={styles.pasteIconLine} />
-            </View>
-          </View>
+          <Icon name='clipboard-paste' size={24} color={Colors.background} />
         </TouchableOpacity>
       </View>
 
@@ -165,7 +160,10 @@ export function AddFriendScreen({ navigation }: AddFriendScreenProps): React.JSX
         disabled={isLoading}
         activeOpacity={0.7}
       >
-        <Text style={styles.scanButtonText}>📷 Сканировать QR</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Icon name='camera' size={18} color='#000' />
+          <Text style={styles.scanButtonText}> Сканировать QR</Text>
+        </View>
       </TouchableOpacity>
 
       <TouchableOpacity
@@ -177,11 +175,14 @@ export function AddFriendScreen({ navigation }: AddFriendScreenProps): React.JSX
         {isLoading ? (
           <ActivityIndicator color='#000' />
         ) : (
-          <Text style={styles.buttonText}>🏴 Отправить приглашение</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+            <Icon name='send' size={16} color='#000' />
+            <Text style={styles.buttonText}> Отправить приглашение</Text>
+          </View>
         )}
       </TouchableOpacity>
 
-      <Text style={styles.note}>Пират должен быть онлайн для вербовки</Text>
+      <Text style={styles.note}>Пользователь должен быть онлайн для добавления</Text>
 
       <QrScannerModal
         visible={showScanner}
@@ -234,37 +235,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  pasteIcon: {
-    width: 20,
-    height: 22,
-    alignItems: 'center',
-  },
-  pasteIconClip: {
-    width: 8,
-    height: 3,
-    backgroundColor: Colors.textPrimary,
-    borderRadius: 1,
-    borderTopLeftRadius: 2,
-    borderTopRightRadius: 2,
-    zIndex: 1,
-  },
-  pasteIconBody: {
-    width: 18,
-    height: 18,
-    borderWidth: 2,
-    borderColor: Colors.textPrimary,
-    borderRadius: 3,
-    marginTop: -1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
-  },
-  pasteIconLine: {
-    width: 10,
-    height: 2,
-    backgroundColor: Colors.textPrimary,
-    borderRadius: 1,
   },
   button: {
     backgroundColor: Colors.primary,

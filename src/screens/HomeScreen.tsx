@@ -16,6 +16,7 @@ import { useNotification } from '../components/NotificationBanner';
 import { ConfirmAlert } from '../components/ConfirmAlert';
 import { maskUserId } from '../utils/maskUserId';
 import { Colors } from '../theme';
+import { Icon } from '../components/Icon';
 import { IncomingCallBanner } from '../components/IncomingCallBanner';
 
 interface HomeScreenProps {
@@ -103,13 +104,7 @@ export const HomeScreen = observer(function HomeScreen({
           onPress={() => navigation.navigate('Settings')}
           activeOpacity={0.7}
         >
-          <View style={styles.gearIcon}>
-            <View style={styles.gearCircle} />
-            <View style={styles.gearSpoke1} />
-            <View style={styles.gearSpoke2} />
-            <View style={styles.gearSpoke3} />
-            <View style={styles.gearSpoke4} />
-          </View>
+          <Icon name='settings' size={22} color='#000' />
         </TouchableOpacity>
       ),
     });
@@ -352,7 +347,7 @@ export const HomeScreen = observer(function HomeScreen({
       {store.contacts.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>Команда пуста</Text>
-          <Text style={styles.emptySubtext}>Найди соратников для плавания</Text>
+          <Text style={styles.emptySubtext}>Найди друзей для общения</Text>
         </View>
       ) : (
         <FlatList
@@ -441,50 +436,11 @@ const styles = StyleSheet.create({
     borderColor: Colors.primaryDark || '#B8960F',
   },
   gearIcon: {
-    width: 22,
-    height: 22,
+    width: 26,
+    height: 26,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  gearCircle: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#000',
-    position: 'absolute',
-    zIndex: 1,
-  },
-  gearSpoke1: {
-    position: 'absolute',
-    width: 4,
-    height: 18,
-    borderRadius: 2,
-    backgroundColor: '#000',
-  },
-  gearSpoke2: {
-    position: 'absolute',
-    width: 4,
-    height: 18,
-    borderRadius: 2,
-    backgroundColor: '#000',
-    transform: [{ rotate: '45deg' }],
-  },
-  gearSpoke3: {
-    position: 'absolute',
-    width: 4,
-    height: 18,
-    borderRadius: 2,
-    backgroundColor: '#000',
-    transform: [{ rotate: '90deg' }],
-  },
-  gearSpoke4: {
-    position: 'absolute',
-    width: 4,
-    height: 18,
-    borderRadius: 2,
-    backgroundColor: '#000',
-    transform: [{ rotate: '135deg' }],
-  },
+  } as const,
   list: {
     paddingHorizontal: 16,
     paddingTop: 8,

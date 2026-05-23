@@ -22,6 +22,7 @@ import { socketService } from '../services/socket';
 import { deriveSharedSecret, encryptMessage, decryptMessage } from '../services/crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { Colors } from '../theme/colors';
+import { Icon } from '../components/Icon';
 import { BackButton } from '../components/BackButton';
 import { CallButton } from '../components/CallButton';
 import { CallConfirmAlert } from '../components/CallConfirmAlert';
@@ -345,7 +346,7 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
         {selectionMode && (
           <Animated.View entering={FadeInLeft.duration(200)} style={styles.selectionMarker}>
             <View style={[styles.selectionCircle, isSelected && styles.selectionCircleSelected]}>
-              {isSelected && <Text style={styles.selectionCheckmark}>✓</Text>}
+              {isSelected && <Icon name='check' size={12} color={Colors.background} />}
             </View>
           </Animated.View>
         )}
@@ -403,7 +404,11 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
           disabled={!inputText.trim() || !isSecretReady}
           activeOpacity={0.7}
         >
-          <Text style={styles.sendButtonText}>🚀</Text>
+          <Icon
+            name='send'
+            size={20}
+            color={!inputText.trim() || !isSecretReady ? Colors.textMuted : '#000'}
+          />
         </TouchableOpacity>
       </View>
     </>
@@ -531,11 +536,7 @@ const styles = StyleSheet.create({
   sendButtonDisabled: {
     opacity: 0.5,
   },
-  sendButtonText: {
-    color: '#000',
-    fontSize: 15,
-    fontWeight: '600',
-  },
+
   messageRow: {
     flexDirection: 'row',
     alignItems: 'center',

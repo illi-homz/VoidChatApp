@@ -11,6 +11,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import { Colors } from '../theme/colors';
+import { Icon } from './Icon';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -248,7 +249,7 @@ export function QrScannerModal({
           accessibilityLabel='Закрыть сканер'
           accessibilityRole='button'
         >
-          <Text style={styles.closeButtonText}>✕</Text>
+          <Icon name='x' size={24} color={Colors.textPrimary} />
         </TouchableOpacity>
 
         {/* Заголовок в верхней части */}

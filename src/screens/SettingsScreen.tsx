@@ -16,6 +16,7 @@ import type { RootStackParamList } from '../navigation/types';
 import { useStore } from '../stores';
 import { useToast } from '../components/Toast';
 import { Colors } from '../theme/colors';
+import { Icon } from '../components/Icon';
 import { version } from '../../package.json';
 
 interface SettingsScreenProps {
@@ -73,7 +74,12 @@ export const SettingsScreen = observer(function SettingsScreen({
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.shareButton} onPress={shareId} activeOpacity={0.7}>
-                <Text style={styles.shareButtonText}>🏴 Поделиться</Text>
+                <View
+                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <Icon name='share-2' size={16} color='#000' />
+                  <Text style={styles.shareButtonText}> Поделиться</Text>
+                </View>
               </TouchableOpacity>
             </>
           )}
@@ -87,9 +93,9 @@ export const SettingsScreen = observer(function SettingsScreen({
             onPress={() => navigation.navigate('AddFriend')}
             activeOpacity={0.7}
           >
-            <Text style={styles.menuIcon}>➕</Text>
+            <Icon name='user-plus' size={18} color={Colors.textPrimary} style={styles.menuIcon} />
             <Text style={styles.menuText}>Добавить контакт</Text>
-            <Text style={styles.menuArrow}>›</Text>
+            <Icon name='chevron-right' size={20} color={Colors.textMuted} />
           </TouchableOpacity>
 
           <View style={styles.menuDivider} />
@@ -99,9 +105,9 @@ export const SettingsScreen = observer(function SettingsScreen({
             onPress={() => navigation.navigate('ServerList')}
             activeOpacity={0.7}
           >
-            <Text style={styles.menuIcon}>🔄</Text>
+            <Icon name='refresh-cw' size={18} color={Colors.textPrimary} style={styles.menuIcon} />
             <Text style={styles.menuText}>Переключить сервер</Text>
-            <Text style={styles.menuArrow}>›</Text>
+            <Icon name='chevron-right' size={20} color={Colors.textMuted} />
           </TouchableOpacity>
         </View>
 
@@ -109,7 +115,7 @@ export const SettingsScreen = observer(function SettingsScreen({
         <Text style={styles.sectionTitle}>О ПРИЛОЖЕНИИ</Text>
         <View style={styles.sectionCard}>
           <View style={styles.aboutContainer}>
-            <Text style={styles.aboutLogo}>☠ VOID CHAT</Text>
+            <Text style={styles.aboutLogo}>VOID CHAT</Text>
             <Text style={styles.aboutVersion}>v{version}</Text>
             <Text style={styles.aboutBuilt}>Developed by illi-homz</Text>
           </View>
@@ -191,25 +197,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   menuIcon: {
-    fontSize: 18,
-    marginRight: 12,
     width: 24,
-    textAlign: 'center',
-  },
+    marginRight: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  } as const,
   menuText: {
     flex: 1,
     fontSize: 16,
     color: Colors.textPrimary,
   },
   menuArrow: {
-    fontSize: 20,
-    color: Colors.textMuted,
     marginLeft: 8,
-  },
+  } as const,
   menuDivider: {
     height: 1,
     backgroundColor: Colors.border,
-    marginLeft: 40,
   },
   aboutContainer: {
     alignItems: 'center',

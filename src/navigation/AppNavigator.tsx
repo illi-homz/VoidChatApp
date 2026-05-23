@@ -42,7 +42,7 @@ export function AppNavigator({ onReady }: AppNavigatorProps): React.JSX.Element 
         >
           <Stack.Screen name='Startup' component={StartupScreen} options={{ headerShown: false }} />
           <Stack.Screen name='Home' component={HomeScreen} />
-          <Stack.Screen name='Chat' component={ChatScreen} options={{ title: '⚓ Чат' }} />
+          <Stack.Screen name='Chat' component={ChatScreen} options={{ title: 'Чат' }} />
           <Stack.Screen
             name='Settings'
             component={SettingsScreen}
@@ -51,7 +51,7 @@ export function AppNavigator({ onReady }: AppNavigatorProps): React.JSX.Element 
           <Stack.Screen
             name='ServerList'
             component={ServerListScreen}
-            options={{ title: 'Порты' }}
+            options={{ title: 'Серверы' }}
           />
           <Stack.Screen
             name='Call'
@@ -61,12 +61,12 @@ export function AppNavigator({ onReady }: AppNavigatorProps): React.JSX.Element 
           <Stack.Screen
             name='AddFriend'
             component={AddFriendScreen}
-            options={{ title: 'Вербовка' }}
+            options={{ title: 'Добавить контакт' }}
           />
           <Stack.Screen
             name='AddServer'
             component={AddServerScreen}
-            options={{ title: 'Новый порт' }}
+            options={{ title: 'Новый сервер' }}
           />
         </Stack.Navigator>
       </NavigationContainer>

@@ -6,6 +6,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { useStore } from '../stores';
 import { useToast } from '../components/Toast';
 import { Colors } from '../theme/colors';
+import { Icon } from '../components/Icon';
 
 export const ShareIdScreen = observer(function ShareIdScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
@@ -49,8 +50,8 @@ export const ShareIdScreen = observer(function ShareIdScreen(): React.JSX.Elemen
     <View
       style={[styles.container, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 }]}
     >
-      <Text style={styles.title}>🏴 Каперское свидетельство</Text>
-      <Text style={styles.subtitle}>Покажи этот свиток соратникам</Text>
+      <Text style={styles.title}>Мой ID</Text>
+      <Text style={styles.subtitle}>Поделись им с друзьями</Text>
 
       <View style={styles.qrContainer}>
         <QRCode
@@ -69,10 +70,13 @@ export const ShareIdScreen = observer(function ShareIdScreen(): React.JSX.Elemen
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.shareButton} onPress={shareId} activeOpacity={0.7}>
-        <Text style={styles.shareButtonText}>🏴 Поделиться</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name='share-2' size={16} color='#000' />
+          <Text style={styles.shareButtonText}> Поделиться</Text>
+        </View>
       </TouchableOpacity>
 
-      <Text style={styles.hint}>Пират получит твой ID и сможет добавить тебя в команду</Text>
+      <Text style={styles.hint}>Друг получит твой ID и сможет добавить тебя в контакты</Text>
     </View>
   );
 });

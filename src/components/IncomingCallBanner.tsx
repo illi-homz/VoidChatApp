@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, Modal, StyleSheet, Animated } from 'react-native';
 import { Colors } from '../theme/colors';
 import { CallIcon } from './CallIcon';
-import { PirateIcon } from './PirateIcon';
+import { Icon } from './Icon';
 
 interface IncomingCallBannerProps {
   visible: boolean;
@@ -110,7 +110,7 @@ export function IncomingCallBanner({
               accessibilityRole='button'
               accessibilityLabel='Отклонить вызов'
             >
-              <PirateIcon variant='skull' size={20} color={Colors.error} />
+              <Icon name='x' size={20} color={Colors.error} />
               <Text style={styles.declineText}>Отклонить</Text>
             </TouchableOpacity>
 

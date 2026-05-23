@@ -5,6 +5,7 @@ import { observer } from 'mobx-react-lite';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Colors } from '../theme/colors';
+import { Icon } from '../components/Icon';
 import { CallIcon } from '../components/CallIcon';
 import { callStore } from '../stores/CallStore';
 import { webrtcService } from '../services/WebRTCService';
@@ -387,7 +388,7 @@ const CallScreenComponent: React.FC = observer(() => {
         )}
         {showFailed && (
           <View style={styles.failedIconContainer}>
-            <Text style={{ color: Colors.error, fontSize: 56 }}>☠</Text>
+            <Icon name='phone-off' size={56} color={Colors.error} />
           </View>
         )}
         {!showFailed && (
@@ -407,18 +408,22 @@ const CallScreenComponent: React.FC = observer(() => {
           onPress={handleToggleMute}
           activeOpacity={0.7}
         >
-          <Text style={[styles.controlLabel, isMuted && styles.controlLabelActive]}>
-            {isMuted ? '🔇' : '🎤'}
-          </Text>
+          <Icon
+            name={isMuted ? 'mic-off' : 'mic'}
+            size={24}
+            color={isMuted ? Colors.primary : Colors.textPrimary}
+          />
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.controlButton, isSpeakerOn && styles.controlButtonActive]}
           onPress={handleToggleSpeaker}
           activeOpacity={0.7}
         >
-          <Text style={[styles.controlLabel, isSpeakerOn && styles.controlLabelActive]}>
-            {isSpeakerOn ? '🔊' : '🔈'}
-          </Text>
+          <Icon
+            name={isSpeakerOn ? 'volume-2' : 'volume-1'}
+            size={24}
+            color={isSpeakerOn ? Colors.primary : Colors.textPrimary}
+          />
         </TouchableOpacity>
       </View>
 

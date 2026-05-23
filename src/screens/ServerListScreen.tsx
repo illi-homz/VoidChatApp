@@ -21,6 +21,7 @@ import { useToast } from '../components/Toast';
 import { BottomSheet } from '../components/BottomSheet';
 import { BottomSheetPrompt } from '../components/BottomSheetPrompt';
 import { Colors } from '../theme/colors';
+import { Icon } from '../components/Icon';
 
 interface ServerListScreenProps {
   navigation: NativeStackNavigationProp<RootStackParamList, 'ServerList'>;
@@ -82,7 +83,6 @@ export const ServerListScreen = observer(function ServerListScreen({
       appStore.isReady
     ) {
       connectingRef.current = false;
-      navigation.replace('Home');
       return;
     }
 
@@ -125,7 +125,7 @@ export const ServerListScreen = observer(function ServerListScreen({
   function handleSaveRename(newName: string): void {
     if (renameServer && newName) {
       serverStore.rename(renameServer.id, newName);
-      toast('Порт переименован', 'success');
+      toast('Сервер переименован', 'success');
     }
     setRenameServer(null);
   }
@@ -133,8 +133,8 @@ export const ServerListScreen = observer(function ServerListScreen({
   function showDeleteConfirm(server: ServerConfig): void {
     setTimeout(() => {
       showSheet({
-        title: 'Удалить порт',
-        message: `Удалить "${server.name}"? Все сообщения и контакты этого порта будут потеряны.`,
+        title: 'Удалить сервер',
+        message: `Удалить "${server.name}"? Все сообщения и контакты этого сервера будут потеряны.`,
         actions: [
           { text: 'Отмена', style: 'cancel' },
           {
@@ -144,9 +144,9 @@ export const ServerListScreen = observer(function ServerListScreen({
               setDeletingId(server.id);
               try {
                 await serverStore.remove(server.id);
-                toast('Порт удалён', 'success');
+                toast('Сервер удалён', 'success');
               } catch {
-                toast('Ошибка при удалении порта', 'error');
+                toast('Ошибка при удалении сервера', 'error');
               } finally {
                 setDeletingId(null);
               }
@@ -183,7 +183,10 @@ export const ServerListScreen = observer(function ServerListScreen({
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {errorMessage && (
         <View style={styles.errorBanner}>
-          <Text style={styles.errorBannerText}>⚠️ {errorMessage}</Text>
+          <View style={styles.errorBannerRow}>
+            <Icon name='triangle-alert' size={16} color={Colors.error} />
+            <Text style={styles.errorBannerText}> {errorMessage}</Text>
+          </View>
         </View>
       )}
 
@@ -224,13 +227,17 @@ export const ServerListScreen = observer(function ServerListScreen({
             {connectingId === item.id ? (
               <ActivityIndicator size='small' color={Colors.primary} />
             ) : (
-              <Text style={styles.connectArrow}>⚓</Text>
+              <Icon
+                name='check'
+                size={20}
+                color={item.id === serverStore.activeServerId ? Colors.primary : Colors.textMuted}
+              />
             )}
           </TouchableOpacity>
         )}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>Нет портов...</Text>
+            <Text style={styles.emptyText}>Нет серверов...</Text>
           </View>
         }
       />
@@ -266,6 +273,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.error,
   },
+  errorBannerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  } as const,
   errorBannerText: {
     color: Colors.error,
     fontSize: 14,

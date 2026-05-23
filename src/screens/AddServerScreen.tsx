@@ -19,6 +19,7 @@ import { initCrypto, generateKeyPair } from '../services/crypto';
 import { useToast } from '../components/Toast';
 import { v4 as uuidv4 } from 'uuid';
 import { Colors } from '../theme/colors';
+import { Icon } from '../components/Icon';
 
 declare const __DEV__: boolean;
 
@@ -47,21 +48,13 @@ interface AddServerScreenProps {
 function ClearButton({ onPress }: { onPress: () => void }): React.JSX.Element {
   return (
     <TouchableOpacity style={styles.clearButton} onPress={onPress} activeOpacity={0.6}>
-      <Text style={styles.clearButtonText}>✕</Text>
+      <Icon name='x' size={16} color={Colors.textMuted} />
     </TouchableOpacity>
   );
 }
 
 function PasteIcon(): React.JSX.Element {
-  return (
-    <View style={styles.pasteIcon}>
-      <View style={styles.pasteIconClip} />
-      <View style={styles.pasteIconBody}>
-        <View style={styles.pasteIconLine} />
-        <View style={styles.pasteIconLine} />
-      </View>
-    </View>
-  );
+  return <Icon name='clipboard-paste' size={24} color={Colors.background} />;
 }
 
 export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX.Element {
@@ -145,8 +138,8 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
       style={[styles.container, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <Text style={styles.title}>⚓ Новый порт</Text>
-      <Text style={styles.description}>Введи название и координаты порта для швартовки</Text>
+      <Text style={styles.title}>Новый сервер</Text>
+      <Text style={styles.description}>Введите название и адрес сервера</Text>
 
       {/* Название */}
       <View style={styles.inputWrapper}>
@@ -215,7 +208,10 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
         {isConnecting ? (
           <ActivityIndicator color='#000' />
         ) : (
-          <Text style={styles.buttonText}>🏴 Отчалить!</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+            <Icon name='plus' size={18} color='#000' />
+            <Text style={styles.buttonText}> Подключиться</Text>
+          </View>
         )}
       </TouchableOpacity>
     </KeyboardAvoidingView>
@@ -274,11 +270,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 6,
   },
-  clearButtonText: {
-    color: Colors.textMuted,
-    fontSize: 14,
-    fontWeight: '600',
-  },
   pasteButton: {
     backgroundColor: Colors.primary,
     borderRadius: 12,
@@ -288,36 +279,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   pasteIcon: {
-    width: 20,
-    height: 22,
-    alignItems: 'center',
-  },
-  pasteIconClip: {
-    width: 8,
-    height: 3,
-    backgroundColor: Colors.textPrimary,
-    borderRadius: 1,
-    borderTopLeftRadius: 2,
-    borderTopRightRadius: 2,
-    zIndex: 1,
-  },
-  pasteIconBody: {
-    width: 18,
-    height: 18,
-    borderWidth: 2,
-    borderColor: Colors.textPrimary,
-    borderRadius: 3,
-    marginTop: -1,
-    alignItems: 'center',
+    width: 40,
+    height: 40,
     justifyContent: 'center',
-    gap: 3,
-  },
-  pasteIconLine: {
-    width: 10,
-    height: 2,
-    backgroundColor: Colors.textPrimary,
-    borderRadius: 1,
-  },
+    alignItems: 'center',
+  } as const,
   button: {
     backgroundColor: Colors.primary,
     borderRadius: 12,

@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../theme/colors';
+import { Icon } from '../components/Icon';
 
 interface NotificationData {
   message: string;
@@ -116,10 +117,10 @@ export function NotificationProvider({
               activeOpacity={0.8}
             >
               <View style={styles.bannerIcon}>
-                <Text style={styles.bannerIconText}>☠</Text>
+                <Icon name='message-circle' size={24} color={Colors.primary} />
               </View>
               <View style={styles.bannerTextContainer}>
-                <Text style={styles.bannerTitle}>Новое послание</Text>
+                <Text style={styles.bannerTitle}>Новое сообщение</Text>
                 <Text style={styles.bannerMessage} numberOfLines={1}>
                   {notification.message}
                 </Text>
@@ -180,9 +181,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
-  },
-  bannerIconText: {
-    fontSize: 18,
   },
   bannerTextContainer: {
     flex: 1,
