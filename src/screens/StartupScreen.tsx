@@ -78,16 +78,22 @@ export const StartupScreen = observer(function StartupScreen({ navigation }: Sta
       // 5. Устанавливаем активный сервер
       await serverStore.setActive(targetServer.id);
 
-      // 6. Подключаемся к сокету с таймаутом 10 секунд
-      await Promise.race([
-        socketService.connect(targetServer.url, appStore.user.userId, appStore.user.publicKey),
-        new Promise<void>((_, reject) =>
-          setTimeout(() => {
-            socketService.disconnect();
-            reject(new Error('Превышено время ожидания подключения'));
-          }, 30000),
-        ),
-      ]);
+      // 6. Подключаемся к сокету с таймаутом 30 секунд
+      const timeoutId = setTimeout(() => {
+        socketService.disconnect();
+      }, 30000);
+
+      try {
+        await socketService.connect(
+          targetServer.url,
+          appStore.user.userId,
+          appStore.user.publicKey,
+        );
+        clearTimeout(timeoutId);
+      } catch (err) {
+        clearTimeout(timeoutId);
+        throw err;
+      }
 
       // 7. Успех — на Home
       navigation.replace('Home');
