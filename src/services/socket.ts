@@ -1,3 +1,4 @@
+import { makeAutoObservable } from 'mobx';
 import { io, Socket } from 'socket.io-client';
 import type {
   FriendRequest,
@@ -20,11 +21,65 @@ const HEARTBEAT_INTERVAL = 30000;
 class SocketService {
   private socket: Socket | null = null;
   private userId: string | null = null;
+  publicKey: string | null = null;
   private connectedUrl: string | null = null;
   connectedAt: number | null = null;
+  _connected: boolean = false;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
+  constructor() {
+    makeAutoObservable(this, {
+      socket: false,
+      _connected: true,
+      connectedAt: true,
+      // Все callback'и и буферы — false (private)
+      friendRequestCallback: false,
+      friendAcceptedCallback: false,
+      friendDeclinedCallback: false,
+      friendRequestSentCallback: false,
+      friendConfirmedCallback: false,
+      messageCallbacks: false,
+      messagesReadCallback: false,
+      messageSentCallback: false,
+      messageFailedCallback: false,
+      presenceCallback: false,
+      connectedCallback: false,
+      disconnectedCallback: false,
+      kickedCallback: false,
+      errorCallback: false,
+      friendRequestBuffer: false,
+      friendAcceptedBuffer: false,
+      friendDeclinedBuffer: false,
+      friendRequestSentBuffer: false,
+      friendConfirmedBuffer: false,
+      messageBuffer: false,
+      // call-related callbacks и буферы
+      callIncomingCallbacks: false,
+      callOfferSentCallbacks: false,
+      callAcceptedCallbacks: false,
+      callDeclinedCallbacks: false,
+      callEndedCallbacks: false,
+      iceCandidateCallbacks: false,
+      callTimedOutCallbacks: false,
+      callIncomingBuffer: false,
+      callOfferSentBuffer: false,
+      callAcceptedBuffer: false,
+      callDeclinedBuffer: false,
+      callEndedBuffer: false,
+      iceCandidateBuffer: false,
+      callTimedOutBuffer: false,
+      // приватные поля
+      userId: false,
+      connectedUrl: false,
+      reconnectAttempts: false,
+      maxReconnectAttempts: false,
+      heartbeatTimer: false,
+      publicKey: false,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+  }
 
   private friendRequestCallback: ((_: FriendRequest) => void) | null = null;
   private friendAcceptedCallback: ((_: FriendRequest) => void) | null = null;
@@ -106,12 +161,14 @@ class SocketService {
 
       this.socket.on('connect', () => {
         this.reconnectAttempts = 0;
+        this._connected = true;
         this.socket?.emit('register', { userId, publicKey });
       });
 
       this.socket.on('registered', () => {
         clearTimeout(timeout);
         this.userId = userId;
+        this.publicKey = publicKey;
         this.connectedUrl = serverUrl;
         this.connectedAt = Date.now();
         this.startHeartbeat();
@@ -130,16 +187,11 @@ class SocketService {
           `[socket] connect_error (${this.reconnectAttempts}/${this.maxReconnectAttempts}):`,
           err.message,
         );
-        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-          clearTimeout(timeout);
-          this.socket?.close();
-          this.socket = null;
-          reject(new Error(`Failed to connect to server: ${err.message}`));
-        }
       });
 
       this.socket.on('disconnect', (reason: string) => {
         clearTimeout(timeout);
+        this._connected = false;
         this.stopHeartbeat();
         this.connectedAt = null;
         this.disconnectedCallback?.();
@@ -312,6 +364,7 @@ class SocketService {
     this.connectedUrl = null;
     this.connectedAt = null;
     this.userId = null;
+    this.publicKey = null;
   }
 
   async reconnect(serverUrl: string, userId: string, publicKey: string): Promise<void> {
@@ -657,8 +710,8 @@ class SocketService {
     this.disconnectedCallback = callback;
   }
 
-  isConnected(): boolean {
-    return this.socket?.connected ?? false;
+  get isConnected(): boolean {
+    return this._connected;
   }
 
   getUserId(): string | null {

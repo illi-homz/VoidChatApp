@@ -590,7 +590,7 @@ class WebRTCService {
         this._onError?.('connection_disconnected');
         this.stopCall();
       }
-    }, 5000);
+    }, 12000);
   }
 
   /** Отменяет таймер disconnected. */

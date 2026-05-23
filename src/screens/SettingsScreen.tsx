@@ -137,12 +137,14 @@ export const SettingsScreen = observer(function SettingsScreen({
                       style={[
                         styles.statusDot,
                         {
-                          backgroundColor: socketService.isConnected() ? Colors.success : Colors.error,
+                          backgroundColor: socketService.isConnected
+                            ? Colors.success
+                            : Colors.error,
                         },
                       ]}
                     />
                     <Text style={styles.connectedSince}>
-                      {socketService.isConnected() && socketService.getConnectedAt()
+                      {socketService.isConnected && socketService.getConnectedAt()
                         ? `Подключен ${formatDuration(now - socketService.getConnectedAt()!)}`
                         : 'Не подключен'}
                     </Text>

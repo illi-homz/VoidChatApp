@@ -13,7 +13,7 @@ export class CallStore {
   direction: 'outgoing' | 'incoming' = 'outgoing';
   duration: number = 0;
   isMuted: boolean = false;
-  isSpeakerOn: boolean = false;
+  isSpeakerOn: boolean = true;
   hasRemoteStream: boolean = false;
   error: string | null = null;
 
@@ -140,7 +140,7 @@ export class CallStore {
     this.contactName = '';
     this.duration = 0;
     this.isMuted = false;
-    this.isSpeakerOn = false;
+    this.isSpeakerOn = true;
     this.hasRemoteStream = false;
     this.error = null;
     this.direction = 'outgoing';

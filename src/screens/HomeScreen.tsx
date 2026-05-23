@@ -7,6 +7,7 @@ import type { RootStackParamList } from '../navigation/types';
 import type { Contact, CallOffer } from '../types';
 import type { BottomSheetAction } from '../components/BottomSheet';
 import { useStore, useServerStore, useCallStore } from '../stores';
+import { useAppStateReconnect } from '../hooks/useAppStateReconnect';
 import { socketService } from '../services/socket';
 import { ContactItem } from '../components/ContactItem';
 import { BottomSheet } from '../components/BottomSheet';
@@ -41,6 +42,7 @@ export const HomeScreen = observer(function HomeScreen({
   const [clearChatTarget, setClearChatTarget] = useState<Contact | null>(null);
   const onMessageCleanupRef = useRef<(() => void) | null>(null);
   const insets = useSafeAreaInsets();
+  useAppStateReconnect();
   const callStore = useCallStore();
   const [incomingCallData, setIncomingCallData] = useState<{
     callId: string;

@@ -92,7 +92,7 @@ export const ServerListScreen = observer(function ServerListScreen({
     }
 
     // Если подключены к другому — дисконнектимся
-    if (socketService.isConnected()) {
+    if (socketService.isConnected) {
       socketService.disconnect();
     }
 

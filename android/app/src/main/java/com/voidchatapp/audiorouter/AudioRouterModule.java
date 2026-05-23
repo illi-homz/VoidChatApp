@@ -53,7 +53,10 @@ public class AudioRouterModule extends ReactContextBaseJavaModule {
 
             audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL,
                     audioManager.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL), 0);
-            Log.d(TAG, "startAudioSession: set volume to max");
+
+            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC,
+                    audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC), 0);
+            Log.d(TAG, "startAudioSession: set volume to max for both streams");
         } catch (Exception e) {
             Log.e(TAG, "startAudioSession error", e);
         }
