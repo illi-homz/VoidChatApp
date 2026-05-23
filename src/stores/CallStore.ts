@@ -13,7 +13,7 @@ export class CallStore {
   direction: 'outgoing' | 'incoming' = 'outgoing';
   duration: number = 0;
   isMuted: boolean = false;
-  isSpeakerOn: boolean = true;
+  isSpeakerOn: boolean = false;
   hasRemoteStream: boolean = false;
   error: string | null = null;
 
@@ -32,14 +32,17 @@ export class CallStore {
    */
   startOutgoingCall(params: { callId: string; contactId: string; contactName: string }): void {
     this.reset();
+    // ВАЖНО: AudioRouter запускаем ДО getUserMedia, чтобы WebRTC инициализировал
+    // аудио-пайплайн в режиме MODE_IN_COMMUNICATION, а не MODE_NORMAL.
+    // На Samsung и некоторых других устройствах смена режима после getUserMedia
+    // не переключает аудио-маршрутизацию, и звук пропадает.
+    audioRouter.startAudioSession();
+    audioRouter.setSpeakerphoneOn(this.isSpeakerOn);
     this.status = 'calling';
     this.callId = params.callId;
     this.contactId = params.contactId;
     this.contactName = params.contactName;
     this.direction = 'outgoing';
-    // AudioRouter НЕ вызываем здесь — getUserMedia сначала должен получить
-    // доступ к микрофону без конфликта аудио-фокуса. AudioRouter запускаем
-    // только при setConnected(), когда WebRTC уже захватил аудиопоток.
   }
 
   /**
@@ -52,12 +55,14 @@ export class CallStore {
     }
     // ВАЖНО: this.reset() не вызываем — вызывающий код (HomeScreen) сам проверяет
     // статус и гарантирует, что звонок не активен, перед вызовом этого метода.
+    // AudioRouter ДО getUserMedia — по той же причине, что и в startOutgoingCall.
+    audioRouter.startAudioSession();
+    audioRouter.setSpeakerphoneOn(this.isSpeakerOn);
     this.status = 'ringing';
     this.callId = params.callId;
     this.contactId = params.fromUserId;
     this.contactName = params.contactName;
     this.direction = 'incoming';
-    // Аудио-сессия будет запущена при setConnected() после getUserMedia
   }
 
   /**
@@ -68,8 +73,8 @@ export class CallStore {
     this.status = 'connected';
     this._callStartTime = Date.now();
     this._startDurationTimer();
-    // Запустить аудио-сессию (после getUserMedia): режим разговора, аудио-фокус, макс. громкость
-    audioRouter.startAudioSession();
+    // Аудио-сессия уже запущена в startOutgoingCall/startIncomingCall (ДО getUserMedia).
+    // Здесь только применяем настройки speakerphone, которые могли измениться.
     audioRouter.setSpeakerphoneOn(this.isSpeakerOn);
   }
 
@@ -140,7 +145,7 @@ export class CallStore {
     this.contactName = '';
     this.duration = 0;
     this.isMuted = false;
-    this.isSpeakerOn = true;
+    this.isSpeakerOn = false;
     this.hasRemoteStream = false;
     this.error = null;
     this.direction = 'outgoing';

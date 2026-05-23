@@ -1,7 +1,10 @@
 package com.voidchatapp.audiorouter;
 
 import android.content.Context;
+import android.media.AudioAttributes;
+import android.media.AudioFocusRequest;
 import android.media.AudioManager;
+import android.os.Build;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -15,6 +18,7 @@ public class AudioRouterModule extends ReactContextBaseJavaModule {
 
     private final AudioManager audioManager;
     private int originalMode = AudioManager.MODE_NORMAL;
+    private AudioFocusRequest audioFocusRequest;
     private static final String TAG = "AudioRouter";
 
     public AudioRouterModule(ReactApplicationContext reactContext) {
@@ -44,13 +48,43 @@ public class AudioRouterModule extends ReactContextBaseJavaModule {
             originalMode = audioManager.getMode();
             Log.d(TAG, "startAudioSession: saved original mode = " + originalMode);
 
+            // Устанавливаем режим связи (VoIP) ДО getUserMedia, чтобы WebRTC
+            // инициализировал аудио-пайплайн в правильном режиме.
+            // На Samsung это критично — смена режима после getUserMedia игнорируется.
             audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
             Log.d(TAG, "startAudioSession: set mode MODE_IN_COMMUNICATION");
 
-            audioManager.requestAudioFocus(null, AudioManager.STREAM_VOICE_CALL,
-                    AudioManager.AUDIOFOCUS_GAIN);
-            Log.d(TAG, "startAudioSession: requested audio focus");
+            // Запрашиваем аудио-фокус через современное API (Android 8+).
+            // Старое API (requestAudioFocus c null listener) на новых версиях
+            // Android может молча не срабатывать.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                AudioFocusRequest focusRequest = new AudioFocusRequest.Builder(
+                        AudioManager.AUDIOFOCUS_GAIN)
+                        .setAudioAttributes(new AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                                .build())
+                        .setOnAudioFocusChangeListener(focusChange -> {
+                            Log.d(TAG, "Audio focus changed: " + focusChange);
+                            // При потере фокуса — ничего не делаем,
+                            // WebRTC сам управляет аудио-потоком
+                        })
+                        .setWillPauseWhenDucked(false)
+                        .build();
+                audioFocusRequest = focusRequest;
+                int result = audioManager.requestAudioFocus(focusRequest);
+                Log.d(TAG, "startAudioSession: requested audio focus (API 26+), result=" + result);
+            } else {
+                // Fallback для старых Android-версий (устаревшее API, но работает)
+                int result = audioManager.requestAudioFocus(
+                        focusChange -> Log.d(TAG, "Audio focus changed (legacy): " + focusChange),
+                        AudioManager.STREAM_VOICE_CALL,
+                        AudioManager.AUDIOFOCUS_GAIN);
+                Log.d(TAG, "startAudioSession: requested audio focus (legacy), result=" + result);
+            }
 
+            // Выставляем громкость на максимум для обоих стримов, которые
+            // может использовать WebRTC (зависит от прошивки устройства)
             audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL,
                     audioManager.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL), 0);
 
@@ -71,8 +105,15 @@ public class AudioRouterModule extends ReactContextBaseJavaModule {
             audioManager.setMode(originalMode);
             Log.d(TAG, "stopAudioSession: restored mode = " + originalMode);
 
-            audioManager.abandonAudioFocus(null);
-            Log.d(TAG, "stopAudioSession: abandoned audio focus");
+            // Отказываемся от фокуса (используем правильное API)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && audioFocusRequest != null) {
+                audioManager.abandonAudioFocusRequest(audioFocusRequest);
+                audioFocusRequest = null;
+                Log.d(TAG, "stopAudioSession: abandoned audio focus (API 26+)");
+            } else {
+                audioManager.abandonAudioFocus(null);
+                Log.d(TAG, "stopAudioSession: abandoned audio focus (legacy)");
+            }
 
             originalMode = AudioManager.MODE_NORMAL;
         } catch (Exception e) {
