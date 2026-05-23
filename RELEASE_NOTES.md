@@ -20,4 +20,7 @@
 - Разрешение `VIBRATE` добавлено в AndroidManifest
 
 ### 📦 Релизный пайплайн
-- Улучшено форматирование Telegram-уведомлений: HTML-разметка (bold, code, ссылки), эмодзи, конвертация markdown → HTML
+- `RELEASE_NOTES.md` теперь используется для **всего**: GitHub Release + Telegram caption (и в локальной сборке, и в CI)
+- CI теперь тоже отправляет Telegram с APK и красивым HTML-описанием
+- Полная конвертация markdown → HTML: заголовки, bold, italic, списки
+- Caption читается напрямую из файла, а не из тела релиза на GitHub
