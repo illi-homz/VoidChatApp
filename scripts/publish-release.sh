@@ -92,9 +92,24 @@ cd "$ROOT"
 info "Pushing main branch..."
 git push origin main
 
-# ── Step 9: GitHub Release ───────────────────────────────────────────
+# ── Step 9: Read RELEASE_NOTES.md for Telegram (before it's deleted) ──
 cd "$ROOT"
 RELEASE_NOTES_FILE="$ROOT/RELEASE_NOTES.md"
+NOTES=""
+if [ -f "$RELEASE_NOTES_FILE" ]; then
+  NOTES=$(sed \
+    -e 's/### \(.*\)/<b>\1<\/b>/g' \
+    -e 's/\*\*\([^*]*\)\*\*/<b>\1<\/b>/g' \
+    -e 's/\*\([^*]*\)\*/<i>\1<\/i>/g' \
+    -e 's/^[-*] /• /g' \
+    -e 's/^# //g' \
+    "$RELEASE_NOTES_FILE")
+  if [ ${#NOTES} -gt 900 ]; then
+    NOTES="${NOTES:0:900}..."
+  fi
+fi
+
+# ── Step 10: GitHub Release ─────────────────────────────────────────
 RELEASE_ARGS=("$TAG" "$APK" "--target" "main")
 if [ -f "$RELEASE_NOTES_FILE" ]; then
   RELEASE_ARGS+=("--notes-file" "$RELEASE_NOTES_FILE")
@@ -106,7 +121,6 @@ fi
 if gh release view "$TAG" > /dev/null 2>&1; then
   info "Release $TAG already exists — uploading APK"
   gh release upload "$TAG" "$APK" --clobber
-  # Если релиз уже существует и есть файл с заметками — обновляем тело релиза
   if [ -f "$RELEASE_NOTES_FILE" ]; then
     gh release edit "$TAG" --notes-file "$RELEASE_NOTES_FILE"
     info "Release notes updated"
@@ -129,30 +143,12 @@ if ! git ls-remote --tags origin | grep -qE "refs/tags/$TAG$"; then
   git push origin "$TAG"
   info "Tag $TAG pushed to remote"
 else
-  info "Tag $TAG already exists on remote (created by gh release in step 9)"
+  info "Tag $TAG already exists on remote (created by gh release in step 10)"
 fi
 
 # ── Step 11: Telegram notification ───────────────────────────────────
 if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
   info "Sending Telegram notification..."
-
-  # Читаем release notes напрямую из RELEASE_NOTES.md
-  NOTES_FILE="$ROOT/RELEASE_NOTES.md"
-  if [ -f "$NOTES_FILE" ]; then
-    # Конвертируем markdown → HTML для Telegram
-    NOTES=$(sed \
-      -e 's/### \(.*\)/<b>\1<\/b>/g' \
-      -e 's/\*\*\([^*]*\)\*\*/<b>\1<\/b>/g' \
-      -e 's/\*\([^*]*\)\*/<i>\1<\/i>/g' \
-      -e 's/^[-*] /• /g' \
-      -e 's/^# //g' \
-      "$NOTES_FILE")
-    if [ ${#NOTES} -gt 900 ]; then
-      NOTES="${NOTES:0:900}..."
-    fi
-  else
-    NOTES=""
-  fi
 
   REPO="illi-homz/VoidChatApp"
   CHANGELOG_URL="https://github.com/${REPO}/releases/tag/${TAG}"
