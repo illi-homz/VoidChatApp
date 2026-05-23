@@ -18,6 +18,8 @@ import { webrtcService } from './WebRTCService';
 
 const HEARTBEAT_INTERVAL = 30000;
 
+export type ConnectionStatus = 'connected' | 'reconnecting' | 'disconnected';
+
 class SocketService {
   private socket: Socket | null = null;
   private userId: string | null = null;
@@ -25,8 +27,10 @@ class SocketService {
   private connectedUrl: string | null = null;
   connectedAt: number | null = null;
   _connected: boolean = false;
-  private reconnectAttempts = 0;
-  private maxReconnectAttempts = 15;
+  connectionStatus: ConnectionStatus = 'disconnected';
+  reconnectAttempt: number = 0;
+  lastError: string | null = null;
+  maxReconnectAttempts = 15;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
@@ -70,11 +74,13 @@ class SocketService {
       callEndedBuffer: false,
       iceCandidateBuffer: false,
       callTimedOutBuffer: false,
+      connectionStatus: true,
+      reconnectAttempt: true,
+      lastError: true,
       // приватные поля
       userId: false,
       connectedUrl: false,
-      reconnectAttempts: false,
-      maxReconnectAttempts: false,
+      maxReconnectAttempts: true,
       heartbeatTimer: false,
       publicKey: false,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -139,8 +145,10 @@ class SocketService {
       this.stopHeartbeat();
     }
 
+    this.connectionStatus = 'disconnected';
+    this.lastError = null;
     // Сброс счётчика перед новой попыткой
-    this.reconnectAttempts = 0;
+    this.reconnectAttempt = 0;
 
     return new Promise((resolve, reject) => {
       // Единый таймер для reject — страховая от зависания
@@ -160,7 +168,9 @@ class SocketService {
       });
 
       this.socket.on('connect', () => {
-        this.reconnectAttempts = 0;
+        this.reconnectAttempt = 0;
+        this.lastError = null;
+        this.connectionStatus = 'connected';
         this._connected = true;
         this.socket?.emit('register', { userId, publicKey });
       });
@@ -185,9 +195,13 @@ class SocketService {
       });
 
       this.socket.on('connect_error', (err: Error) => {
-        this.reconnectAttempts++;
+        this.reconnectAttempt++;
+        this.lastError = err.message;
+        this._connected = false;
+        this.connectionStatus =
+          this.reconnectAttempt >= this.maxReconnectAttempts ? 'disconnected' : 'reconnecting';
         console.warn(
-          `[socket] connect_error (${this.reconnectAttempts}/${this.maxReconnectAttempts}):`,
+          `[socket] connect_error (${this.reconnectAttempt}/${this.maxReconnectAttempts}):`,
           err.message,
         );
       });
@@ -198,9 +212,22 @@ class SocketService {
         this.stopHeartbeat();
         this.connectedAt = null;
         this.disconnectedCallback?.();
-        if (reason === 'io server disconnect' || reason === 'transport close') {
+        if (reason === 'io server disconnect') {
+          // Сервер инициировал отключение — Socket.IO не будет переподключаться
+          this.connectionStatus = 'disconnected';
+          console.warn('[socket] disconnected by server:', reason);
+        } else {
+          // Socket.IO будет пытаться переподключиться
+          this.connectionStatus = 'reconnecting';
           console.warn('[socket] disconnected:', reason);
         }
+      });
+
+      this.socket.io.on('reconnect_failed', () => {
+        this.connectionStatus = 'disconnected';
+        this._connected = false;
+        this.stopHeartbeat();
+        console.warn('[socket] reconnect failed after', this.maxReconnectAttempts, 'attempts');
       });
 
       this.socket.on('kicked', (data: { message: string }) => {
@@ -368,6 +395,9 @@ class SocketService {
     this.connectedAt = null;
     this.userId = null;
     this.publicKey = null;
+    this.connectionStatus = 'disconnected';
+    this.lastError = null;
+    this.reconnectAttempt = 0;
   }
 
   async reconnect(serverUrl: string, userId: string, publicKey: string): Promise<void> {
@@ -378,6 +408,9 @@ class SocketService {
       this.socket = null;
       this.userId = null;
     }
+    this.connectionStatus = 'disconnected';
+    this.reconnectAttempt = 0;
+    this.lastError = null;
     return this.connect(serverUrl, userId, publicKey);
   }
 
@@ -715,6 +748,12 @@ class SocketService {
 
   get isConnected(): boolean {
     return this._connected;
+  }
+
+  get estimatedReconnectDelay(): number | null {
+    if (this.connectionStatus !== 'reconnecting') return null;
+    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempt - 1), 30000);
+    return delay;
   }
 
   getUserId(): string | null {

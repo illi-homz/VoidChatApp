@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   Share,
   Clipboard,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { observer } from 'mobx-react-lite';
@@ -35,11 +36,39 @@ export const SettingsScreen = observer(function SettingsScreen({
 
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 30000);
+    const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
 
   const [reconnecting, setReconnecting] = useState(false);
+
+  // --- Анимированная пульсация точки для состояния переподключения ---
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  const connectionStatus = socketService.connectionStatus;
+
+  useEffect(() => {
+    if (connectionStatus === 'reconnecting') {
+      const animation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 0.25,
+            duration: 700,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 700,
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+      animation.start();
+      return () => animation.stop();
+    } else {
+      pulseAnim.setValue(1);
+    }
+  }, [connectionStatus, pulseAnim]);
 
   const handleReconnect = useCallback(async () => {
     const server = serverStore.activeServer;
@@ -132,29 +161,65 @@ export const SettingsScreen = observer(function SettingsScreen({
               <View style={styles.serverCardBody}>
                 <View style={styles.serverInfo}>
                   <Text style={styles.serverUrl}>{serverStore.activeServer.url}</Text>
-                  <View style={styles.statusRow}>
-                    <View
-                      style={[
-                        styles.statusDot,
-                        {
-                          backgroundColor: socketService.isConnected
-                            ? Colors.success
-                            : Colors.error,
-                        },
-                      ]}
-                    />
-                    <Text style={styles.connectedSince}>
-                      {socketService.isConnected && socketService.getConnectedAt()
-                        ? `Подключен ${formatDuration(now - socketService.getConnectedAt()!)}`
-                        : 'Не подключен'}
-                    </Text>
-                  </View>
+
+                  {/* --- Индикатор статуса соединения (3 состояния) --- */}
+                  {socketService.connectionStatus === 'connected' ? (
+                    <>
+                      <View style={styles.statusRow}>
+                        <View style={[styles.statusDot, { backgroundColor: Colors.success }]} />
+                        <Text style={styles.connectedSince}>
+                          {socketService.getConnectedAt()
+                            ? `Подключен ${formatDuration(now - socketService.getConnectedAt()!)}`
+                            : 'Подключен'}
+                        </Text>
+                      </View>
+                    </>
+                  ) : socketService.connectionStatus === 'reconnecting' ? (
+                    <>
+                      <View style={styles.statusRow}>
+                        <Animated.View
+                          style={[
+                            styles.statusDot,
+                            { backgroundColor: Colors.warning, opacity: pulseAnim },
+                          ]}
+                        />
+                        <View>
+                          <Text style={styles.connectedSince}>
+                            Подключается... {socketService.reconnectAttempt}/
+                            {socketService.maxReconnectAttempts}
+                          </Text>
+                          {socketService.estimatedReconnectDelay && (
+                            <Text style={styles.statusSecondary}>
+                              через ~{Math.round(socketService.estimatedReconnectDelay / 1000)} с
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                    </>
+                  ) : (
+                    <>
+                      <View style={styles.statusRow}>
+                        <View style={[styles.statusDot, { backgroundColor: Colors.error }]} />
+                        <View>
+                          <Text style={styles.connectedSince}>Нет соединения</Text>
+                          {socketService.lastError && (
+                            <Text style={styles.statusSecondary} numberOfLines={2}>
+                              {socketService.lastError}
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                    </>
+                  )}
                 </View>
               </View>
               <TouchableOpacity
-                style={styles.reconnectButton}
+                style={[
+                  styles.reconnectButton,
+                  socketService.connectionStatus === 'reconnecting' && { opacity: 0.4 },
+                ]}
                 onPress={handleReconnect}
-                disabled={reconnecting}
+                disabled={reconnecting || socketService.connectionStatus === 'reconnecting'}
                 activeOpacity={0.6}
               >
                 {reconnecting ? (
@@ -314,7 +379,10 @@ const styles = StyleSheet.create({
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+  },
+  connectedSince: {
+    fontSize: 13,
+    color: Colors.textPrimary,
   },
   statusDot: {
     width: 10,
@@ -322,9 +390,11 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     marginRight: 8,
   },
-  connectedSince: {
-    fontSize: 13,
+  statusSecondary: {
+    fontSize: 12,
     color: Colors.textMuted,
+    marginTop: 4,
+    marginLeft: 18, // выравнивание с текстом первой строки (10px точка + 8px gap)
   },
   switchButton: {
     backgroundColor: Colors.surface,
