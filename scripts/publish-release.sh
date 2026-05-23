@@ -162,7 +162,7 @@ if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
   curl -s -S -X POST \
     -F "chat_id=${TELEGRAM_CHAT_ID}" \
     -F "document=@${APK}" \
-    -F "caption=</tmp/voidchat_caption.txt>" \
+    -F "caption=</tmp/voidchat_caption.txt" \
     -F "parse_mode=HTML" \
     "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" || warn "Telegram notification failed (non-fatal)"
 else
