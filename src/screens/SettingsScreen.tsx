@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,15 +7,17 @@ import {
   ScrollView,
   Share,
   Clipboard,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { observer } from 'mobx-react-lite';
 import QRCode from 'react-native-qrcode-svg';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
-import { useStore } from '../stores';
+import { useStore, useServerStore } from '../stores';
+import { socketService } from '../services/socket';
 import { useToast } from '../components/Toast';
-import { Colors } from '../theme/colors';
+import { Colors } from '../theme';
 import { Icon } from '../components/Icon';
 import { version } from '../../package.json';
 
@@ -28,7 +30,44 @@ export const SettingsScreen = observer(function SettingsScreen({
 }: SettingsScreenProps) {
   const insets = useSafeAreaInsets();
   const store = useStore();
+  const serverStore = useServerStore();
   const { toast } = useToast();
+
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const [reconnecting, setReconnecting] = useState(false);
+
+  const handleReconnect = useCallback(async () => {
+    const server = serverStore.activeServer;
+    const user = store.user;
+    if (!server || !user) return;
+
+    setReconnecting(true);
+    try {
+      await socketService.reconnect(server.url, user.userId, user.publicKey);
+      toast('Переподключение выполнено', 'success');
+    } catch {
+      toast('Не удалось переподключиться', 'error');
+    } finally {
+      setReconnecting(false);
+    }
+  }, [serverStore.activeServer, store.user, toast]);
+
+  function formatDuration(ms: number): string {
+    if (!Number.isFinite(ms) || ms < 0) return '0 сек';
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    if (minutes === 0) return `${seconds} сек`;
+    if (minutes < 60) return `${minutes} мин ${seconds} сек`;
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return `${hours} ч ${remainingMinutes} мин`;
+  }
 
   function copyId() {
     if (!store.user) return;
@@ -47,7 +86,7 @@ export const SettingsScreen = observer(function SettingsScreen({
 
   return (
     <View style={[styles.container, { paddingBottom: insets.bottom }]}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Секция: Мой контакт */}
         <Text style={styles.sectionTitle}>МОЙ КОНТАКТ</Text>
         <View style={styles.sectionCard}>
@@ -85,31 +124,56 @@ export const SettingsScreen = observer(function SettingsScreen({
           )}
         </View>
 
-        {/* Секция: Управление */}
-        <Text style={styles.sectionTitle}>УПРАВЛЕНИЕ</Text>
-        <View style={styles.sectionCard}>
-          <TouchableOpacity
-            style={styles.menuRow}
-            onPress={() => navigation.navigate('AddFriend')}
-            activeOpacity={0.7}
-          >
-            <Icon name='user-plus' size={18} color={Colors.textPrimary} style={styles.menuIcon} />
-            <Text style={styles.menuText}>Добавить контакт</Text>
-            <Icon name='chevron-right' size={20} color={Colors.textMuted} />
-          </TouchableOpacity>
-
-          <View style={styles.menuDivider} />
-
-          <TouchableOpacity
-            style={styles.menuRow}
-            onPress={() => navigation.navigate('ServerList')}
-            activeOpacity={0.7}
-          >
-            <Icon name='refresh-cw' size={18} color={Colors.textPrimary} style={styles.menuIcon} />
-            <Text style={styles.menuText}>Переключить сервер</Text>
-            <Icon name='chevron-right' size={20} color={Colors.textMuted} />
-          </TouchableOpacity>
+        {/* Секция: Сервер */}
+        <Text style={styles.sectionTitle}>СЕРВЕР</Text>
+        <View style={styles.serverCard}>
+          {serverStore.activeServer ? (
+            <>
+              <View style={styles.serverCardBody}>
+                <View style={styles.serverInfo}>
+                  <Text style={styles.serverUrl}>{serverStore.activeServer.url}</Text>
+                  <View style={styles.statusRow}>
+                    <View
+                      style={[
+                        styles.statusDot,
+                        {
+                          backgroundColor: socketService.isConnected() ? Colors.success : Colors.error,
+                        },
+                      ]}
+                    />
+                    <Text style={styles.connectedSince}>
+                      {socketService.isConnected() && socketService.getConnectedAt()
+                        ? `Подключен ${formatDuration(now - socketService.getConnectedAt()!)}`
+                        : 'Не подключен'}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={styles.reconnectButton}
+                onPress={handleReconnect}
+                disabled={reconnecting}
+                activeOpacity={0.6}
+              >
+                {reconnecting ? (
+                  <ActivityIndicator size='small' color='#000' />
+                ) : (
+                  <Icon name='refresh-cw' size={18} color='#000' />
+                )}
+              </TouchableOpacity>
+            </>
+          ) : (
+            <Text style={styles.connectedSince}>Сервер не выбран</Text>
+          )}
         </View>
+
+        <TouchableOpacity
+          style={styles.switchButton}
+          onPress={() => navigation.navigate('ServerList', { returnToHome: false })}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.switchButtonText}>Переключить сервер</Text>
+        </TouchableOpacity>
 
         {/* Секция: О приложении */}
         <Text style={styles.sectionTitle}>О ПРИЛОЖЕНИИ</Text>
@@ -139,14 +203,14 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     letterSpacing: 1,
     marginBottom: 8,
-    marginTop: 8,
+    marginTop: 0,
     paddingHorizontal: 4,
   },
   sectionCard: {
     backgroundColor: Colors.surface,
     borderRadius: 12,
     padding: 16,
-    marginBottom: 16,
+    marginBottom: 20,
     borderWidth: 1,
     borderColor: Colors.border,
   },
@@ -213,6 +277,66 @@ const styles = StyleSheet.create({
   menuDivider: {
     height: 1,
     backgroundColor: Colors.border,
+  },
+  serverCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  serverCardBody: {
+    paddingRight: 44,
+  },
+  serverInfo: {
+    flex: 1,
+  },
+  reconnectButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.primary,
+  },
+  serverUrl: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    fontFamily: 'monospace',
+    marginBottom: 8,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  statusDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 8,
+  },
+  connectedSince: {
+    fontSize: 13,
+    color: Colors.textMuted,
+  },
+  switchButton: {
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+  },
+  switchButtonText: {
+    color: Colors.primary,
+    fontSize: 15,
+    fontWeight: '600',
   },
   aboutContainer: {
     alignItems: 'center',

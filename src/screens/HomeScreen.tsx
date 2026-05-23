@@ -93,19 +93,28 @@ export const HomeScreen = observer(function HomeScreen({
       socketService.offCallIncoming();
       onMessageCleanupRef.current?.();
     };
-  }, []);
+  }, [serverStore.activeServerId]);
 
   useEffect(() => {
     navigation.setOptions({
       title: serverStore.activeServer?.name ?? 'VoidChat',
       headerRight: () => (
-        <TouchableOpacity
-          style={styles.settingsButton}
-          onPress={() => navigation.navigate('Settings')}
-          activeOpacity={0.7}
-        >
-          <Icon name='settings' size={22} color='#000' />
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={styles.settingsButton}
+            onPress={() => navigation.navigate('AddFriend')}
+            activeOpacity={0.7}
+          >
+            <Icon name='plus' size={22} color='#000' />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.settingsButton}
+            onPress={() => navigation.navigate('Settings')}
+            activeOpacity={0.7}
+          >
+            <Icon name='settings' size={22} color='#000' />
+          </TouchableOpacity>
+        </View>
       ),
     });
   }, [navigation, serverStore.activeServer?.name]);
@@ -352,6 +361,7 @@ export const HomeScreen = observer(function HomeScreen({
       ) : (
         <FlatList
           data={store.contacts}
+          showsVerticalScrollIndicator={false}
           extraData={{
             contactsLen: store.contacts.length,
             presenceMap: store.presenceMap,
@@ -425,6 +435,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
+  headerRight: {
+    flexDirection: 'row',
+    gap: 16,
+  },
   settingsButton: {
     width: 40,
     height: 40,
@@ -433,17 +447,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: Colors.primary,
     borderWidth: 1.5,
-    borderColor: Colors.primaryDark || '#B8960F',
+    borderColor: Colors.primaryDark || '#F0C080',
   },
-  gearIcon: {
-    width: 26,
-    height: 26,
-    justifyContent: 'center',
-    alignItems: 'center',
-  } as const,
   list: {
     paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingTop: 16,
     paddingBottom: 16,
   },
   emptyContainer: {
@@ -456,7 +464,7 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     fontSize: 20,
     fontWeight: '600',
-    marginBottom: 8,
+    marginBottom: 16,
   },
   emptySubtext: {
     color: Colors.textMuted,

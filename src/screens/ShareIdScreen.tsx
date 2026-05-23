@@ -86,13 +86,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
     alignItems: 'center',
-    padding: 20,
+    padding: 16,
   },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
     color: Colors.textPrimary,
-    marginTop: 20,
+    marginTop: 16,
   },
   subtitle: {
     fontSize: 14,

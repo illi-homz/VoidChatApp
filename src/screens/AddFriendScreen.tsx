@@ -127,7 +127,7 @@ export function AddFriendScreen({ navigation }: AddFriendScreenProps): React.JSX
 
   return (
     <View
-      style={[styles.container, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 }]}
+      style={[styles.container, { paddingTop: 16, paddingBottom: insets.bottom + 16 }]}
     >
       <Text style={styles.title}>Добавить контакт</Text>
       <Text style={styles.description}>Введи ID пользователя, чтобы добавить его в контакты</Text>
@@ -197,25 +197,25 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
-    padding: 20,
+    padding: 16,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: Colors.textPrimary,
-    marginBottom: 12,
+    marginBottom: 16,
   },
   description: {
     fontSize: 14,
     color: Colors.textSecondary,
-    marginBottom: 24,
+    marginBottom: 16,
     lineHeight: 20,
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
-    gap: 10,
+    marginBottom: 16,
+    gap: 16,
   },
   input: {
     flex: 1,
@@ -255,7 +255,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: Colors.primary,
   },

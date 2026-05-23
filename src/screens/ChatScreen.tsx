@@ -11,6 +11,7 @@ import {
   Dimensions,
   KeyboardAvoidingView,
   Clipboard,
+  Vibration,
 } from 'react-native';
 
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -233,6 +234,7 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
   }
 
   function handleMessageLongPress(item: MessageExt): void {
+    Vibration.vibrate(10);
     if (!selectionMode) {
       setSelectionMode(true);
       setSelectedIds(new Set([item.id]));
@@ -376,6 +378,7 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
       <FlatList
         ref={flatListRef}
         data={reversedMessages}
+        showsVerticalScrollIndicator={false}
         renderItem={renderMessage}
         keyExtractor={item => item.id}
         extraData={selectedIds}
@@ -508,12 +511,12 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     paddingVertical: 10,
     backgroundColor: Colors.surface,
     borderTopWidth: 1,
     borderTopColor: Colors.borderLight,
-    gap: 10,
+    gap: 16,
   },
   input: {
     flex: 1,

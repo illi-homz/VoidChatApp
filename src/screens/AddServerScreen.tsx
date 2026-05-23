@@ -222,18 +222,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
-    padding: 20,
+    padding: 16,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: Colors.textPrimary,
-    marginBottom: 12,
+    marginBottom: 16,
   },
   description: {
     fontSize: 14,
     color: Colors.textSecondary,
-    marginBottom: 24,
+    marginBottom: 16,
     lineHeight: 20,
   },
   inputWrapper: {
@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 16,
-    gap: 10,
+    gap: 16,
   },
   ipInputWrapper: {
     flex: 1,
@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 16,
   },
   buttonDisabled: {
     opacity: 0.7,

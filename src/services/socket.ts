@@ -21,6 +21,7 @@ class SocketService {
   private socket: Socket | null = null;
   private userId: string | null = null;
   private connectedUrl: string | null = null;
+  connectedAt: number | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
@@ -112,6 +113,7 @@ class SocketService {
         clearTimeout(timeout);
         this.userId = userId;
         this.connectedUrl = serverUrl;
+        this.connectedAt = Date.now();
         this.startHeartbeat();
         this.connectedCallback?.();
         resolve();
@@ -139,6 +141,7 @@ class SocketService {
       this.socket.on('disconnect', (reason: string) => {
         clearTimeout(timeout);
         this.stopHeartbeat();
+        this.connectedAt = null;
         this.disconnectedCallback?.();
         if (reason === 'io server disconnect' || reason === 'transport close') {
           console.warn('[socket] disconnected:', reason);
@@ -307,6 +310,7 @@ class SocketService {
     this.socket?.disconnect();
     this.socket = null;
     this.connectedUrl = null;
+    this.connectedAt = null;
     this.userId = null;
   }
 
@@ -663,6 +667,10 @@ class SocketService {
 
   getConnectedUrl(): string | null {
     return this.connectedUrl;
+  }
+
+  getConnectedAt(): number | null {
+    return this.connectedAt;
   }
 }
 

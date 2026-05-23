@@ -2,7 +2,7 @@ export type RootStackParamList = {
   Startup: undefined;
   Home: undefined;
   Settings: undefined;
-  ServerList: { errorMessage?: string } | undefined;
+  ServerList: { errorMessage?: string; returnToHome?: boolean } | undefined;
   Chat: { contactId: string; contactName: string };
   AddFriend: undefined;
   AddServer: undefined;

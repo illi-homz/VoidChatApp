@@ -83,6 +83,11 @@ export const ServerListScreen = observer(function ServerListScreen({
       appStore.isReady
     ) {
       connectingRef.current = false;
+      if (route.params?.returnToHome === false) {
+        navigation.goBack();
+      } else {
+        navigation.replace('Home');
+      }
       return;
     }
 
@@ -108,7 +113,11 @@ export const ServerListScreen = observer(function ServerListScreen({
 
       await serverStore.setActive(server.id);
       await socketService.connect(server.url, appStore.user.userId, appStore.user.publicKey);
-      navigation.replace('Home');
+      if (route.params?.returnToHome === false) {
+        navigation.goBack();
+      } else {
+        navigation.replace('Home');
+      }
     } catch (e) {
       console.error('Connection error:', e instanceof Error ? e.message : e);
       toast('Не удалось подключиться к серверу', 'error');
@@ -193,6 +202,7 @@ export const ServerListScreen = observer(function ServerListScreen({
       <FlatList
         data={serverStore.servers}
         keyExtractor={item => item.id}
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.list}
         renderItem={({ item }) => (
           <TouchableOpacity
@@ -263,12 +273,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
-    padding: 20,
+    padding: 16,
   },
   errorBanner: {
     backgroundColor: 'rgba(255,68,68,0.15)',
     borderRadius: 12,
-    padding: 12,
+    padding: 16,
     marginBottom: 16,
     borderWidth: 1,
     borderColor: Colors.error,
@@ -291,7 +301,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderRadius: 12,
     padding: 16,
-    marginBottom: 12,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: Colors.border,
   },

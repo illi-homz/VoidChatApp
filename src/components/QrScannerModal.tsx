@@ -337,7 +337,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     borderRadius: SCAN_BORDER_RADIUS,
     borderWidth: 2,
-    borderColor: Colors.primary, // #FFD700 — золото
+    borderColor: Colors.primary, // морковный
   },
   flashOverlay: {
     ...StyleSheet.absoluteFill,
