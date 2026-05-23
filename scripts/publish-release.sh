@@ -138,25 +138,31 @@ if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
 
   NOTES=$(gh release view "$TAG" --json body --jq '.body' 2>/dev/null || echo "")
   if [ -n "$NOTES" ]; then
-    NOTES=$(echo "$NOTES" | sed 's/\*\*\([^*]*\)\*\*/<b>\1<\/b>/g')
+    # Конвертируем markdown → HTML для Telegram
+    NOTES=$(echo "$NOTES" \
+      | sed 's/### \(.*\)/<b>\1<\/b>/g' \
+      | sed 's/\*\*\([^*]*\)\*\*/<b>\1<\/b>/g' \
+      | sed 's/\*\([^*]*\)\*/<i>\1<\/i>/g' \
+      | sed 's/^[-*] /• /g' \
+      | sed 's/^# //g')
     if [ ${#NOTES} -gt 900 ]; then
       NOTES="${NOTES:0:900}..."
     fi
   fi
 
   REPO="illi-homz/VoidChatApp"
+  CHANGELOG_URL="https://github.com/${REPO}/releases/tag/${TAG}"
 
   {
-    printf '<b>🚀 VoidChatApp %s released!</b>\n' "$TAG"
-    printf '📦 %s\n' "$APK_NAME"
+    printf '<b>🚀 VoidChatApp %s</b>\n' "$TAG"
     printf '\n'
     if [ -n "$NOTES" ]; then
       printf '<b>📋 Что нового:</b>\n'
       printf '%s\n' "$NOTES"
       printf '\n'
     fi
-    printf '🔗 <a href="https://github.com/%s/releases/tag/%s">Открыть релиз</a>\n' \
-      "$REPO" "$TAG"
+    printf '📦 <code>%s</code>\n' "$APK_NAME"
+    printf '🔗 <a href="%s">Полный список изменений</a>\n' "$CHANGELOG_URL"
   } > /tmp/voidchat_caption.txt
 
   curl -s -S -X POST \
