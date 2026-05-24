@@ -190,7 +190,12 @@ class WebRTCService {
       }
     }
     const videoConstraints = withVideo
-      ? { width: 320, height: 240, frameRate: 15, facingMode: 'user' as const }
+      ? {
+          width: { ideal: 640, min: 320, max: 1280 },
+          height: { ideal: 480, min: 240, max: 720 },
+          frameRate: { ideal: 24, min: 15, max: 30 },
+          facingMode: 'user' as const,
+        }
       : false;
     const stream = await mediaDevices.getUserMedia({ audio: true, video: videoConstraints });
     this._localStream = stream;
@@ -209,17 +214,30 @@ class WebRTCService {
 
   /**
    * Включить/выключить камеру (видеотрек) без renegotiation.
-   * true = камера активна, false = чёрный экран (track.enabled = false)
+   * true = камера активна, false = отправка видео прекращается.
+   *
+   * Помимо track.enabled, также использует RTCRtpSender.replaceTrack(null)
+   * для полной остановки передачи — на некоторых Android-устройствах
+   * track.enabled = false не останавливает отправку.
    */
   setCameraEnabled(enabled: boolean): void {
     this._localStream?.getVideoTracks().forEach(track => {
       track.enabled = enabled;
     });
+
+    // Дополнительно: останавливаем/возобновляем发送 через RTCRtpSender
+    if (this._pc) {
+      const sender = this._pc.getSenders().find(s => s.track?.kind === 'video');
+      if (sender) {
+        const videoTrack = this._localStream?.getVideoTracks()[0] ?? null;
+        sender.replaceTrack(enabled ? videoTrack : null).catch(() => {});
+      }
+    }
   }
 
   /**
    * Переключить камеру между front (facingMode: 'user') и back (facingMode: 'environment').
-   * Упрощённая реализация для v1: останавливает старый видео-трек,
+   * Определяет текущую камеру через enumerateDevices, останавливает старый трек,
    * создаёт новый через getUserMedia и заменяет через replaceTrack.
    */
   async switchCamera(): Promise<void> {
@@ -228,15 +246,13 @@ class WebRTCService {
     if (videoTracks.length === 0) return;
 
     const currentTrack = videoTracks[0];
-    // Определяем текущую камеру через _settings (react-native-webrtc использует
-    // подчёркнутые методы). Если недоступно — предполагаем front-camera.
-    const currentSettings: any = (currentTrack as any)._settings?.();
-    const currentFacingMode: string = currentSettings?.facingMode ?? 'user';
-    const newFacingMode: 'user' | 'environment' =
-      currentFacingMode === 'user' ? 'environment' : 'user';
+    // Определяем текущую камеру по label/ID: front обычно содержит 'front' или 'user'
+    const label = currentTrack.label?.toLowerCase() ?? '';
+    const isFrontCamera =
+      label.includes('front') || label.includes('user') || !label.includes('back');
+    const newFacingMode: 'user' | 'environment' = isFrontCamera ? 'environment' : 'user';
 
     try {
-      // Запрашиваем разрешение камеры
       try {
         await permissions.request({ name: 'camera' });
       } catch {
@@ -250,7 +266,12 @@ class WebRTCService {
       // Создаём новый видео-трек с противоположной камерой
       const newStream = await mediaDevices.getUserMedia({
         audio: false,
-        video: { width: 320, height: 240, frameRate: 15, facingMode: newFacingMode },
+        video: {
+          width: { ideal: 640, min: 320, max: 1280 },
+          height: { ideal: 480, min: 240, max: 720 },
+          frameRate: { ideal: 24, min: 15, max: 30 },
+          facingMode: newFacingMode,
+        },
       });
 
       const newVideoTrack = newStream.getVideoTracks()[0];
@@ -268,12 +289,11 @@ class WebRTCService {
         if (sender) {
           await sender.replaceTrack(newVideoTrack);
         } else {
-          // Если сендера нет (редкий случай) — добавляем трек через addTrack
           this._pc.addTrack(newVideoTrack, this._localStream);
         }
       }
 
-      console.log('[WebRTC] Camera switched to', newFacingMode);
+      console.log('[WebRTC] Camera switched to', newFacingMode, '(was:', label || 'unknown)');
     } catch (e) {
       console.warn('[WebRTC] Failed to switch camera:', e);
     }

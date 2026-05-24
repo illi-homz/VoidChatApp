@@ -45,18 +45,21 @@ export class CallStore {
     // аудио-пайплайн в режиме MODE_IN_COMMUNICATION, а не MODE_NORMAL.
     // На Samsung и некоторых других устройствах смена режима после getUserMedia
     // не переключает аудио-маршрутизацию, и звук пропадает.
+    this.callType = params.callType ?? 'audio';
+    this.direction = 'outgoing';
+
+    // Для видео-звонков по умолчанию включаем динамик
+    if (this.callType === 'video') {
+      this.isSpeakerOn = true;
+      this.isCameraOn = true;
+    }
+
     audioRouter.startAudioSession();
     audioRouter.setSpeakerphoneOn(this.isSpeakerOn);
     this.status = 'calling';
     this.callId = params.callId;
     this.contactId = params.contactId;
     this.contactName = params.contactName;
-    this.callType = params.callType ?? 'audio';
-    this.direction = 'outgoing';
-
-    if (this.callType === 'video') {
-      this.isCameraOn = true;
-    }
   }
 
   /**
@@ -75,18 +78,21 @@ export class CallStore {
     // ВАЖНО: this.reset() не вызываем — вызывающий код (HomeScreen) сам проверяет
     // статус и гарантирует, что звонок не активен, перед вызовом этого метода.
     // AudioRouter ДО getUserMedia — по той же причине, что и в startOutgoingCall.
+    this.callType = params.callType ?? 'audio';
+    this.direction = 'incoming';
+
+    // Для видео-звонков по умолчанию включаем динамик
+    if (this.callType === 'video') {
+      this.isSpeakerOn = true;
+      this.isCameraOn = true;
+    }
+
     audioRouter.startAudioSession();
     audioRouter.setSpeakerphoneOn(this.isSpeakerOn);
     this.status = 'ringing';
     this.callId = params.callId;
     this.contactId = params.fromUserId;
     this.contactName = params.contactName;
-    this.callType = params.callType ?? 'audio';
-    this.direction = 'incoming';
-
-    if (this.callType === 'video') {
-      this.isCameraOn = true;
-    }
   }
 
   /**

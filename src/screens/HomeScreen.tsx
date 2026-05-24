@@ -262,10 +262,13 @@ export const HomeScreen = observer(function HomeScreen({
 
       const name = contact.nickname ?? maskUserId(contact.userId);
 
+      const callType = data.mediaType ?? 'audio';
+
       callStore.startIncomingCall({
         callId: data.callId,
         fromUserId: data.fromUserId,
         contactName: name,
+        callType,
       });
 
       setIncomingCallData({
@@ -273,7 +276,7 @@ export const HomeScreen = observer(function HomeScreen({
         fromUserId: data.fromUserId,
         sdp: data.sdp,
         contactName: name,
-        callType: data.mediaType ?? 'audio',
+        callType,
       });
     });
 

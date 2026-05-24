@@ -13,16 +13,15 @@ interface CallConfirmAlertProps {
 }
 
 /**
- * CallConfirmAlert — пиратский диалог подтверждения звонка.
+ * CallConfirmAlert — диалог подтверждения звонка.
  * Показывается при нажатии на кнопку звонка в чате.
  *
  * Содержит:
- * - Золотую иконку-заглушку
- * - Текст "Набрать капитана?"
- * - Имя контакта
- * - Кнопка "Видеозвонок" (золотая, с иконкой камеры)
- * - Кнопка "Аудиозвонок" (золотая, с иконкой трубки)
- * - Кнопка "Отставить" (серая)
+ * - Иконку телефонной трубки
+ * - Вопрос "Позвонить {contactName}?"
+ * - Кнопка "Видеозвонок" (с иконкой камеры)
+ * - Кнопка "Аудиозвонок" (с иконкой трубки)
+ * - Кнопка "Отмена" (серая)
  */
 export function CallConfirmAlert({
   visible,
@@ -74,18 +73,14 @@ export function CallConfirmAlert({
     >
       <Animated.View style={[styles.overlay, { opacity }]}>
         <Animated.View style={[styles.card, { transform: [{ scale }] }]}>
-          {/* Декоративная иконка */}
-          <View style={styles.iconContainer}>
-            <View style={styles.iconCircle}>
-              <CallIcon size={32} color={Colors.primary} />
-            </View>
+          {/* Иконка */}
+          <View style={styles.iconCircle}>
+            <CallIcon size={28} color={Colors.textPrimary} />
           </View>
 
-          {/* Заголовок */}
-          <Text style={styles.title}>Набрать капитана?</Text>
-
-          {/* Имя контакта */}
-          <Text style={styles.contactName}>{contactName}</Text>
+          {/* Вопрос */}
+          <Text style={styles.title}>Позвонить</Text>
+          <Text style={styles.contactName}>{contactName}?</Text>
 
           {/* Кнопки */}
           <TouchableOpacity
@@ -95,7 +90,7 @@ export function CallConfirmAlert({
             accessibilityRole='button'
             accessibilityLabel='Видеозвонок'
           >
-            <CameraIcon size={20} color={Colors.background} />
+            <CameraIcon size={20} color='#fff' />
             <Text style={styles.actionText}>Видеозвонок</Text>
           </TouchableOpacity>
 
@@ -106,7 +101,7 @@ export function CallConfirmAlert({
             accessibilityRole='button'
             accessibilityLabel='Аудиозвонок'
           >
-            <CallIcon size={20} color={Colors.background} />
+            <CallIcon size={20} color='#fff' />
             <Text style={styles.actionText}>Аудиозвонок</Text>
           </TouchableOpacity>
 
@@ -115,9 +110,9 @@ export function CallConfirmAlert({
             onPress={onCancel}
             activeOpacity={0.7}
             accessibilityRole='button'
-            accessibilityLabel='Отменить вызов'
+            accessibilityLabel='Отменить'
           >
-            <Text style={styles.cancelText}>Отставить</Text>
+            <Text style={styles.cancelText}>Отмена</Text>
           </TouchableOpacity>
         </Animated.View>
       </Animated.View>
@@ -128,50 +123,38 @@ export function CallConfirmAlert({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: Colors.overlay,
+    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   card: {
-    width: '85%',
+    width: '82%',
     maxWidth: 300,
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
+    backgroundColor: '#1a1a2e',
+    borderRadius: 20,
     paddingVertical: 28,
     paddingHorizontal: 24,
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: Colors.primary,
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    elevation: 10,
-  },
-  iconContainer: {
-    marginBottom: 16,
   },
   iconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: 'rgba(255, 215, 0, 0.12)',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.08)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 215, 0, 0.3)',
+    marginBottom: 16,
   },
   title: {
     fontSize: 20,
-    fontWeight: '800',
-    color: Colors.textPrimary,
-    marginBottom: 4,
+    fontWeight: '700',
+    color: '#fff',
     textAlign: 'center',
   },
   contactName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: Colors.primary,
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#fff',
     marginBottom: 24,
     textAlign: 'center',
   },
@@ -179,48 +162,39 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 48,
     borderRadius: 12,
-    backgroundColor: Colors.primary,
+    backgroundColor: '#2a6eff',
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
     gap: 8,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 215, 0, 0.3)',
     marginBottom: 12,
   },
   audioButton: {
     width: '100%',
     height: 48,
     borderRadius: 12,
-    backgroundColor: Colors.primaryDark,
+    backgroundColor: '#3a3a5c',
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
     gap: 8,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 215, 0, 0.3)',
     marginBottom: 16,
   },
   actionText: {
-    color: Colors.background,
+    color: '#fff',
     fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 0.5,
+    fontWeight: '600',
   },
   cancelButton: {
     width: '100%',
-    height: 48,
+    height: 44,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surface,
   },
   cancelText: {
-    color: Colors.textSecondary,
+    color: '#999',
     fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    fontWeight: '500',
   },
 });
