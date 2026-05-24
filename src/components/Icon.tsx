@@ -24,6 +24,7 @@ export type IconName =
   | 'volume-2'
   | 'volume-1'
   | 'camera'
+  | 'camera-off'
   | 'skull'
   | 'ship'
   | 'swords'
@@ -223,6 +224,14 @@ const IconBase: React.FC<IconProps> = ({ name, size = 24, color = '#000', style 
           <Circle cx='12' cy='13' r='3' />
         </Svg>
       );
+    case 'camera-off':
+      return (
+        <Svg {...svgProps}>
+          <Path d='M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z' />
+          <Circle cx='12' cy='13' r='3' />
+          <Path d='M22 2 2 22' />
+        </Svg>
+      );
     case 'skull':
       return (
         <Svg {...svgProps}>
@@ -337,3 +346,18 @@ const IconBase: React.FC<IconProps> = ({ name, size = 24, color = '#000', style 
 };
 
 export const Icon = React.memo(IconBase);
+
+interface CameraOffIconProps {
+  width?: number;
+  height?: number;
+  color?: string;
+}
+
+export const CameraOffIcon: React.FC<CameraOffIconProps> = ({
+  width = 24,
+  height = 24,
+  color = '#FFD700',
+}) => {
+  const size = Math.min(width, height);
+  return <Icon name='camera-off' size={size} color={color} />;
+};

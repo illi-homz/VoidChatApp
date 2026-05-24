@@ -13,6 +13,8 @@ import { socketService } from '../services/socket';
 import { useToast } from '../components/Toast';
 import type { RootStackParamList } from '../navigation/types';
 import { appStore } from '../stores/AppStore';
+import { RTCView } from 'react-native-webrtc';
+import { VideoPiP } from '../components/VideoPiP';
 
 const CallScreenComponent: React.FC = observer(() => {
   console.log('[CallScreen] RENDER');
@@ -20,7 +22,7 @@ const CallScreenComponent: React.FC = observer(() => {
   const route = useRoute<RouteProp<RootStackParamList, 'Call'>>();
   if (!route.params) return null;
   const params = route.params;
-  const { contactId, contactName, direction } = params;
+  const { contactId, contactName, direction, callType } = params;
   const insets = useSafeAreaInsets();
   const { toast } = useToast();
 
@@ -71,7 +73,7 @@ const CallScreenComponent: React.FC = observer(() => {
     };
     webrtcService.onRenegotiationNeeded = sdp => {
       if (callStore.callId && callStore.contactId) {
-        socketService.sendCallOffer(callStore.contactId, sdp, callStore.callId);
+        socketService.sendCallOffer(callStore.contactId, sdp, callStore.callId, callStore.callType);
       }
     };
     webrtcService.onError = error => {
@@ -94,8 +96,8 @@ const CallScreenComponent: React.FC = observer(() => {
         toast('Соединение нестабильно...', 'warning');
       }
     };
-    webrtcService.onRemoteStream = () => {
-      callStore.hasRemoteStream = true;
+    webrtcService.onRemoteStream = stream => {
+      callStore.setRemoteStream(stream.getVideoTracks().length > 0);
     };
 
     // Теперь запускаем звонок
@@ -191,6 +193,7 @@ const CallScreenComponent: React.FC = observer(() => {
           duration: callStore.duration,
           timestamp: Date.now(),
           status: 'missed',
+          callType: callStore.callType ?? callType ?? 'audio',
         });
         toast('Нет ответа', 'error');
         setTimeout(() => navigation.goBack(), 2000);
@@ -235,6 +238,7 @@ const CallScreenComponent: React.FC = observer(() => {
           duration: callStore.duration,
           timestamp: Date.now(),
           status: 'missed',
+          callType: callStore.callType ?? callType ?? 'audio',
         });
         webrtcService.stopCall();
         toast('Соединение прервано', 'error');
@@ -273,10 +277,12 @@ const CallScreenComponent: React.FC = observer(() => {
         callId: generatedCallId,
         contactId: userId,
         contactName: name,
+        callType,
       });
 
-      const localSdp = await webrtcService.createOffer();
-      socketService.sendCallOffer(userId, localSdp, generatedCallId);
+      const withVideo = callType === 'video';
+      const localSdp = await webrtcService.createOffer(withVideo);
+      socketService.sendCallOffer(userId, localSdp, generatedCallId, callType);
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Не удалось начать звонок';
       callStore.setFailed(message);
@@ -287,7 +293,8 @@ const CallScreenComponent: React.FC = observer(() => {
   // ---- Функция принятия входящего звонка ----
   const acceptIncomingCall = async (sdp: string, callId: string) => {
     try {
-      const answerSdp = await webrtcService.createAnswer(sdp);
+      const withVideo = callType === 'video';
+      const answerSdp = await webrtcService.createAnswer(sdp, withVideo);
       socketService.sendCallAccept(callId, answerSdp);
       callStore.setConnected();
     } catch (e) {
@@ -363,6 +370,15 @@ const CallScreenComponent: React.FC = observer(() => {
       <StatusBar barStyle='light-content' backgroundColor='transparent' translucent />
       {isInactive && <View style={styles.inactiveOverlay} />}
 
+      {callType === 'video' && webrtcService.remoteStream && (
+        <RTCView
+          streamURL={webrtcService.remoteStream.toURL()}
+          style={StyleSheet.absoluteFill}
+          objectFit='cover'
+          zOrder={0}
+        />
+      )}
+
       <View style={[styles.topSection, { paddingTop: Math.max(insets.top + 16, MIN_TOP_INSET) }]}>
         <Text style={styles.contactName}>{contactDisplayName}</Text>
         {statusText && (
@@ -380,27 +396,45 @@ const CallScreenComponent: React.FC = observer(() => {
       </View>
 
       <View style={styles.avatarSection}>
-        {showPulse && (
-          <Animated.View
-            style={[styles.pulseRing, { opacity: glowAnim, transform: [{ scale: pulseAnim }] }]}
-            pointerEvents='none'
-          />
-        )}
-        {showFailed && (
-          <View style={styles.failedIconContainer}>
-            <Icon name='phone-off' size={56} color={Colors.error} />
-          </View>
-        )}
-        {!showFailed && (
-          <Animated.View
-            style={[styles.avatarOuter, showPulse && { transform: [{ scale: pulseAnim }] }]}
-          >
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{initialLetter}</Text>
-            </View>
-          </Animated.View>
+        {!(callType === 'video' && callStore.hasRemoteVideo && callStatus === 'connected') && (
+          <>
+            {showPulse && (
+              <Animated.View
+                style={[styles.pulseRing, { opacity: glowAnim, transform: [{ scale: pulseAnim }] }]}
+                pointerEvents='none'
+              />
+            )}
+            {showFailed && (
+              <View style={styles.failedIconContainer}>
+                <Icon name='phone-off' size={56} color={Colors.error} />
+              </View>
+            )}
+            {!showFailed && (
+              <Animated.View
+                style={[styles.avatarOuter, showPulse && { transform: [{ scale: pulseAnim }] }]}
+              >
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>{initialLetter}</Text>
+                </View>
+              </Animated.View>
+            )}
+          </>
         )}
       </View>
+
+      {callType === 'video' && callStore.isCameraOn && webrtcService.localStream && (
+        <VideoPiP streamURL={webrtcService.localStream.toURL()} />
+      )}
+
+      {callType === 'video' && callStore.isCameraOn && (
+        <TouchableOpacity
+          style={styles.switchCameraButton}
+          onPress={() => webrtcService.switchCamera()}
+          activeOpacity={0.7}
+        >
+          <Icon name='refresh-cw' size={20} color='#fff' />
+        </TouchableOpacity>
+      )}
 
       <View style={styles.controlsSection}>
         <TouchableOpacity
@@ -414,6 +448,22 @@ const CallScreenComponent: React.FC = observer(() => {
             color={isMuted ? Colors.primary : Colors.textPrimary}
           />
         </TouchableOpacity>
+        {callType === 'video' && (
+          <TouchableOpacity
+            style={[styles.controlButton, !callStore.isCameraOn && styles.controlButtonActive]}
+            onPress={() => {
+              callStore.toggleCamera();
+              webrtcService.setCameraEnabled(callStore.isCameraOn);
+            }}
+            activeOpacity={0.7}
+          >
+            <Icon
+              name={callStore.isCameraOn ? 'camera' : 'camera-off'}
+              size={24}
+              color={callStore.isCameraOn ? Colors.textPrimary : Colors.primary}
+            />
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           style={[styles.controlButton, isSpeakerOn && styles.controlButtonActive]}
           onPress={handleToggleSpeaker}
@@ -505,6 +555,18 @@ const styles = StyleSheet.create({
   controlButtonActive: { borderColor: Colors.primary, backgroundColor: Colors.surface },
   controlLabel: { fontSize: 12, color: Colors.textSecondary, marginTop: 4 },
   controlLabelActive: { color: Colors.primary },
+  switchCameraButton: {
+    position: 'absolute',
+    top: 60,
+    left: 16,
+    zIndex: 100,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   endCallSection: { alignItems: 'center' },
   endCallButton: {
     width: 64,

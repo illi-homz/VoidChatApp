@@ -1,6 +1,6 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 import { webrtcService } from '../services/WebRTCService';
-import type { CallStatus, CallRecord } from '../types';
+import type { CallStatus, CallRecord, CallType } from '../types';
 
 import { audioRouter } from '../services/AudioRouter';
 
@@ -11,10 +11,14 @@ export class CallStore {
   contactId: string | null = null;
   contactName: string = '';
   direction: 'outgoing' | 'incoming' = 'outgoing';
+  callType: CallType = 'audio';
   duration: number = 0;
   isMuted: boolean = false;
   isSpeakerOn: boolean = false;
   hasRemoteStream: boolean = false;
+  isCameraOn: boolean = false;
+  hasLocalVideo: boolean = false;
+  hasRemoteVideo: boolean = false;
   error: string | null = null;
 
   // ---- Приватное ----
@@ -27,10 +31,15 @@ export class CallStore {
 
   /**
    * Начать исходящий звонок.
-   * Устанавливает статус 'calling', сохраняет callId, contactId, contactName, direction.
+   * Устанавливает статус 'calling', сохраняет callId, contactId, contactName, direction, callType.
    * Активирует AudioRouter для аудио-режима.
    */
-  startOutgoingCall(params: { callId: string; contactId: string; contactName: string }): void {
+  startOutgoingCall(params: {
+    callId: string;
+    contactId: string;
+    contactName: string;
+    callType?: CallType;
+  }): void {
     this.reset();
     // ВАЖНО: AudioRouter запускаем ДО getUserMedia, чтобы WebRTC инициализировал
     // аудио-пайплайн в режиме MODE_IN_COMMUNICATION, а не MODE_NORMAL.
@@ -42,14 +51,24 @@ export class CallStore {
     this.callId = params.callId;
     this.contactId = params.contactId;
     this.contactName = params.contactName;
+    this.callType = params.callType ?? 'audio';
     this.direction = 'outgoing';
+
+    if (this.callType === 'video') {
+      this.isCameraOn = true;
+    }
   }
 
   /**
    * Получен входящий звонок.
    * Устанавливает статус 'ringing', сохраняет данные.
    */
-  startIncomingCall(params: { callId: string; fromUserId: string; contactName: string }): void {
+  startIncomingCall(params: {
+    callId: string;
+    fromUserId: string;
+    contactName: string;
+    callType?: CallType;
+  }): void {
     if (this.status !== 'idle') {
       return; // Уже обрабатываем звонок — игнорируем
     }
@@ -62,7 +81,12 @@ export class CallStore {
     this.callId = params.callId;
     this.contactId = params.fromUserId;
     this.contactName = params.contactName;
+    this.callType = params.callType ?? 'audio';
     this.direction = 'incoming';
+
+    if (this.callType === 'video') {
+      this.isCameraOn = true;
+    }
   }
 
   /**
@@ -76,6 +100,10 @@ export class CallStore {
     // Аудио-сессия уже запущена в startOutgoingCall/startIncomingCall (ДО getUserMedia).
     // Здесь только применяем настройки speakerphone, которые могли измениться.
     audioRouter.setSpeakerphoneOn(this.isSpeakerOn);
+
+    if (this.callType === 'video') {
+      this.hasLocalVideo = true;
+    }
   }
 
   /**
@@ -96,6 +124,22 @@ export class CallStore {
   }
 
   /**
+   * Переключить камеру (только для video-звонков).
+   * Меняет только состояние — WebRTCService.setCameraEnabled вызывается в CallScreen.
+   */
+  toggleCamera(): void {
+    if (this.callType !== 'video') return;
+    this.isCameraOn = !this.isCameraOn;
+  }
+
+  /**
+   * Принудительно установить состояние камеры.
+   */
+  setCameraEnabled(enabled: boolean): void {
+    this.isCameraOn = enabled;
+  }
+
+  /**
    * Завершить звонок.
    * Останавливает таймер, AudioRouter, сбрасывает состояние.
    * Возвращает CallRecord для сохранения (если нужно).
@@ -111,10 +155,14 @@ export class CallStore {
           duration: this.duration,
           timestamp: Date.now(),
           status: this.status === 'connected' ? 'completed' : 'missed',
+          callType: this.callType,
         }
       : null;
 
     this.status = 'ended';
+    this.isCameraOn = false;
+    this.hasLocalVideo = false;
+    this.hasRemoteVideo = false;
     return record;
   }
 
@@ -135,6 +183,15 @@ export class CallStore {
   }
 
   /**
+   * Установить флаги удалённого потока.
+   * Вызывается из колбэка onRemoteStream в CallScreen.
+   */
+  setRemoteStream(hasVideo: boolean): void {
+    this.hasRemoteStream = true;
+    this.hasRemoteVideo = hasVideo;
+  }
+
+  /**
    * Полный сброс стора в исходное состояние.
    */
   reset(): void {
@@ -147,7 +204,11 @@ export class CallStore {
     this.isMuted = false;
     this.isSpeakerOn = false;
     this.hasRemoteStream = false;
+    this.isCameraOn = false;
+    this.hasLocalVideo = false;
+    this.hasRemoteVideo = false;
     this.error = null;
+    this.callType = 'audio';
     this.direction = 'outgoing';
     this._callStartTime = 0;
     audioRouter.stopAudioSession();

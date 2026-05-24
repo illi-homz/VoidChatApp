@@ -2,11 +2,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, Modal, StyleSheet, Animated } from 'react-native';
 import { Colors } from '../theme/colors';
 import { CallIcon } from './CallIcon';
+import { CameraIcon } from './CameraIcon';
 
 interface CallConfirmAlertProps {
   visible: boolean;
   contactName: string;
-  onConfirm: () => void;
+  onAudioCall: () => void;
+  onVideoCall: () => void;
   onCancel: () => void;
 }
 
@@ -15,15 +17,18 @@ interface CallConfirmAlertProps {
  * Показывается при нажатии на кнопку звонка в чате.
  *
  * Содержит:
- * - Золотую иконку телефонной трубки
- * - Текст "Набрать капитана {name}?"
- * - Кнопка "Набирать" (золотая)
+ * - Золотую иконку-заглушку
+ * - Текст "Набрать капитана?"
+ * - Имя контакта
+ * - Кнопка "Видеозвонок" (золотая, с иконкой камеры)
+ * - Кнопка "Аудиозвонок" (золотая, с иконкой трубки)
  * - Кнопка "Отставить" (серая)
  */
 export function CallConfirmAlert({
   visible,
   contactName,
-  onConfirm,
+  onAudioCall,
+  onVideoCall,
   onCancel,
 }: CallConfirmAlertProps): React.JSX.Element {
   const [showModal, setShowModal] = useState(false);
@@ -69,7 +74,7 @@ export function CallConfirmAlert({
     >
       <Animated.View style={[styles.overlay, { opacity }]}>
         <Animated.View style={[styles.card, { transform: [{ scale }] }]}>
-          {/* Иконка звонка */}
+          {/* Декоративная иконка */}
           <View style={styles.iconContainer}>
             <View style={styles.iconCircle}>
               <CallIcon size={32} color={Colors.primary} />
@@ -83,28 +88,37 @@ export function CallConfirmAlert({
           <Text style={styles.contactName}>{contactName}</Text>
 
           {/* Кнопки */}
-          <View style={styles.buttonsRow}>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={onCancel}
-              activeOpacity={0.7}
-              accessibilityRole='button'
-              accessibilityLabel='Отменить вызов'
-            >
-              <Text style={styles.cancelText}>Отставить</Text>
-            </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.videoButton}
+            onPress={onVideoCall}
+            activeOpacity={0.7}
+            accessibilityRole='button'
+            accessibilityLabel='Видеозвонок'
+          >
+            <CameraIcon size={20} color={Colors.background} />
+            <Text style={styles.actionText}>Видеозвонок</Text>
+          </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.confirmButton}
-              onPress={onConfirm}
-              activeOpacity={0.7}
-              accessibilityRole='button'
-              accessibilityLabel='Набрать контакт'
-            >
-              <CallIcon size={18} color={Colors.background} />
-              <Text style={styles.confirmText}>Набирать</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            style={styles.audioButton}
+            onPress={onAudioCall}
+            activeOpacity={0.7}
+            accessibilityRole='button'
+            accessibilityLabel='Аудиозвонок'
+          >
+            <CallIcon size={20} color={Colors.background} />
+            <Text style={styles.actionText}>Аудиозвонок</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.cancelButton}
+            onPress={onCancel}
+            activeOpacity={0.7}
+            accessibilityRole='button'
+            accessibilityLabel='Отменить вызов'
+          >
+            <Text style={styles.cancelText}>Отставить</Text>
+          </TouchableOpacity>
         </Animated.View>
       </Animated.View>
     </Modal>
@@ -161,13 +175,40 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     textAlign: 'center',
   },
-  buttonsRow: {
-    flexDirection: 'row',
+  videoButton: {
     width: '100%',
-    gap: 12,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: Colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 215, 0, 0.3)',
+    marginBottom: 12,
+  },
+  audioButton: {
+    width: '100%',
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: Colors.primaryDark,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 215, 0, 0.3)',
+    marginBottom: 16,
+  },
+  actionText: {
+    color: Colors.background,
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   cancelButton: {
-    flex: 1,
+    width: '100%',
     height: 48,
     borderRadius: 12,
     justifyContent: 'center',
@@ -180,24 +221,6 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontSize: 15,
     fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  confirmButton: {
-    flex: 1,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: Colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 215, 0, 0.3)',
-  },
-  confirmText: {
-    color: Colors.background,
-    fontSize: 15,
-    fontWeight: '800',
     letterSpacing: 0.5,
   },
 });

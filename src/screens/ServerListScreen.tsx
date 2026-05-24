@@ -333,13 +333,15 @@ export const ServerListScreen = observer(function ServerListScreen({
         statusBarTranslucent
       >
         <View style={styles.editOverlay}>
-            <TouchableOpacity
-              style={styles.editOverlayTouchable}
-              activeOpacity={1}
-              onPress={() => setEditServer(null)}
-            />
-            <View style={[styles.editSheet, { paddingBottom: editKeyboardHeight + insets.bottom + 20 }]}>
-              <Text style={styles.editTitle}>Изменить сервер</Text>
+          <TouchableOpacity
+            style={styles.editOverlayTouchable}
+            activeOpacity={1}
+            onPress={() => setEditServer(null)}
+          />
+          <View
+            style={[styles.editSheet, { paddingBottom: editKeyboardHeight + insets.bottom + 20 }]}
+          >
+            <Text style={styles.editTitle}>Изменить сервер</Text>
             <Text style={styles.editSubtitle}>{editServer?.name}</Text>
 
             <View style={styles.editInputWrapper}>

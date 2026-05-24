@@ -92,7 +92,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }): Reac
     <ToastContext.Provider value={{ show }}>
       {children}
       {toast !== null && (
-        <View style={[styles.toastOverlay, { paddingTop: insets.top + 16 }]} pointerEvents='box-none'>
+        <View
+          style={[styles.toastOverlay, { paddingTop: insets.top + 16 }]}
+          pointerEvents='box-none'
+        >
           <Animated.View
             style={[
               styles.toast,

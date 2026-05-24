@@ -57,15 +57,19 @@ export interface ServerConfig {
 
 export type CallStatus = 'idle' | 'calling' | 'ringing' | 'connected' | 'ended' | 'failed';
 
+export type CallType = 'audio' | 'video';
+
 export interface CallOffer {
   callId: string;
   fromUserId: string;
   sdp: string;
+  mediaType?: CallType;
 }
 
 export interface CallOfferSent {
   callId: string;
   targetUserId: string;
+  mediaType: CallType;
 }
 
 export interface CallAnswer {
@@ -100,4 +104,5 @@ export interface CallRecord {
   duration: number;
   timestamp: number;
   status: 'missed' | 'completed' | 'declined';
+  callType: CallType;
 }

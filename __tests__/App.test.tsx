@@ -3,14 +3,18 @@
  */
 
 // Моки для модулей, от которых зависит CallStore/WebRTCService
-jest.mock('react-native-incall-manager', () => ({
-  start: jest.fn(),
-  stop: jest.fn(),
-  startRingtone: jest.fn(),
-  stopRingtone: jest.fn(),
-  setMicrophoneMute: jest.fn(),
-  setSpeakerphoneOn: jest.fn(),
-}));
+jest.mock(
+  'react-native-incall-manager',
+  () => ({
+    start: jest.fn(),
+    stop: jest.fn(),
+    startRingtone: jest.fn(),
+    stopRingtone: jest.fn(),
+    setMicrophoneMute: jest.fn(),
+    setSpeakerphoneOn: jest.fn(),
+  }),
+  { virtual: true },
+);
 
 jest.mock('react-native-webrtc', () => ({
   mediaDevices: {

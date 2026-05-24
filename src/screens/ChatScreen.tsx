@@ -27,6 +27,7 @@ import { Colors } from '../theme/colors';
 import { Icon } from '../components/Icon';
 import { BackButton } from '../components/BackButton';
 import { CallButton } from '../components/CallButton';
+import { VideoCallButton } from '../components/VideoCallButton';
 import { CallConfirmAlert } from '../components/CallConfirmAlert';
 import { StatusIcon } from '../components/StatusIcon';
 import { useToast } from '../components/Toast';
@@ -63,7 +64,7 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
   const sharedSecretRef = useRef<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const initialIdsRef = useRef<Set<string> | null>(null);
-  const [showCallConfirm, setShowCallConfirm] = useState(false);
+  const [callConfirmType, setCallConfirmType] = useState<'audio' | 'video' | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const displayName = store.contacts.find(c => c.userId === contactId)?.nickname ?? contactName;
   const [selectionMode, setSelectionMode] = useState(false);
@@ -95,16 +96,28 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
       headerShown: true,
       headerLeft: () => <BackButton onPress={() => navigation.goBack()} />,
       headerRight: () => (
-        <CallButton
-          contactName={displayName}
-          onPress={() => {
-            if (callStore.status !== 'idle') {
-              toast('Уже есть активный звонок', 'error');
-              return;
-            }
-            setShowCallConfirm(true);
-          }}
-        />
+        <View style={styles.headerButtons}>
+          <VideoCallButton
+            contactName={displayName}
+            onPress={() => {
+              if (callStore.status !== 'idle') {
+                toast('Уже есть активный звонок', 'error');
+                return;
+              }
+              setCallConfirmType('video');
+            }}
+          />
+          <CallButton
+            contactName={displayName}
+            onPress={() => {
+              if (callStore.status !== 'idle') {
+                toast('Уже есть активный звонок', 'error');
+                return;
+              }
+              setCallConfirmType('audio');
+            }}
+          />
+        </View>
       ),
     });
     initializeChat();
@@ -465,21 +478,33 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
           </KeyboardAvoidingView>
         </View>
       )}
-      {showCallConfirm && (
+      {callConfirmType !== null && (
         <CallConfirmAlert
-          visible={showCallConfirm}
+          visible={callConfirmType !== null}
           contactName={displayName}
-          onConfirm={() => {
-            setShowCallConfirm(false);
+          onAudioCall={() => {
+            setCallConfirmType(null);
             setTimeout(() => {
               navigation.navigate('Call', {
                 contactId,
                 contactName: displayName,
                 direction: 'outgoing',
+                callType: 'audio',
               });
             }, 100);
           }}
-          onCancel={() => setShowCallConfirm(false)}
+          onVideoCall={() => {
+            setCallConfirmType(null);
+            setTimeout(() => {
+              navigation.navigate('Call', {
+                contactId,
+                contactName: displayName,
+                direction: 'outgoing',
+                callType: 'video',
+              });
+            }, 100);
+          }}
+          onCancel={() => setCallConfirmType(null)}
         />
       )}
     </>
@@ -490,6 +515,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   messagesList: {
     paddingHorizontal: 16,

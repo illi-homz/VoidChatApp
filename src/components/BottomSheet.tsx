@@ -119,9 +119,7 @@ export function BottomSheet({
           accessibilityLabel={action.text}
         >
           <View style={styles.actionIcon}>
-            {action.icon && (
-              <Icon name={action.icon} size={20} color={textColor} />
-            )}
+            {action.icon && <Icon name={action.icon} size={20} color={textColor} />}
           </View>
           <Text style={[styles.actionText, { color: textColor }]}>{action.text}</Text>
         </TouchableOpacity>
@@ -175,9 +173,7 @@ export function BottomSheet({
                   accessibilityLabel={action.text}
                 >
                   <View style={styles.cancelButtonRow}>
-                    {action.icon && (
-                      <Icon name={action.icon} size={18} color={Colors.primary} />
-                    )}
+                    {action.icon && <Icon name={action.icon} size={18} color={Colors.primary} />}
                     <Text style={styles.cancelText}>{action.text}</Text>
                   </View>
                 </TouchableOpacity>

@@ -194,6 +194,7 @@ describe('CallStore', () => {
     expect(record!.status).toBe('completed');
     expect(record!.duration).toBe(5);
     expect(record!.timestamp).toBeGreaterThan(0);
+    expect(record!.callType).toBe('audio');
   });
 
   it('should return missed CallRecord on endCall when not connected', () => {

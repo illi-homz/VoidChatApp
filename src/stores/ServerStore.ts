@@ -95,7 +95,10 @@ export class ServerStore {
     }
   }
 
-  async update(serverId: string, updates: Partial<Pick<ServerConfig, 'name' | 'url'>>): Promise<void> {
+  async update(
+    serverId: string,
+    updates: Partial<Pick<ServerConfig, 'name' | 'url'>>,
+  ): Promise<void> {
     const server = this.servers.find(s => s.id === serverId);
     if (server) {
       Object.assign(server, updates);

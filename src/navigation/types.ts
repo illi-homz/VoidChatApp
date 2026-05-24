@@ -1,3 +1,5 @@
+import type { CallType } from '../types';
+
 export type RootStackParamList = {
   Startup: undefined;
   Home: undefined;
@@ -11,6 +13,7 @@ export type RootStackParamList = {
         contactId: string;
         contactName: string;
         direction: 'outgoing';
+        callType: CallType;
       }
     | {
         contactId: string;
@@ -18,5 +21,6 @@ export type RootStackParamList = {
         direction: 'incoming';
         sdp: string;
         callId: string;
+        callType: CallType;
       };
 };

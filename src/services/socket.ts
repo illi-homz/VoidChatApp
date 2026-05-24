@@ -12,6 +12,7 @@ import type {
   CallEnded,
   CallDeclined,
   CallTimedOut,
+  CallType,
 } from '../types';
 
 import { webrtcService } from './WebRTCService';
@@ -123,16 +124,17 @@ class SocketService {
   }> = [];
   private messageBuffer: ServerMessage[] = [];
 
-  private callIncomingCallbacks: Array<(data: CallOffer) => void> = [];
-  private callOfferSentCallbacks: Array<(data: CallOfferSent) => void> = [];
+  private callIncomingCallbacks: Array<(data: CallOffer & { mediaType?: CallType }) => void> = [];
+  private callOfferSentCallbacks: Array<(data: CallOfferSent & { mediaType?: CallType }) => void> =
+    [];
   private callAcceptedCallbacks: Array<(data: CallAnswer) => void> = [];
   private callDeclinedCallbacks: Array<(data: CallDeclined) => void> = [];
   private callEndedCallbacks: Array<(data: CallEnded) => void> = [];
   private iceCandidateCallbacks: Array<(data: CallIceCandidate) => void> = [];
   private callTimedOutCallbacks: Array<(data: CallTimedOut) => void> = [];
 
-  private callIncomingBuffer: CallOffer[] = [];
-  private callOfferSentBuffer: CallOfferSent[] = [];
+  private callIncomingBuffer: (CallOffer & { mediaType?: CallType })[] = [];
+  private callOfferSentBuffer: (CallOfferSent & { mediaType?: CallType })[] = [];
   private callAcceptedBuffer: CallAnswer[] = [];
   private callDeclinedBuffer: CallDeclined[] = [];
   private callEndedBuffer: CallEnded[] = [];
@@ -464,8 +466,8 @@ class SocketService {
     this.socket.emit('messages_read', { from: userId, contactId });
   }
 
-  sendCallOffer(targetUserId: string, sdp: string, callId?: string): void {
-    this.socket?.emit('call_offer', { targetUserId, sdp, callId });
+  sendCallOffer(targetUserId: string, sdp: string, callId?: string, mediaType?: CallType): void {
+    this.socket?.emit('call_offer', { targetUserId, sdp, callId, mediaType });
   }
 
   sendCallAccept(callId: string, sdp: string): void {
@@ -620,7 +622,7 @@ class SocketService {
     this.presenceCallback = null;
   }
 
-  onCallIncoming(callback: (_: CallOffer) => void): () => void {
+  onCallIncoming(callback: (_: CallOffer & { mediaType?: CallType }) => void): () => void {
     this.callIncomingCallbacks.push(callback);
     // Flush buffer to the new callback
     while (this.callIncomingBuffer.length > 0) {
@@ -636,7 +638,7 @@ class SocketService {
     this.callIncomingBuffer = [];
   }
 
-  onCallOfferSent(callback: (_: CallOfferSent) => void): () => void {
+  onCallOfferSent(callback: (_: CallOfferSent & { mediaType?: CallType }) => void): () => void {
     this.callOfferSentCallbacks.push(callback);
     while (this.callOfferSentBuffer.length > 0) {
       callback(this.callOfferSentBuffer.shift()!);

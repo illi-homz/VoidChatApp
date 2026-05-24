@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { observer } from 'mobx-react-lite';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
-import type { Contact, CallOffer, CallEnded, CallTimedOut } from '../types';
+import type { Contact, CallOffer, CallEnded, CallTimedOut, CallType } from '../types';
 import type { BottomSheetAction } from '../components/BottomSheet';
 import { useStore, useServerStore, useCallStore } from '../stores';
 import { useAppStateReconnect } from '../hooks/useAppStateReconnect';
@@ -49,6 +49,7 @@ export const HomeScreen = observer(function HomeScreen({
     fromUserId: string;
     sdp: string;
     contactName: string;
+    callType: CallType;
   } | null>(null);
   const incomingCallDataRef = useRef<typeof incomingCallData>(null);
 
@@ -272,6 +273,7 @@ export const HomeScreen = observer(function HomeScreen({
         fromUserId: data.fromUserId,
         sdp: data.sdp,
         contactName: name,
+        callType: data.mediaType ?? 'audio',
       });
     });
 
@@ -439,6 +441,7 @@ export const HomeScreen = observer(function HomeScreen({
           visible={true}
           contactName={incomingCallData.contactName}
           contactId={incomingCallData.fromUserId}
+          callType={incomingCallData.callType}
           onAccept={async () => {
             setIncomingCallData(null);
             navigation.navigate('Call', {
@@ -447,6 +450,7 @@ export const HomeScreen = observer(function HomeScreen({
               direction: 'incoming',
               sdp: incomingCallData.sdp,
               callId: incomingCallData.callId,
+              callType: incomingCallData.callType,
             });
           }}
           onDecline={() => {

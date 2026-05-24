@@ -164,10 +164,13 @@ class WebRTCService {
   // ================================================================
 
   /**
-   * Запрашивает доступ к микрофону и возвращает локальный аудиопоток.
+   * Запрашивает доступ к микрофону (и опционально к камере) и возвращает
+   * локальный аудио/видео-поток.
    * При повторном вызове возвращает уже существующий поток.
+   *
+   * @param withVideo — если true, также запрашивает видео (320x240, 15fps)
    */
-  async startLocalStream(): Promise<MediaStream> {
+  async startLocalStream(withVideo: boolean = false): Promise<MediaStream> {
     if (this._localStream) {
       return this._localStream;
     }
@@ -179,7 +182,17 @@ class WebRTCService {
     } catch {
       // permissions API может быть недоступен — getUserMedia запросит сам
     }
-    const stream = await mediaDevices.getUserMedia({ audio: true, video: false });
+    if (withVideo) {
+      try {
+        await permissions.request({ name: 'camera' });
+      } catch {
+        // permissions API может быть недоступен — getUserMedia запросит сам
+      }
+    }
+    const videoConstraints = withVideo
+      ? { width: 320, height: 240, frameRate: 15, facingMode: 'user' as const }
+      : false;
+    const stream = await mediaDevices.getUserMedia({ audio: true, video: videoConstraints });
     this._localStream = stream;
     return stream;
   }
@@ -194,16 +207,128 @@ class WebRTCService {
     });
   }
 
+  /**
+   * Включить/выключить камеру (видеотрек) без renegotiation.
+   * true = камера активна, false = чёрный экран (track.enabled = false)
+   */
+  setCameraEnabled(enabled: boolean): void {
+    this._localStream?.getVideoTracks().forEach(track => {
+      track.enabled = enabled;
+    });
+  }
+
+  /**
+   * Переключить камеру между front (facingMode: 'user') и back (facingMode: 'environment').
+   * Упрощённая реализация для v1: останавливает старый видео-трек,
+   * создаёт новый через getUserMedia и заменяет через replaceTrack.
+   */
+  async switchCamera(): Promise<void> {
+    if (!this._localStream) return;
+    const videoTracks = this._localStream.getVideoTracks();
+    if (videoTracks.length === 0) return;
+
+    const currentTrack = videoTracks[0];
+    // Определяем текущую камеру через _settings (react-native-webrtc использует
+    // подчёркнутые методы). Если недоступно — предполагаем front-camera.
+    const currentSettings: any = (currentTrack as any)._settings?.();
+    const currentFacingMode: string = currentSettings?.facingMode ?? 'user';
+    const newFacingMode: 'user' | 'environment' =
+      currentFacingMode === 'user' ? 'environment' : 'user';
+
+    try {
+      // Запрашиваем разрешение камеры
+      try {
+        await permissions.request({ name: 'camera' });
+      } catch {
+        // permissions API может быть недоступен
+      }
+
+      // Останавливаем старый трек и удаляем из локального потока
+      currentTrack.stop();
+      this._localStream.removeTrack(currentTrack);
+
+      // Создаём новый видео-трек с противоположной камерой
+      const newStream = await mediaDevices.getUserMedia({
+        audio: false,
+        video: { width: 320, height: 240, frameRate: 15, facingMode: newFacingMode },
+      });
+
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      if (!newVideoTrack) {
+        console.warn('[WebRTC] switchCamera: no video track in new stream');
+        return;
+      }
+
+      // Добавляем новый трек в локальный поток
+      this._localStream.addTrack(newVideoTrack);
+
+      // Заменяем трек в PeerConnection (без renegotiation)
+      if (this._pc) {
+        const sender = this._pc.getSenders().find(s => s.track?.kind === 'video');
+        if (sender) {
+          await sender.replaceTrack(newVideoTrack);
+        } else {
+          // Если сендера нет (редкий случай) — добавляем трек через addTrack
+          this._pc.addTrack(newVideoTrack, this._localStream);
+        }
+      }
+
+      console.log('[WebRTC] Camera switched to', newFacingMode);
+    } catch (e) {
+      console.warn('[WebRTC] Failed to switch camera:', e);
+    }
+  }
+
+  /**
+   * Запрашивает разрешение на использование камеры.
+   * Использует react-native-webrtc permissions API (аналогично микрофону).
+   *
+   * @returns true если разрешение получено, false если отказано
+   */
+  async requestCameraPermission(): Promise<boolean> {
+    try {
+      const result = await permissions.request({ name: 'camera' });
+      return result === 'granted';
+    } catch {
+      // permissions API может быть недоступен — getUserMedia запросит сам
+      try {
+        const testStream = await mediaDevices.getUserMedia({
+          audio: false,
+          video: { width: 1, height: 1 },
+        });
+        testStream.getTracks().forEach(t => t.stop());
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  }
+
+  /**
+   * Публичный метод для начала звонка: запрашивает разрешения и
+   * захватывает медиа-поток.
+   *
+   * @param withVideo — если true, также запрашивает камеру
+   */
+  async startCall(withVideo: boolean = false): Promise<void> {
+    if (withVideo) {
+      await this.requestCameraPermission();
+    }
+    await this.startLocalStream(withVideo);
+  }
+
   // ================================================================
   //  Создание PeerConnection (приватный)
   // ================================================================
 
   /**
    * Создаёт RTCPeerConnection с ICE-серверами, добавляет локальный
-   * аудиотрек и устанавливает обработчики событий.
+   * аудио/видео-трек и устанавливает обработчики событий.
+   *
+   * @param withVideo — если true, также захватывает видео
    */
-  private async createPeerConnection(): Promise<PcEventHandlers> {
-    await this.startLocalStream();
+  private async createPeerConnection(withVideo: boolean = false): Promise<PcEventHandlers> {
+    await this.startLocalStream(withVideo);
     this._callInSetup = true;
 
     // Для отладки TURN: раскомментируй iceTransportPolicy ниже чтобы
@@ -294,7 +419,7 @@ class WebRTCService {
       this._negotiationInProgress = true;
       try {
         const sdpInfo = (await pc.createOffer()) as SdpInfo;
-        const modifiedSdp = this._modifySdpForOpus(sdpInfo.sdp);
+        const modifiedSdp = this._modifySdpForAudio(sdpInfo.sdp);
         const desc = { type: 'offer', sdp: modifiedSdp };
         await pc.setLocalDescription(desc);
         const jsonSdp = JSON.stringify(desc);
@@ -333,22 +458,24 @@ class WebRTCService {
   /**
    * Исходящий звонок: создаёт SDP offer.
    *
-   * 1. Захватывает микрофон
+   * 1. Захватывает микрофон (и опционально камеру)
    * 2. Создаёт PeerConnection
    * 3. Вызывает createOffer
    * 4. Модифицирует SDP (Opus FEC + битрейт)
    * 5. Устанавливает модифицированный SDP как local description
    * 6. Возвращает SDP как JSON-строку
+   *
+   * @param withVideo — если true, offer включает видео (offerToReceiveVideo: true)
    */
-  async createOffer(): Promise<string> {
+  async createOffer(withVideo: boolean = false): Promise<string> {
     try {
-      const pc = await this.createPeerConnection();
+      const pc = await this.createPeerConnection(withVideo);
       const sdpInfo = (await pc.createOffer({
         offerToReceiveAudio: true,
-        offerToReceiveVideo: false,
+        offerToReceiveVideo: withVideo,
       })) as SdpInfo;
 
-      const modifiedSdp = this._modifySdpForOpus(sdpInfo.sdp);
+      const modifiedSdp = this._modifySdpForAudio(sdpInfo.sdp);
       const desc = { type: 'offer', sdp: modifiedSdp };
       await pc.setLocalDescription(desc);
       this._callInSetup = false;
@@ -364,23 +491,25 @@ class WebRTCService {
   /**
    * Входящий звонок: создаёт SDP answer на основе offer от удалённой стороны.
    *
-   * 1. Захватывает микрофон
+   * 1. Захватывает микрофон (и опционально камеру)
    * 2. Создаёт PeerConnection
    * 3. Устанавливает remote description из offerSdp
    * 4. Вызывает createAnswer
    * 5. Модифицирует SDP (Opus FEC + битрейт)
    * 6. Устанавливает модифицированный SDP как local description
    * 7. Возвращает SDP как JSON-строку
+   *
+   * @param withVideo — если true, также захватывает видео и включает его в answer
    */
-  async createAnswer(offerSdp: string): Promise<string> {
+  async createAnswer(offerSdp: string, withVideo: boolean = false): Promise<string> {
     try {
-      const pc = await this.createPeerConnection();
+      const pc = await this.createPeerConnection(withVideo);
       const offer = JSON.parse(offerSdp) as SdpInfo;
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
       await this._flushPendingCandidates();
 
       const answer = (await pc.createAnswer()) as SdpInfo;
-      const modifiedSdp = this._modifySdpForOpus(answer.sdp);
+      const modifiedSdp = this._modifySdpForAudio(answer.sdp);
       const desc = { type: 'answer', sdp: modifiedSdp };
       await pc.setLocalDescription(desc);
       this._callInSetup = false;
@@ -459,7 +588,7 @@ class WebRTCService {
     if (!this._pc) return null;
     try {
       const sdpInfo = (await this._pc.createOffer({ iceRestart: true })) as SdpInfo;
-      const modifiedSdp = this._modifySdpForOpus(sdpInfo.sdp);
+      const modifiedSdp = this._modifySdpForAudio(sdpInfo.sdp);
       const desc = { type: 'offer', sdp: modifiedSdp };
       await this._pc.setLocalDescription(desc);
       const jsonSdp = JSON.stringify(desc);
@@ -472,14 +601,17 @@ class WebRTCService {
 
   /**
    * Завершает звонок и очищает всё состояние.
-   * - Останавливает и освобождает локальные треки
+   * - Останавливает и освобождает локальные аудио- и видео-треки
    * - Закрывает PeerConnection
    * - Сбрасывает коллбэки
    */
   stopCall(): void {
     this._clearDisconnectedTimer();
 
-    this._localStream?.getTracks().forEach(t => t.stop());
+    // Останавливаем аудио-треки
+    this._localStream?.getAudioTracks().forEach(t => t.stop());
+    // Останавливаем видео-треки
+    this._localStream?.getVideoTracks().forEach(t => t.stop());
     this._localStream = null;
     this._remoteStream = null;
     this._iceRestartAttempted = false;
@@ -514,7 +646,7 @@ class WebRTCService {
     await this._pc?.setRemoteDescription(new RTCSessionDescription(offer));
     await this._flushPendingCandidates();
     const answer = (await this._pc?.createAnswer()) as SdpInfo;
-    const modifiedSdp = this._modifySdpForOpus(answer.sdp);
+    const modifiedSdp = this._modifySdpForAudio(answer.sdp);
     const desc = { type: 'answer', sdp: modifiedSdp };
     await this._pc?.setLocalDescription(desc);
     return JSON.stringify(desc);
@@ -552,8 +684,9 @@ class WebRTCService {
    * Модифицирует SDP для голосовых звонков:
    * - Включает FEC (useinbandfec=1) для Opus
    * - Устанавливает битрейт 32 kbps (maxaveragebitrate=32000)
+   * - Модифицирует только аудио-секции SDP (Opus), видео-кодеки не трогает
    */
-  private _modifySdpForOpus(sdp: string): string {
+  private _modifySdpForAudio(sdp: string): string {
     const opusMatch = sdp.match(/a=rtpmap:(\d+) opus\/48000/);
     if (!opusMatch) return sdp;
 

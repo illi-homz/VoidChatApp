@@ -3,11 +3,13 @@ import { View, Text, TouchableOpacity, Modal, StyleSheet, Animated } from 'react
 import { Colors } from '../theme/colors';
 import { CallIcon } from './CallIcon';
 import { Icon } from './Icon';
+import { type CallType } from '../types';
 
 interface IncomingCallBannerProps {
   visible: boolean;
   contactName: string;
   contactId: string;
+  callType: CallType;
   onAccept: () => void;
   onDecline: () => void;
 }
@@ -21,6 +23,7 @@ export function IncomingCallBanner({
   visible,
   contactName,
   contactId,
+  callType,
   onAccept,
   onDecline,
 }: IncomingCallBannerProps): React.JSX.Element {
@@ -96,7 +99,16 @@ export function IncomingCallBanner({
           </View>
 
           {/* Текст */}
-          <Text style={styles.incomingLabel}>Входящий вызов</Text>
+          <View style={styles.callTypeRow}>
+            <Icon
+              name={callType === 'video' ? 'camera' : 'phone'}
+              size={16}
+              color={Colors.primary}
+            />
+            <Text style={styles.incomingLabel}>
+              {callType === 'video' ? 'ВИДЕОЗВОНОК' : 'АУДИОЗВОНОК'}
+            </Text>
+          </View>
           <Text style={styles.contactName} numberOfLines={1}>
             {contactName}
           </Text>
@@ -119,7 +131,7 @@ export function IncomingCallBanner({
               onPress={onAccept}
               activeOpacity={0.7}
               accessibilityRole='button'
-              accessibilityLabel='Ответить на вызов'
+              accessibilityLabel={`Ответить на ${callType === 'video' ? 'видео' : 'аудио'}звонок`}
             >
               <CallIcon size={20} color={Colors.background} />
               <Text style={styles.acceptText}>Ответить</Text>
@@ -189,13 +201,18 @@ const styles = StyleSheet.create({
     fontSize: 34,
     fontWeight: '900',
   },
+  callTypeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
   incomingLabel: {
     fontSize: 14,
     fontWeight: '700',
     color: Colors.primary,
     letterSpacing: 2,
     textTransform: 'uppercase',
-    marginBottom: 4,
   },
   contactName: {
     fontSize: 22,
