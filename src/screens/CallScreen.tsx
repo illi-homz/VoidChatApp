@@ -426,16 +426,6 @@ const CallScreenComponent: React.FC = observer(() => {
         <VideoPiP streamURL={webrtcService.localStream.toURL()} />
       )}
 
-      {callType === 'video' && callStore.isCameraOn && (
-        <TouchableOpacity
-          style={styles.switchCameraButton}
-          onPress={() => webrtcService.switchCamera()}
-          activeOpacity={0.7}
-        >
-          <Icon name='refresh-cw' size={20} color='#fff' />
-        </TouchableOpacity>
-      )}
-
       <View style={styles.controlsSection}>
         <TouchableOpacity
           style={[styles.controlButton, isMuted && styles.controlButtonActive]}
@@ -462,6 +452,15 @@ const CallScreenComponent: React.FC = observer(() => {
               size={24}
               color={callStore.isCameraOn ? Colors.textPrimary : Colors.primary}
             />
+          </TouchableOpacity>
+        )}
+        {callType === 'video' && callStore.isCameraOn && (
+          <TouchableOpacity
+            style={styles.controlButton}
+            onPress={() => webrtcService.switchCamera()}
+            activeOpacity={0.7}
+          >
+            <Icon name='refresh-cw' size={24} color={Colors.textPrimary} />
           </TouchableOpacity>
         )}
         <TouchableOpacity
@@ -555,18 +554,6 @@ const styles = StyleSheet.create({
   controlButtonActive: { borderColor: Colors.primary, backgroundColor: Colors.surface },
   controlLabel: { fontSize: 12, color: Colors.textSecondary, marginTop: 4 },
   controlLabelActive: { color: Colors.primary },
-  switchCameraButton: {
-    position: 'absolute',
-    top: 60,
-    left: 16,
-    zIndex: 100,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   endCallSection: { alignItems: 'center' },
   endCallButton: {
     width: 64,

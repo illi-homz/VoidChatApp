@@ -60,6 +60,7 @@ class WebRTCService {
   private _pc: RTCPeerConnection | null = null;
   private _localStream: MediaStream | null = null;
   private _remoteStream: MediaStream | null = null;
+  private _currentFacingMode: 'user' | 'environment' = 'user';
 
   // ---- Коллбэки (устанавливаются извне) ----
 
@@ -191,14 +192,17 @@ class WebRTCService {
     }
     const videoConstraints = withVideo
       ? {
-          width: { ideal: 640, min: 320, max: 1280 },
-          height: { ideal: 480, min: 240, max: 720 },
-          frameRate: { ideal: 24, min: 15, max: 30 },
+          width: { min: 480, ideal: 1280, max: 1920 },
+          height: { min: 360, ideal: 720, max: 1080 },
+          frameRate: { min: 20, ideal: 30, max: 30 },
           facingMode: 'user' as const,
         }
       : false;
     const stream = await mediaDevices.getUserMedia({ audio: true, video: videoConstraints });
     this._localStream = stream;
+    if (withVideo) {
+      this._currentFacingMode = 'user';
+    }
     return stream;
   }
 
@@ -246,11 +250,9 @@ class WebRTCService {
     if (videoTracks.length === 0) return;
 
     const currentTrack = videoTracks[0];
-    // Определяем текущую камеру по label/ID: front обычно содержит 'front' или 'user'
-    const label = currentTrack.label?.toLowerCase() ?? '';
-    const isFrontCamera =
-      label.includes('front') || label.includes('user') || !label.includes('back');
-    const newFacingMode: 'user' | 'environment' = isFrontCamera ? 'environment' : 'user';
+    // Переключаем на противоположную камеру
+    const newFacingMode: 'user' | 'environment' =
+      this._currentFacingMode === 'user' ? 'environment' : 'user';
 
     try {
       try {
@@ -267,9 +269,9 @@ class WebRTCService {
       const newStream = await mediaDevices.getUserMedia({
         audio: false,
         video: {
-          width: { ideal: 640, min: 320, max: 1280 },
-          height: { ideal: 480, min: 240, max: 720 },
-          frameRate: { ideal: 24, min: 15, max: 30 },
+          width: { min: 480, ideal: 1280, max: 1920 },
+          height: { min: 360, ideal: 720, max: 1080 },
+          frameRate: { min: 20, ideal: 30, max: 30 },
           facingMode: newFacingMode,
         },
       });
@@ -293,7 +295,9 @@ class WebRTCService {
         }
       }
 
-      console.log('[WebRTC] Camera switched to', newFacingMode, '(was:', label || 'unknown)');
+      // Запоминаем новое состояние
+      this._currentFacingMode = newFacingMode;
+      console.log('[WebRTC] Camera switched to', newFacingMode);
     } catch (e) {
       console.warn('[WebRTC] Failed to switch camera:', e);
     }
