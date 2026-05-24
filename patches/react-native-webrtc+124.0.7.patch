@@ -15,7 +15,7 @@ index 89569e7..b3e7921 100644
       * Sets the callback for when video dimensions change.
       *
 diff --git a/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/WebRTCView.java b/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/WebRTCView.java
-index e2c30bf..0d9dfb2 100644
+index e2c30bf..c22cdb2 100644
 --- a/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/WebRTCView.java
 +++ b/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/WebRTCView.java
 @@ -3,10 +3,12 @@ package com.oney.WebRTCModule;
@@ -42,26 +42,47 @@ index e2c30bf..0d9dfb2 100644
  
          setMirror(false);
          setScalingType(DEFAULT_SCALING_TYPE);
-@@ -405,6 +411,20 @@ public class WebRTCView extends ViewGroup {
+@@ -405,6 +411,30 @@ public class WebRTCView extends ViewGroup {
          }
      }
  
-+    public void setBorderRadius(float radius) {
-+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-+            final float r = radius;
++    private float _borderRadius = 0;
++
++    private void applyBorderRadiusInternal() {
++        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP
++                && _borderRadius > 0) {
++            final float r = _borderRadius;
 +            surfaceViewRenderer.setClipToOutline(true);
 +            surfaceViewRenderer.setOutlineProvider(new ViewOutlineProvider() {
 +                @Override
 +                public void getOutline(View view, Outline outline) {
-+                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), r);
++                    int w = view.getWidth();
++                    int h = view.getHeight();
++                    if (w > 0 && h > 0) {
++                        outline.setRoundRect(0, 0, w, h, r);
++                    }
 +                }
 +            });
 +        }
 +    }
 +
++    public void setBorderRadius(float radius) {
++        _borderRadius = radius;
++        applyBorderRadiusInternal();
++    }
++
      /**
       * In the fashion of
       * https://www.w3.org/TR/html5/embedded-content-0.html#dom-video-videowidth
+@@ -569,6 +599,8 @@ public class WebRTCView extends ViewGroup {
+             try {
+                 surfaceViewRenderer.init(sharedContext, rendererEvents);
+                 surfaceViewRendererInstances++;
++                // init() сбрасывает OutlineProvider — переприменяем borderRadius
++                applyBorderRadiusInternal();
+             } catch (Exception e) {
+                 Logging.e(
+                         TAG, "Failed to initialize surfaceViewRenderer on instance " + surfaceViewRendererInstances, e);
 diff --git a/node_modules/react-native-webrtc/src/RTCView.ts b/node_modules/react-native-webrtc/src/RTCView.ts
 index 94da298..b7f26e8 100644
 --- a/node_modules/react-native-webrtc/src/RTCView.ts
