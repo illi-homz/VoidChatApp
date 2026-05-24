@@ -21,11 +21,13 @@ function ScaleBtn({
   style,
   activeStyle,
   onPress,
+  accessibilityLabel,
   children,
 }: {
   style?: any;
   activeStyle?: any;
   onPress?: () => void;
+  accessibilityLabel?: string;
   children: React.ReactNode;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
@@ -45,6 +47,7 @@ function ScaleBtn({
         onPressIn={animateIn}
         onPressOut={animateOut}
         activeOpacity={0.7}
+        accessibilityLabel={accessibilityLabel}
         style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
       >
         {children}
@@ -505,25 +508,9 @@ const CallScreenComponent: React.FC = observer(() => {
           { paddingBottom: Math.max(insets.bottom + 24, MIN_BOTTOM_INSET) },
         ]}
       >
-        <ScaleBtn style={styles.endCallButton} onPress={handleEndCall}>
+        <ScaleBtn style={styles.endCallButton} onPress={handleEndCall} accessibilityLabel='Завершить звонок'>
           <CallIcon size={28} color={Colors.textPrimary} />
         </ScaleBtn>
-      </View>
-
-      <View
-        style={[
-          styles.endCallSection,
-          { paddingBottom: Math.max(insets.bottom + 24, MIN_BOTTOM_INSET) },
-        ]}
-      >
-        <TouchableOpacity
-          style={styles.endCallButton}
-          onPress={handleEndCall}
-          activeOpacity={0.7}
-          accessibilityLabel='Завершить звонок'
-        >
-          <CallIcon size={28} color={Colors.textPrimary} />
-        </TouchableOpacity>
         {!showControls && !isInactive && <Text style={styles.endCallLabel}>Завершить</Text>}
       </View>
     </View>

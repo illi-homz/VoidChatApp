@@ -13,11 +13,12 @@ interface VideoPiPProps {
 }
 
 /**
- * VideoPiP — self-view (картинка-в-картинке) для видео-звонков.
+ * VideoPiP — self-view для видео-звонков.
  * Отображает локальный видеопоток в правом верхнем углу экрана.
  *
- * На Android RTCView (native SurfaceView) не обрезается в круг через borderRadius,
- * поэтому используется скруглённый квадрат.
+ * На Android 21+ используется native borderRadius через OutlineProvider
+ * (патч react-native-webrtc), который обрезает SurfaceViewRenderer
+ * до скруглённого прямоугольника.
  *
  * Если streamURL === null (камера выключена), компонент не рендерится.
  */
@@ -33,15 +34,14 @@ export function VideoPiP({ streamURL, style, onLayout }: VideoPiPProps): React.J
       accessibilityRole='none'
       accessibilityLabel='Моё видео'
     >
-      <View style={styles.clipHolder}>
-        <RTCView
-          streamURL={streamURL}
-          style={styles.video}
-          objectFit='cover'
-          mirror={true}
-          zOrder={1}
-        />
-      </View>
+      <RTCView
+        streamURL={streamURL}
+        style={styles.video}
+        borderRadius={64}
+        objectFit='cover'
+        mirror={true}
+        zOrder={1}
+      />
       <View style={styles.borderOverlay} pointerEvents='none' />
     </View>
   );
@@ -61,13 +61,6 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 8,
   },
-  clipHolder: {
-    width: 64,
-    height: 64,
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: Colors.background,
-  },
   video: {
     width: 64,
     height: 64,
@@ -78,8 +71,9 @@ const styles = StyleSheet.create({
     left: 0,
     width: 64,
     height: 64,
-    borderRadius: 12,
+    borderRadius: 999,
     borderWidth: 1.5,
     borderColor: 'rgba(255, 215, 0, 0.5)',
+    pointerEvents: 'none',
   },
 });
