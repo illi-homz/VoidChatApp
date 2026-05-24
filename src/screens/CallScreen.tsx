@@ -112,8 +112,10 @@ const CallScreenComponent: React.FC = observer(() => {
       }
     };
     webrtcService.onRenegotiationNeeded = sdp => {
+      console.log('[CallScreen] onRenegotiationNeeded, callId=' + callStore.callId + ', contactId=' + callStore.contactId);
       if (callStore.callId && callStore.contactId) {
         socketService.sendCallOffer(callStore.contactId, sdp, callStore.callId, callStore.callType);
+        console.log('[CallScreen] ✅ sendCallOffer sent for renegotiation');
       }
     };
     webrtcService.onError = error => {
@@ -166,13 +168,18 @@ const CallScreenComponent: React.FC = observer(() => {
   useEffect(() => {
     // Для входящих слушаем call_incoming (renegotiation)
     const unsubCallIncoming = socketService.onCallIncoming(data => {
+      console.log('[CallScreen] call_incoming received, callId=' + data.callId + ', myCallId=' + callStore.callId + ', status=' + callStore.status);
       if (data.callId === callStore.callId && callStore.status === 'connected') {
+        console.log('[CallScreen] 🔄 processing renegotiation offer');
         webrtcService
           .handleRenegotiationOffer(data.sdp)
           .then(answerSdp => {
+            console.log('[CallScreen] ✅ renegotiation answer created, sending call_accept');
             socketService.sendCallAccept(data.callId, answerSdp);
           })
-          .catch(() => {});
+          .catch(e => {
+            console.warn('[CallScreen] ❌ renegotiation offer failed:', e);
+          });
       }
     });
 
@@ -186,6 +193,7 @@ const CallScreenComponent: React.FC = observer(() => {
     // Звонок принят (caller получает answer SDP)
     const unsubAccepted = socketService.onCallAccepted(data => {
       if (data.callId === callStore.callId && callStore.status === 'calling') {
+        console.log('[CallScreen] ✅ initial answer received, setting remote description');
         webrtcService
           .setRemoteDescription(data.sdp)
           .then(() => {
@@ -194,7 +202,10 @@ const CallScreenComponent: React.FC = observer(() => {
           .catch(() => {});
       } else if (data.callId === callStore.callId && callStore.status === 'connected') {
         // Renegotiation answer
-        webrtcService.setRemoteDescription(data.sdp).catch(() => {});
+        console.log('[CallScreen] 🔄 renegotiation answer received, setting remote description');
+        webrtcService.setRemoteDescription(data.sdp).catch(e => {
+          console.warn('[CallScreen] ❌ setRemoteDescription (reneg) failed:', e);
+        });
       }
     });
 
@@ -477,9 +488,16 @@ const CallScreenComponent: React.FC = observer(() => {
         {callType === 'video' && (
           <ScaleBtn
             style={[styles.controlButton, !callStore.isCameraOn && styles.controlButtonActive]}
-            onPress={() => {
-              callStore.toggleCamera();
-              webrtcService.setCameraEnabled(callStore.isCameraOn);
+            onPress={async () => {
+              // Выключение: сначала убираем UI, потом останавливаем камеру
+              if (callStore.isCameraOn) {
+                callStore.toggleCamera();
+                await webrtcService.setCameraEnabled(false).catch(() => {});
+              } else {
+                // Включение: сначала запускаем камеру, потом показываем UI
+                await webrtcService.setCameraEnabled(true).catch(() => {});
+                callStore.toggleCamera();
+              }
             }}
           >
             <Icon

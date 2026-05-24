@@ -61,6 +61,8 @@ class WebRTCService {
   private _localStream: MediaStream | null = null;
   private _remoteStream: MediaStream | null = null;
   private _currentFacingMode: 'user' | 'environment' = 'user';
+  /** Ссылка на RTCRtpSender видео — нужна для replaceTrack после выключения камеры. */
+  private _videoSender: RTCRtpSender | null = null;
 
   // ---- Коллбэки (устанавливаются извне) ----
 
@@ -224,18 +226,131 @@ class WebRTCService {
    * для полной остановки передачи — на некоторых Android-устройствах
    * track.enabled = false не останавливает отправку.
    */
-  setCameraEnabled(enabled: boolean): void {
-    this._localStream?.getVideoTracks().forEach(track => {
-      track.enabled = enabled;
-    });
-
-    // Дополнительно: останавливаем/возобновляем发送 через RTCRtpSender
-    if (this._pc) {
-      const sender = this._pc.getSenders().find(s => s.track?.kind === 'video');
-      if (sender) {
-        const videoTrack = this._localStream?.getVideoTracks()[0] ?? null;
-        sender.replaceTrack(enabled ? videoTrack : null).catch(() => {});
+  /**
+   * Включить/выключить камеру.
+   *
+   * При выключении — полностью останавливает видео-трек и удаляет его
+   * из локального потока, чтобы освободить камеру (на некоторых Android-
+   * устройствах track.enabled = false не отдаёт камеру системе).
+   *
+   * При включении — создаёт новый видео-трек через getUserMedia,
+   * добавляет в локальный поток и в PeerConnection через replaceTrack.
+   */
+  async setCameraEnabled(enabled: boolean): Promise<void> {
+    if (enabled) {
+      // ── Включение камеры ───────────────────────────────────
+      // Если видео-трек уже есть и жив — просто включаем
+      const existingTrack = this._localStream?.getVideoTracks()[0];
+      if (existingTrack && existingTrack.readyState === 'live') {
+        existingTrack.enabled = true;
+        if (this._pc) {
+          const sender = this._pc.getSenders().find(s => s.track?.kind === 'video');
+          if (sender) {
+            await sender.replaceTrack(existingTrack).catch(() => {});
+          }
+        }
+        return;
       }
+
+      // Создаём новый видео-трек
+      try {
+        await permissions.request({ name: 'camera' });
+      } catch { /* permissions API может быть недоступен */ }
+
+      const newStream = await mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          width: { min: 480, ideal: 1280, max: 1920 },
+          height: { min: 360, ideal: 720, max: 1080 },
+          frameRate: { min: 20, ideal: 30, max: 30 },
+          facingMode: this._currentFacingMode as 'user' | 'environment' | undefined,
+        },
+      });
+
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      if (!newVideoTrack) {
+        console.warn('[WebRTC] setCameraEnabled(true): no video track');
+        return;
+      }
+
+      this._localStream?.addTrack(newVideoTrack);
+
+      if (this._pc) {
+        if (this._videoSender) {
+          await this._videoSender.replaceTrack(newVideoTrack).catch(() => {});
+          // На Android replaceTrack триггерит negotiationneeded самостоятельно.
+          // Дополнительный вызов _renegotiateVideo() не нужен — он только
+          // создаёт циклическую renegotiation (баг Android WebRTC).
+        } else {
+          this._videoSender = this._pc.addTrack(newVideoTrack, this._localStream!);
+          await this._renegotiateVideo().catch(() => {});
+        }
+      }
+    } else {
+      // ── Выключение камеры ──────────────────────────────────
+      const tracks = this._localStream?.getVideoTracks() ?? [];
+      tracks.forEach(track => {
+        track.stop();
+        this._localStream?.removeTrack(track);
+      });
+
+      if (this._pc) {
+        const sender = this._pc.getSenders().find(s => s.track?.kind === 'video');
+        if (sender) {
+          await sender.replaceTrack(null).catch(() => {});
+        }
+      }
+    }
+  }
+
+  /**
+   * Принудительная renegotiation видео-трека.
+   * Нужна после sender.replaceTrack() — спецификация WebRTC не требует
+   * renegotiation для replaceTrack, но на практике без неё remote сторона
+   * не получает видео (особенно на Android/Samsung).
+   */
+  /** Предотвращает циклическую renegotiation. */
+  private _pendingRenegotiation = false;
+
+  private async _renegotiateVideo(): Promise<void> {
+    if (!this._pc) {
+      console.log('[WebRTC] ⏭ _renegotiateVideo: no PC');
+      return;
+    }
+    if (this._negotiationInProgress) {
+      console.log('[WebRTC] ⏭ _renegotiateVideo: negotiation already in progress');
+      return;
+    }
+    if (this._callInSetup) {
+      console.log('[WebRTC] ⏭ _renegotiateVideo: call in setup');
+      return;
+    }
+    if (this._pendingRenegotiation) {
+      console.log('[WebRTC] ⏭ _renegotiateVideo: pending renegotiation already active, skipping');
+      return;
+    }
+    console.log('[WebRTC] 🔄 _renegotiateVideo: starting, sigState=' + this._pc.signalingState);
+    this._negotiationInProgress = true;
+    this._pendingRenegotiation = true;
+    try {
+      const sdpInfo = (await this._pc.createOffer()) as SdpInfo;
+      console.log('[WebRTC] 🔄 createOffer OK, sdp length=' + sdpInfo.sdp.length);
+      const modifiedSdp = this._modifySdpForAudio(sdpInfo.sdp);
+      const desc = { type: 'offer', sdp: modifiedSdp };
+      await this._pc.setLocalDescription(desc);
+      console.log('[WebRTC] 🔄 setLocalDescription OK, sigState=' + this._pc.signalingState);
+      const jsonSdp = JSON.stringify(desc);
+      if (this._onRenegotiationNeeded) {
+        console.log('[WebRTC] 🔄 sending renegotiation offer via onRenegotiationNeeded');
+        this._onRenegotiationNeeded(jsonSdp);
+      } else {
+        console.log('[WebRTC] ⚠️ _onRenegotiationNeeded is null — offer not sent!');
+      }
+    } catch (e) {
+      console.warn('[WebRTC] ❌ renegotiateVideo failed:', e);
+      this._pendingRenegotiation = false;
+    } finally {
+      this._negotiationInProgress = false;
     }
   }
 
@@ -439,7 +554,9 @@ class WebRTCService {
 
     // --- onnegotiationneeded ---
     pc.onnegotiationneeded = async () => {
-      if (this._callInSetup || this._negotiationInProgress) return;
+      // Защита от циклической renegotiation: Android WebRTC иногда
+      // стреляет negotiationneeded после setRemoteDescription в 'stable'.
+      if (this._callInSetup || this._negotiationInProgress || this._pendingRenegotiation) return;
       this._negotiationInProgress = true;
       try {
         const sdpInfo = (await pc.createOffer()) as SdpInfo;
@@ -455,10 +572,13 @@ class WebRTCService {
       }
     };
 
-    // Добавляем локальный аудиотрек
+    // Добавляем локальные треки
     if (this._localStream) {
       this._localStream.getTracks().forEach(track => {
-        pc.addTrack(track, this._localStream!);
+        const sender = pc.addTrack(track, this._localStream!);
+        if (track.kind === 'video') {
+          this._videoSender = sender;
+        }
       });
     }
 
@@ -560,6 +680,8 @@ class WebRTCService {
       const desc = JSON.parse(sdp) as SdpInfo;
       await this._pc?.setRemoteDescription(new RTCSessionDescription(desc));
       await this._flushPendingCandidates();
+      // Renegotiation-цикл завершён — разрешаем следующую ручную renegotiation
+      this._pendingRenegotiation = false;
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to set remote description';
       this._onError?.(msg);
@@ -640,9 +762,11 @@ class WebRTCService {
     this._remoteStream = null;
     this._iceRestartAttempted = false;
     this._negotiationInProgress = false;
+    this._pendingRenegotiation = false;
     this._callInSetup = false;
     this._pendingCandidates = [];
     this._earlyCandidates = [];
+    this._videoSender = null;
 
     if (this._pc) {
       this._pc.close();
@@ -666,13 +790,17 @@ class WebRTCService {
    * 4. Возвращает answer SDP как JSON-строку
    */
   async handleRenegotiationOffer(offerSdp: string): Promise<string> {
+    console.log('[WebRTC] 🔄 handleRenegotiationOffer, sigState=' + (this._pc?.signalingState ?? 'no-pc'));
     const offer = JSON.parse(offerSdp) as SdpInfo;
     await this._pc?.setRemoteDescription(new RTCSessionDescription(offer));
+    console.log('[WebRTC] 🔄 setRemoteDescription(offer) OK, sigState=' + (this._pc?.signalingState ?? 'no-pc'));
     await this._flushPendingCandidates();
     const answer = (await this._pc?.createAnswer()) as SdpInfo;
+    console.log('[WebRTC] 🔄 createAnswer OK');
     const modifiedSdp = this._modifySdpForAudio(answer.sdp);
     const desc = { type: 'answer', sdp: modifiedSdp };
     await this._pc?.setLocalDescription(desc);
+    console.log('[WebRTC] 🔄 setLocalDescription(answer) OK');
     return JSON.stringify(desc);
   }
 
