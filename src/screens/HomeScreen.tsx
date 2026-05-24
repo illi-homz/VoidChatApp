@@ -72,6 +72,7 @@ export const HomeScreen = observer(function HomeScreen({
       actions: [
         {
           text: 'OK',
+          icon: 'check',
           onPress: () => {
             socketService.disconnect();
             navigation.reset({ index: 0, routes: [{ name: 'ServerList' }] });
@@ -147,17 +148,19 @@ export const HomeScreen = observer(function HomeScreen({
         actions: [
           {
             text: 'Принять',
+            icon: 'user-plus',
             onPress: () => handleAcceptFriend(request),
           },
           {
             text: 'Отклонить',
+            icon: 'x',
             style: 'destructive',
             onPress: () => {
               store.removeContact(request.fromUserId);
               socketService.declineFriend(request.fromUserId);
             },
           },
-          { text: 'Отмена', style: 'cancel' },
+          { text: 'Отмена', icon: 'x', style: 'cancel' },
         ],
       });
     });
@@ -309,19 +312,22 @@ export const HomeScreen = observer(function HomeScreen({
       actions: [
         {
           text: 'Задать прозвище',
+          icon: 'copy',
           onPress: () => setPromptContact(contact),
         },
         {
           text: 'Очистить чат',
+          icon: 'broom',
           style: 'destructive',
           onPress: () => showClearChatConfirm(contact),
         },
         {
           text: 'Удалить',
+          icon: 'trash-2',
           style: 'destructive',
           onPress: () => showDeleteConfirm(contact),
         },
-        { text: 'Отмена', style: 'cancel' },
+        { text: 'Отмена', icon: 'x', style: 'cancel' },
       ],
     });
   }
@@ -333,9 +339,10 @@ export const HomeScreen = observer(function HomeScreen({
         title: 'Удалить контакт',
         message: `Вы уверены, что хотите удалить ${maskUserId(contact.userId)}?`,
         actions: [
-          { text: 'Отмена', style: 'cancel' },
+          { text: 'Отмена', icon: 'x', style: 'cancel' },
           {
             text: 'Удалить',
+            icon: 'trash-2',
             style: 'destructive',
             onPress: () => store.removeContact(contact.userId),
           },

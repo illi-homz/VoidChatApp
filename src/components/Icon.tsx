@@ -1,6 +1,6 @@
 import React from 'react';
 import { ViewStyle } from 'react-native';
-import Svg, { Path, Circle, Line, Polyline, Rect } from 'react-native-svg';
+import Svg, { Path, Circle, Line, Polyline, Rect, G } from 'react-native-svg';
 
 export type IconName =
   | 'phone'
@@ -32,7 +32,9 @@ export type IconName =
   | 'send'
   | 'share-2'
   | 'message-circle'
-  | 'plus';
+  | 'plus'
+  | 'qr-code'
+  | 'broom';
 
 interface IconProps {
   name: IconName;
@@ -298,6 +300,35 @@ const IconBase: React.FC<IconProps> = ({ name, size = 24, color = '#000', style 
         <Svg {...svgProps}>
           <Path d='M5 12h14' />
           <Path d='M12 5v14' />
+        </Svg>
+      );
+    case 'qr-code':
+      return (
+        <Svg {...svgProps}>
+          <Rect width='5' height='5' x='3' y='3' rx='1' />
+          <Rect width='5' height='5' x='16' y='3' rx='1' />
+          <Rect width='5' height='5' x='3' y='16' rx='1' />
+          <Path d='M21 16h-3a2 2 0 0 0-2 2v3' />
+          <Path d='M21 21v.01' />
+          <Path d='M12 7v3a2 2 0 0 1-2 2H7' />
+          <Path d='M3 12h.01' />
+          <Path d='M12 3h.01' />
+          <Path d='M12 16v.01' />
+          <Path d='M16 12h1' />
+          <Path d='M21 12v.01' />
+        </Svg>
+      );
+    case 'broom':
+      return (
+        <Svg {...svgProps}>
+          <G transform='translate(12,12) rotate(-40) scale(1.1) translate(-13,-12)'>
+            <Line x1='12' y1='2' x2='12' y2='14' />
+            <Path d='M5 21c1-2 3-4 7-7' />
+            <Path d='M19 21c-1-2-3-4-7-7' />
+            <Path d='M8 22c1-2 2-3 4-5' />
+            <Path d='M16 22c-1-2-2-3-4-5' />
+            <Path d='M12 14v8' />
+          </G>
         </Svg>
       );
     default:

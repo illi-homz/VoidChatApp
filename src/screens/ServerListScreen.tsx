@@ -6,8 +6,11 @@ import {
   StyleSheet,
   ActivityIndicator,
   FlatList,
+  Modal,
+  TextInput,
+  Keyboard,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRoute } from '@react-navigation/native';
 import { observer } from 'mobx-react-lite';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -43,7 +46,53 @@ export const ServerListScreen = observer(function ServerListScreen({
     actions: BottomSheetAction[];
   }>({ actions: [] });
   const [renameServer, setRenameServer] = useState<ServerConfig | null>(null);
+  const [editServer, setEditServer] = useState<ServerConfig | null>(null);
+  const [editIp, setEditIp] = useState('');
+  const [editPort, setEditPort] = useState('');
+  const [editKeyboardHeight, setEditKeyboardHeight] = useState(0);
   const errorMessage = route.params?.errorMessage;
+  const insets = useSafeAreaInsets();
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', e => {
+      setEditKeyboardHeight(e.endCoordinates.height);
+    });
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      setEditKeyboardHeight(0);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  function parseServerUrl(url: string): { ip: string; port: string } {
+    const clean = url.replace(/^https?:\/\//, '');
+    const [host, port = '9001'] = clean.split(':');
+    return { ip: host, port };
+  }
+
+  function handleStartEdit(server: ServerConfig): void {
+    const { ip, port } = parseServerUrl(server.url);
+    setEditIp(ip);
+    setEditPort(port);
+    setEditServer(server);
+    setSheetVisible(false);
+  }
+
+  function handleSaveEdit(): void {
+    if (!editServer) return;
+    const trimmedIp = editIp.trim();
+    const trimmedPort = editPort.trim() || '9001';
+    if (!trimmedIp) {
+      toast('Введите IP сервера', 'error');
+      return;
+    }
+    const newUrl = `http://${trimmedIp}:${trimmedPort}`;
+    serverStore.update(editServer.id, { url: newUrl });
+    toast('Сервер изменён', 'success');
+    setEditServer(null);
+  }
   // ref для защиты от повторного сабмита (при StrictMode)
   const connectingRef = useRef(false);
 
@@ -145,9 +194,10 @@ export const ServerListScreen = observer(function ServerListScreen({
         title: 'Удалить сервер',
         message: `Удалить "${server.name}"? Все сообщения и контакты этого сервера будут потеряны.`,
         actions: [
-          { text: 'Отмена', style: 'cancel' },
+          { text: 'Отмена', icon: 'x', style: 'cancel' },
           {
             text: 'Удалить',
+            icon: 'trash-2',
             style: 'destructive',
             onPress: async () => {
               setDeletingId(server.id);
@@ -172,18 +222,26 @@ export const ServerListScreen = observer(function ServerListScreen({
       actions: [
         {
           text: 'Подключиться',
+          icon: 'refresh-cw',
           onPress: () => handleConnect(server),
         },
         {
           text: 'Переименовать',
+          icon: 'copy',
           onPress: () => handleRename(server),
         },
         {
+          text: 'Изменить IP/порт',
+          icon: 'settings',
+          onPress: () => handleStartEdit(server),
+        },
+        {
           text: 'Удалить',
+          icon: 'trash-2',
           style: 'destructive',
           onPress: () => showDeleteConfirm(server),
         },
-        { text: 'Отмена', style: 'cancel' },
+        { text: 'Отмена', icon: 'x', style: 'cancel' },
       ],
     });
   }
@@ -265,6 +323,91 @@ export const ServerListScreen = observer(function ServerListScreen({
         onSave={handleSaveRename}
         onCancel={() => setRenameServer(null)}
       />
+
+      {/* Модалка редактирования IP/порта */}
+      <Modal
+        visible={editServer !== null}
+        transparent
+        animationType='fade'
+        onRequestClose={() => setEditServer(null)}
+        statusBarTranslucent
+      >
+        <View style={styles.editOverlay}>
+            <TouchableOpacity
+              style={styles.editOverlayTouchable}
+              activeOpacity={1}
+              onPress={() => setEditServer(null)}
+            />
+            <View style={[styles.editSheet, { paddingBottom: editKeyboardHeight + insets.bottom + 20 }]}>
+              <Text style={styles.editTitle}>Изменить сервер</Text>
+            <Text style={styles.editSubtitle}>{editServer?.name}</Text>
+
+            <View style={styles.editInputWrapper}>
+              <TextInput
+                style={styles.editInput}
+                value={editIp}
+                onChangeText={text =>
+                  setEditIp(prevIp => {
+                    const isDeleting = text.length < prevIp.length;
+                    let clean = text.replace(/[^0-9.]/g, '');
+                    const rawSegments = clean.split('.');
+                    const processed: string[] = [];
+                    for (const segment of rawSegments) {
+                      for (let i = 0; i < segment.length; i += 3) {
+                        processed.push(segment.slice(i, i + 3));
+                      }
+                    }
+                    const final = processed.slice(0, 4);
+                    let result = final.join('.');
+                    if (!isDeleting && final.length < 4) {
+                      const last = final[final.length - 1];
+                      if (last && last.length === 3) {
+                        result += '.';
+                      }
+                    }
+                    return result;
+                  })
+                }
+                placeholder='IP сервера'
+                placeholderTextColor={Colors.textMuted}
+                autoCapitalize='none'
+                autoCorrect={false}
+                keyboardType='number-pad'
+              />
+            </View>
+
+            <View style={styles.editInputWrapper}>
+              <TextInput
+                style={styles.editInput}
+                value={editPort}
+                onChangeText={setEditPort}
+                placeholder='Порт'
+                placeholderTextColor={Colors.textMuted}
+                keyboardType='number-pad'
+                autoCapitalize='none'
+                autoCorrect={false}
+              />
+            </View>
+
+            <View style={styles.editButtons}>
+              <TouchableOpacity
+                style={styles.editCancelButton}
+                onPress={() => setEditServer(null)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.editCancelText}>Отмена</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.editSaveButton}
+                onPress={handleSaveEdit}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.editSaveText}>Сохранить</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 });
@@ -353,6 +496,77 @@ const styles = StyleSheet.create({
   emptyText: {
     color: Colors.textMuted,
     fontSize: 16,
+  },
+  // ---- Edit modal styles ----
+  editOverlay: {
+    flex: 1,
+    backgroundColor: Colors.overlay,
+    justifyContent: 'flex-end',
+  },
+  editOverlayTouchable: {
+    flex: 1,
+  },
+  editSheet: {
+    backgroundColor: Colors.surface,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  editTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: Colors.textPrimary,
+    marginBottom: 4,
+  },
+  editSubtitle: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    marginBottom: 20,
+  },
+  editInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.background,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: 16,
+  },
+  editInput: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    color: Colors.textPrimary,
+    fontSize: 16,
+    fontFamily: 'monospace',
+  },
+  editButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+    marginTop: 4,
+  },
+  editCancelButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  editCancelText: {
+    color: Colors.primary,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  editSaveButton: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  editSaveText: {
+    color: '#000',
+    fontSize: 15,
+    fontWeight: '600',
   },
   addHeaderButton: {
     backgroundColor: Colors.primary,

@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Clipboard,
   Vibration,
+  Animated as RNAnimated,
 } from 'react-native';
 
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -29,7 +30,7 @@ import { CallButton } from '../components/CallButton';
 import { CallConfirmAlert } from '../components/CallConfirmAlert';
 import { StatusIcon } from '../components/StatusIcon';
 import { useToast } from '../components/Toast';
-import Animated, { FadeInDown, FadeInLeft, FadeInUp, FadeOut } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeInUp, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { selectionStore } from '../stores/SelectionStore';
 
@@ -73,6 +74,15 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
   messagesRef.current = messages;
   const contactIdRef = useRef(contactId);
   contactIdRef.current = contactId;
+  const markerAnim = useRef(new RNAnimated.Value(0)).current;
+
+  useEffect(() => {
+    RNAnimated.timing(markerAnim, {
+      toValue: selectionMode ? 1 : 0,
+      duration: 200,
+      useNativeDriver: false,
+    }).start();
+  }, [selectionMode, markerAnim]);
 
   // Запоминаем ID сообщений, которые уже были в чате при открытии
   if (initialIdsRef.current === null && messages.length > 0) {
@@ -345,13 +355,33 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
           isSelected && styles.messageRowSelected,
         ]}
       >
-        {selectionMode && (
-          <Animated.View entering={FadeInLeft.duration(200)} style={styles.selectionMarker}>
+        <RNAnimated.View
+          style={[
+            styles.selectionMarker,
+            {
+              width: markerAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 44],
+              }),
+            },
+          ]}
+        >
+          <RNAnimated.View
+            style={[
+              styles.selectionMarkerCircleWrap,
+              {
+                opacity: markerAnim.interpolate({
+                  inputRange: [0, 0.5, 1],
+                  outputRange: [0, 0, 1],
+                }),
+              },
+            ]}
+          >
             <View style={[styles.selectionCircle, isSelected && styles.selectionCircleSelected]}>
               {isSelected && <Icon name='check' size={12} color={Colors.background} />}
             </View>
-          </Animated.View>
-        )}
+          </RNAnimated.View>
+        </RNAnimated.View>
 
         <Animated.View style={styles.messageWrap} exiting={FadeOut}>
           <View style={[styles.messageBubble, isMe ? styles.myMessage : styles.theirMessage]}>
@@ -552,7 +582,13 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
   },
   selectionMarker: {
-    width: 32,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    paddingLeft: 6,
+  },
+  selectionMarkerCircleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   selectionCircle: {
     width: 22,

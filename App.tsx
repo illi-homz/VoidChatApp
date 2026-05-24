@@ -29,7 +29,12 @@ function App(): React.JSX.Element {
       <StoreProvider>
         <ToastProvider>
           <NotificationProvider>
-            <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+            <StatusBar
+              barStyle="light-content"
+              backgroundColor="transparent"
+              translucent
+              hidden={splashVisible}
+            />
             <AppNavigator onReady={handleNavigationReady} />
             {splashVisible && (
               <SplashScreen

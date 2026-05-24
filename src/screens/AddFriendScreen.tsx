@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -156,33 +156,32 @@ export function AddFriendScreen({ navigation }: AddFriendScreenProps): React.JSX
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity
-        style={styles.scanButton}
-        onPress={() => setShowScanner(true)}
-        disabled={isLoading}
-        activeOpacity={0.7}
-      >
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Icon name='camera' size={18} color='#000' />
-          <Text style={styles.scanButtonText}> Сканировать QR</Text>
-        </View>
-      </TouchableOpacity>
+      <View style={styles.buttonsRow}>
+        <TouchableOpacity
+          style={styles.scanButton}
+          onPress={() => setShowScanner(true)}
+          disabled={isLoading}
+          activeOpacity={0.7}
+        >
+          <Icon name='qr-code' size={22} color={Colors.primary} />
+        </TouchableOpacity>
 
-      <TouchableOpacity
-        style={[styles.button, isLoading && styles.buttonDisabled]}
-        onPress={sendFriendRequest}
-        disabled={isLoading}
-        activeOpacity={0.7}
-      >
-        {isLoading ? (
-          <ActivityIndicator color='#000' />
-        ) : (
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-            <Icon name='send' size={16} color='#000' />
-            <Text style={styles.buttonText}> Отправить приглашение</Text>
-          </View>
-        )}
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.sendButton, isLoading && styles.buttonDisabled]}
+          onPress={sendFriendRequest}
+          disabled={isLoading}
+          activeOpacity={0.7}
+        >
+          {isLoading ? (
+            <ActivityIndicator color='#000' />
+          ) : (
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name='send' size={16} color='#000' />
+              <Text style={styles.buttonText}> Отправить приглашение</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      </View>
 
       <Text style={styles.note}>Пользователь должен быть онлайн для добавления</Text>
 
@@ -238,7 +237,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  button: {
+  buttonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  scanButton: {
+    width: 50,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sendButton: {
+    flex: 1,
     backgroundColor: Colors.primary,
     borderRadius: 12,
     paddingVertical: 14,
@@ -249,20 +261,6 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#000',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  scanButton: {
-    backgroundColor: 'transparent',
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: Colors.primary,
-  },
-  scanButtonText: {
-    color: Colors.primary,
     fontSize: 16,
     fontWeight: '600',
   },

@@ -61,12 +61,12 @@ export function AppNavigator({ onReady }: AppNavigatorProps): React.JSX.Element 
           <Stack.Screen
             name='AddFriend'
             component={AddFriendScreen}
-            options={{ title: 'Добавить контакт' }}
+            options={{ headerTitle: '' }}
           />
           <Stack.Screen
             name='AddServer'
             component={AddServerScreen}
-            options={{ title: 'Новый сервер' }}
+            options={{ headerTitle: '' }}
           />
         </Stack.Navigator>
       </NavigationContainer>

@@ -135,7 +135,7 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
 
   return (
     <KeyboardAvoidingView
-      style={[styles.container, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 }]}
+      style={[styles.container, { paddingTop: 20, paddingBottom: insets.bottom + 20 }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <Text style={styles.title}>Новый сервер</Text>
@@ -161,12 +161,35 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
           <TextInput
             style={styles.input}
             value={ip}
-            onChangeText={text => setIp(formatServerAddress(text))}
+            onChangeText={text =>
+              setIp(prevIp => {
+                const isDeleting = text.length < prevIp.length;
+                let clean = text.replace(/[^0-9.]/g, '');
+                const rawSegments = clean.split('.');
+                // Разбиваем длинные группы цифр на сегменты по 3
+                const processed: string[] = [];
+                for (const segment of rawSegments) {
+                  for (let i = 0; i < segment.length; i += 3) {
+                    processed.push(segment.slice(i, i + 3));
+                  }
+                }
+                const final = processed.slice(0, 4);
+                let result = final.join('.');
+                // Авто-добавление точки после 3 цифр
+                if (!isDeleting && final.length < 4) {
+                  const last = final[final.length - 1];
+                  if (last && last.length === 3) {
+                    result += '.';
+                  }
+                }
+                return result;
+              })
+            }
             placeholder='IP или домен (например: void4217.com)'
             placeholderTextColor={Colors.textMuted}
             autoCapitalize='none'
             autoCorrect={false}
-            keyboardType='default'
+            keyboardType='number-pad'
             editable={!isConnecting}
           />
           {ip.length > 0 && !isConnecting && <ClearButton onPress={() => setIp('')} />}

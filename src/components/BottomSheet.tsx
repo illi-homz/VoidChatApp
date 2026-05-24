@@ -13,12 +13,14 @@ import {
 } from 'react-native';
 import { Colors } from '../theme/colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Icon, IconName } from './Icon';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const SWIPE_THRESHOLD = 80;
 
 export interface BottomSheetAction {
   text: string;
+  icon?: IconName;
   style?: 'cancel' | 'destructive' | 'default';
   onPress?: () => void;
 }
@@ -44,16 +46,15 @@ export function BottomSheet({
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gesture) => {
-        return gesture.dy > 5;
-      },
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
       onPanResponderMove: (_, gesture) => {
         translateY.setValue(Math.max(0, gesture.dy));
       },
       onPanResponderRelease: (_, gesture) => {
         if (gesture.dy > SWIPE_THRESHOLD || gesture.vy > 0.5) {
           closeWithAnimation();
+          onClose();
         } else {
           Animated.spring(translateY, {
             toValue: 0,
@@ -117,6 +118,11 @@ export function BottomSheet({
           accessibilityRole='button'
           accessibilityLabel={action.text}
         >
+          <View style={styles.actionIcon}>
+            {action.icon && (
+              <Icon name={action.icon} size={20} color={textColor} />
+            )}
+          </View>
           <Text style={[styles.actionText, { color: textColor }]}>{action.text}</Text>
         </TouchableOpacity>
         {!isLast && <View style={styles.actionSeparator} />}
@@ -139,12 +145,15 @@ export function BottomSheet({
 
         <Animated.View
           style={[styles.sheet, { transform: [{ translateY }], paddingBottom: bottom + 20 }]}
-          {...panResponder.panHandlers}
         >
-          <View style={styles.dragIndicator} />
-          {title && <Text style={styles.title}>{title}</Text>}
-          {message && <Text style={styles.message}>{message}</Text>}
+          {/* Верхняя часть: ручка + заголовок — зона для драга */}
+          <View {...panResponder.panHandlers} style={styles.dragZone}>
+            <View style={styles.dragIndicator} />
+            {title && <Text style={styles.title}>{title}</Text>}
+            {message && <Text style={styles.message}>{message}</Text>}
+          </View>
 
+          {/* Экшены — без PanResponder, чтобы TouchableOpacity работали */}
           {nonCancelActions.length > 0 && (
             <View style={styles.actionsContainer}>
               {nonCancelActions.map((action, index, arr) => renderActionButton(action, index, arr))}
@@ -165,7 +174,12 @@ export function BottomSheet({
                   accessibilityRole='button'
                   accessibilityLabel={action.text}
                 >
-                  <Text style={styles.cancelText}>{action.text}</Text>
+                  <View style={styles.cancelButtonRow}>
+                    {action.icon && (
+                      <Icon name={action.icon} size={18} color={Colors.primary} />
+                    )}
+                    <Text style={styles.cancelText}>{action.text}</Text>
+                  </View>
                 </TouchableOpacity>
               ))}
             </View>
@@ -189,10 +203,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
-    paddingTop: 20,
   },
   title: {
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: 'bold',
     color: Colors.textPrimary,
     paddingHorizontal: 20,
@@ -210,8 +223,14 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     height: 50,
-    justifyContent: 'center',
-    paddingLeft: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 16,
+  },
+  actionIcon: {
+    width: 28,
+    alignItems: 'center',
+    marginRight: 10,
   },
   actionText: {
     fontSize: 17,
@@ -220,7 +239,7 @@ const styles = StyleSheet.create({
   actionSeparator: {
     height: 1,
     backgroundColor: Colors.borderLight,
-    marginLeft: 20,
+    marginLeft: 54,
   },
   cancelContainer: {
     marginTop: 8,
@@ -236,10 +255,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  cancelButtonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   cancelText: {
     fontSize: 17,
     fontWeight: '500',
     color: Colors.primary,
+  },
+  dragZone: {
+    paddingTop: 20,
   },
   dragIndicator: {
     width: 36,

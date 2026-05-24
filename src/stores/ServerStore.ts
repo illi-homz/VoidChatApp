@@ -95,6 +95,14 @@ export class ServerStore {
     }
   }
 
+  async update(serverId: string, updates: Partial<Pick<ServerConfig, 'name' | 'url'>>): Promise<void> {
+    const server = this.servers.find(s => s.id === serverId);
+    if (server) {
+      Object.assign(server, updates);
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(this.servers));
+    }
+  }
+
   async incrementServerUnread(serverId: string): Promise<void> {
     this.serverUnread = {
       ...this.serverUnread,

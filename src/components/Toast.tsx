@@ -1,9 +1,11 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { FadeInUp, FadeOutUp } from 'react-native-reanimated';
 import { Colors } from '../theme/colors';
+import { Icon, IconName } from './Icon';
 
-type ToastType = 'success' | 'error' | 'info';
+type ToastType = 'success' | 'error' | 'warning' | 'info';
 
 interface ToastData {
   message: string;
@@ -22,41 +24,46 @@ const TOAST_DURATION = 2500;
 const TOAST_ANIMATION_IN = 300;
 const TOAST_ANIMATION_OUT = 250;
 
+/** Тёмный непрозрачный фон с лёгким оттенком статуса */
 const BG_COLORS: Record<ToastType, string> = {
+  success: 'rgba(0, 50, 30, 0.88)',
+  error: 'rgba(80, 15, 15, 0.88)',
+  warning: 'rgba(80, 55, 0, 0.88)',
+  info: 'rgba(45, 40, 30, 0.88)',
+};
+
+/** Цвет границы — соответствует статусу */
+const BORDER_COLORS: Record<ToastType, string> = {
+  success: 'rgba(0, 204, 136, 0.35)',
+  error: 'rgba(255, 68, 68, 0.35)',
+  warning: 'rgba(255, 184, 0, 0.35)',
+  info: 'rgba(255, 216, 144, 0.3)',
+};
+
+/** Цвет левой акцентной полосы и иконки — насыщенный и читаемый */
+const ACCENT_COLORS: Record<ToastType, string> = {
   success: Colors.toastSuccess,
   error: Colors.toastError,
+  warning: Colors.toastWarning,
   info: Colors.toastInfo,
 };
 
-const TEXT_COLORS: Record<ToastType, string> = {
-  success: '#000',
-  error: '#FFFFFF',
-  info: '#FFFFFF',
+/** Иконка для каждого статуса */
+const ICON_NAMES: Record<ToastType, IconName> = {
+  success: 'check',
+  error: 'circle-x',
+  warning: 'triangle-alert',
+  info: 'message-circle',
 };
 
 export function ToastProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
   const [toast, setToast] = useState<ToastData | null>(null);
-  const translateY = useRef(new Animated.Value(-120)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const insets = useSafeAreaInsets();
 
   const hideToast = useCallback(() => {
-    Animated.parallel([
-      Animated.timing(translateY, {
-        toValue: -120,
-        duration: TOAST_ANIMATION_OUT,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacity, {
-        toValue: 0,
-        duration: TOAST_ANIMATION_OUT,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      setToast(null);
-    });
-  }, [translateY, opacity]);
+    setToast(null);
+  }, []);
 
   const show = useCallback(
     (message: string, type: ToastType = 'info') => {
@@ -64,29 +71,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }): Reac
         clearTimeout(timerRef.current);
       }
 
-      translateY.setValue(-120);
-      opacity.setValue(0);
-
       setToast({ message, type });
-
-      Animated.parallel([
-        Animated.timing(translateY, {
-          toValue: 60,
-          duration: TOAST_ANIMATION_IN,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 1,
-          duration: TOAST_ANIMATION_IN,
-          useNativeDriver: true,
-        }),
-      ]).start();
 
       timerRef.current = setTimeout(() => {
         hideToast();
       }, TOAST_DURATION);
     },
-    [translateY, opacity, hideToast],
+    [hideToast],
   );
 
   useEffect(() => {
@@ -101,22 +92,25 @@ export function ToastProvider({ children }: { children: React.ReactNode }): Reac
     <ToastContext.Provider value={{ show }}>
       {children}
       {toast !== null && (
-        <View style={[styles.toastOverlay, { paddingTop: insets.top }]} pointerEvents='box-none'>
+        <View style={[styles.toastOverlay, { paddingTop: insets.top + 16 }]} pointerEvents='box-none'>
           <Animated.View
             style={[
               styles.toast,
-              { backgroundColor: BG_COLORS[toast.type] },
               {
-                transform: [{ translateY }],
-                opacity,
+                backgroundColor: BG_COLORS[toast.type],
+                borderColor: BORDER_COLORS[toast.type],
+                borderLeftColor: ACCENT_COLORS[toast.type],
               },
             ]}
+            entering={FadeInUp.duration(TOAST_ANIMATION_IN).springify()}
+            exiting={FadeOutUp.duration(TOAST_ANIMATION_OUT)}
             accessibilityRole='alert'
             accessibilityLabel={toast.message}
           >
-            <Text style={[styles.toastText, { color: TEXT_COLORS[toast.type] }]}>
-              {toast.message}
-            </Text>
+            <View style={styles.toastIcon}>
+              <Icon name={ICON_NAMES[toast.type]} size={16} color={ACCENT_COLORS[toast.type]} />
+            </View>
+            <Text style={styles.toastText}>{toast.message}</Text>
           </Animated.View>
         </View>
       )}
@@ -136,24 +130,37 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 9999,
-    alignItems: 'center',
   },
   toast: {
-    borderRadius: 12,
-    paddingHorizontal: 24,
-    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderLeftWidth: 3,
+    paddingRight: 14,
+    paddingLeft: 10,
+    paddingVertical: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
     elevation: 8,
-    maxWidth: '85%',
+  },
+  toastIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
   },
   toastText: {
+    flex: 1,
     fontSize: 14,
-    textAlign: 'center',
     fontWeight: '500',
+    color: Colors.textPrimary,
+    lineHeight: 18,
   },
 });

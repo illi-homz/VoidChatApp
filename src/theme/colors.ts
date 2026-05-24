@@ -34,10 +34,11 @@ export const Colors = {
   statusDotOffline: '#FF4444', // Красный дот офлайн
 
   // Системные
-  overlay: 'rgba(0,0,0,0.7)', // Затемнение модалок
+  overlay: 'rgba(0,0,0,0.55)', // Затемнение модалок
   toastSuccess: '#00CC88', // Успех тост
   toastError: '#FF4444', // Ошибка тост
-  toastInfo: '#555555', // Инфо тост
+  toastWarning: '#FFB800', // Предупреждение тост
+  toastInfo: '#FFD890', // Инфо тост
 
   // Технические константы
   borderStandardWidth: 1,
