@@ -194,8 +194,8 @@ class WebRTCService {
     }
     const videoConstraints = withVideo
       ? {
-          width: { min: 480, ideal: 1280, max: 1920 },
-          height: { min: 360, ideal: 720, max: 1080 },
+          width: { min: 480, ideal: 1280, max: 1280 },
+          height: { min: 360, ideal: 720, max: 720 },
           frameRate: { min: 20, ideal: 30, max: 30 },
           facingMode: 'user' as const,
         }
@@ -260,8 +260,8 @@ class WebRTCService {
       const newStream = await mediaDevices.getUserMedia({
         audio: false,
         video: {
-          width: { min: 480, ideal: 1280, max: 1920 },
-          height: { min: 360, ideal: 720, max: 1080 },
+          width: { min: 480, ideal: 1280, max: 1280 },
+          height: { min: 360, ideal: 720, max: 720 },
           frameRate: { min: 20, ideal: 30, max: 30 },
           facingMode: this._currentFacingMode as 'user' | 'environment' | undefined,
         },
@@ -384,8 +384,8 @@ class WebRTCService {
       const newStream = await mediaDevices.getUserMedia({
         audio: false,
         video: {
-          width: { min: 480, ideal: 1280, max: 1920 },
-          height: { min: 360, ideal: 720, max: 1080 },
+          width: { min: 480, ideal: 1280, max: 1280 },
+          height: { min: 360, ideal: 720, max: 720 },
           frameRate: { min: 20, ideal: 30, max: 30 },
           facingMode: newFacingMode,
         },
