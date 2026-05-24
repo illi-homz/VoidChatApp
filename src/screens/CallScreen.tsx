@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useRef, useMemo, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Animated, StatusBar } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { observer } from 'mobx-react-lite';
@@ -15,6 +15,43 @@ import type { RootStackParamList } from '../navigation/types';
 import { appStore } from '../stores/AppStore';
 import { RTCView } from 'react-native-webrtc';
 import { VideoPiP } from '../components/VideoPiP';
+
+/** Кнопка с анимацией сжатия при нажатии (scale 0.9) */
+function ScaleBtn({
+  style,
+  activeStyle,
+  onPress,
+  children,
+}: {
+  style?: any;
+  activeStyle?: any;
+  onPress?: () => void;
+  children: React.ReactNode;
+}) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const animateIn = useCallback(
+    () => Animated.spring(scale, { toValue: 0.9, useNativeDriver: true, friction: 10 }).start(),
+    [scale],
+  );
+  const animateOut = useCallback(
+    () => Animated.spring(scale, { toValue: 1, useNativeDriver: true, friction: 8 }).start(),
+    [scale],
+  );
+
+  return (
+    <Animated.View style={[style, { transform: [{ scale }] }]}>
+      <TouchableOpacity
+        onPress={onPress}
+        onPressIn={animateIn}
+        onPressOut={animateOut}
+        activeOpacity={0.7}
+        style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
+      >
+        {children}
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
 
 const CallScreenComponent: React.FC = observer(() => {
   console.log('[CallScreen] RENDER');
@@ -427,53 +464,50 @@ const CallScreenComponent: React.FC = observer(() => {
       )}
 
       <View style={styles.controlsSection}>
-        <TouchableOpacity
-          style={[styles.controlButton, isMuted && styles.controlButtonActive]}
-          onPress={handleToggleMute}
-          activeOpacity={0.7}
-        >
+        <ScaleBtn style={[styles.controlButton, isMuted && styles.controlButtonActive]} onPress={handleToggleMute}>
           <Icon
             name={isMuted ? 'mic-off' : 'mic'}
             size={24}
             color={isMuted ? Colors.primary : Colors.textPrimary}
           />
-        </TouchableOpacity>
+        </ScaleBtn>
         {callType === 'video' && (
-          <TouchableOpacity
+          <ScaleBtn
             style={[styles.controlButton, !callStore.isCameraOn && styles.controlButtonActive]}
             onPress={() => {
               callStore.toggleCamera();
               webrtcService.setCameraEnabled(callStore.isCameraOn);
             }}
-            activeOpacity={0.7}
           >
             <Icon
               name={callStore.isCameraOn ? 'camera' : 'camera-off'}
               size={24}
               color={callStore.isCameraOn ? Colors.textPrimary : Colors.primary}
             />
-          </TouchableOpacity>
+          </ScaleBtn>
         )}
         {callType === 'video' && callStore.isCameraOn && (
-          <TouchableOpacity
-            style={styles.controlButton}
-            onPress={() => webrtcService.switchCamera()}
-            activeOpacity={0.7}
-          >
+          <ScaleBtn style={styles.controlButton} onPress={() => webrtcService.switchCamera()}>
             <Icon name='refresh-cw' size={24} color={Colors.textPrimary} />
-          </TouchableOpacity>
+          </ScaleBtn>
         )}
-        <TouchableOpacity
-          style={[styles.controlButton, isSpeakerOn && styles.controlButtonActive]}
-          onPress={handleToggleSpeaker}
-          activeOpacity={0.7}
-        >
+        <ScaleBtn style={[styles.controlButton, isSpeakerOn && styles.controlButtonActive]} onPress={handleToggleSpeaker}>
           <Icon
             name={isSpeakerOn ? 'volume-2' : 'volume-1'}
             size={24}
             color={isSpeakerOn ? Colors.primary : Colors.textPrimary}
           />
-        </TouchableOpacity>
+        </ScaleBtn>
+      </View>
+      <View
+        style={[
+          styles.endCallSection,
+          { paddingBottom: Math.max(insets.bottom + 24, MIN_BOTTOM_INSET) },
+        ]}
+      >
+        <ScaleBtn style={styles.endCallButton} onPress={handleEndCall}>
+          <CallIcon size={28} color={Colors.textPrimary} />
+        </ScaleBtn>
       </View>
 
       <View
@@ -502,7 +536,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   inactiveOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
   topSection: { alignItems: 'center' },
-  contactName: { color: Colors.text, fontSize: 24, fontWeight: '700' },
+  contactName: { color: Colors.primary, fontSize: 28, fontWeight: '700' },
   statusText: { color: Colors.primary, fontSize: 16, marginTop: 8 },
   statusTextFailed: { color: Colors.error },
   statusTextEnded: { color: Colors.textSecondary },
@@ -540,7 +574,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
   },
   avatarText: { color: Colors.primary, fontSize: 48, fontWeight: '700' },
-  controlsSection: { flexDirection: 'row', justifyContent: 'center', gap: 40, paddingBottom: 40 },
+  controlsSection: { flexDirection: 'row', justifyContent: 'center', gap: 12, paddingBottom: 40 },
   controlButton: {
     width: 64,
     height: 64,
@@ -549,7 +583,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.surface,
+    backgroundColor: 'rgba(5, 18, 13, 0.55)',
   },
   controlButtonActive: { borderColor: Colors.primary, backgroundColor: Colors.surface },
   controlLabel: { fontSize: 12, color: Colors.textSecondary, marginTop: 4 },
