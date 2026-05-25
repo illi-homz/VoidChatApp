@@ -11,7 +11,6 @@ export default [
 			'metro.config.js',
 			'jest.config.js',
 			'index.js',
-			'App.tsx',
 			'__tests__/**',
 			'node_modules/**',
 			'android/**',

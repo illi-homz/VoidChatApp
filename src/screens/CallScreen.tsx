@@ -70,6 +70,9 @@ const CallScreenComponent: React.FC = observer(() => {
   const MIN_BOTTOM_INSET = 60;
 
   const endedRef = useRef(false);
+  const goBackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const callTypeRef = useRef(callType);
+  callTypeRef.current = callType;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
 
@@ -98,6 +101,17 @@ const CallScreenComponent: React.FC = observer(() => {
       };
     }
   }, [status, pulseAnim, glowAnim]);
+
+  /** Общий helper для goBack с таймаутом — гарантирует корректный cleanup */
+  const scheduleGoBack = (delayMs: number = 2000) => {
+    if (goBackTimerRef.current) {
+      clearTimeout(goBackTimerRef.current);
+    }
+    goBackTimerRef.current = setTimeout(() => {
+      goBackTimerRef.current = null;
+      navigation.goBack();
+    }, delayMs);
+  };
 
   // ---- Инициализация при монтировании ----
   useEffect(() => {
@@ -129,7 +143,7 @@ const CallScreenComponent: React.FC = observer(() => {
         callStore.setFailed(error);
         webrtcService.stopCall();
         toast(error || 'Ошибка соединения', 'error');
-        setTimeout(() => navigation.goBack(), 2000);
+        scheduleGoBack();
       }
     };
     webrtcService.onConnectionState = state => {
@@ -138,7 +152,7 @@ const CallScreenComponent: React.FC = observer(() => {
         callStore.setFailed('Соединение прервано');
         webrtcService.stopCall();
         toast('Соединение потеряно', 'error');
-        setTimeout(() => navigation.goBack(), 2000);
+        scheduleGoBack();
       } else if (state === 'disconnected') {
         toast('Соединение нестабильно...', 'warning');
       }
@@ -166,6 +180,10 @@ const CallScreenComponent: React.FC = observer(() => {
       webrtcService.onRenegotiationNeeded = null;
       webrtcService.onIceCandidate = null;
       webrtcService.onRemoteStream = null;
+      if (goBackTimerRef.current) {
+        clearTimeout(goBackTimerRef.current);
+        goBackTimerRef.current = null;
+      }
     };
   }, []); // deps: []
 
@@ -227,7 +245,7 @@ const CallScreenComponent: React.FC = observer(() => {
         endedRef.current = true;
         callStore.setFailed('Абонент отклонил вызов');
         toast('Вызов отклонён', 'error');
-        setTimeout(() => navigation.goBack(), 2000);
+        scheduleGoBack();
       }
     });
 
@@ -241,7 +259,7 @@ const CallScreenComponent: React.FC = observer(() => {
         const mins = Math.floor(data.duration / 60);
         const secs = data.duration % 60;
         toast(`Звонок завершён (${mins}:${secs.toString().padStart(2, '0')})`, 'info');
-        setTimeout(() => navigation.goBack(), 2000);
+        scheduleGoBack();
       }
     });
 
@@ -256,10 +274,10 @@ const CallScreenComponent: React.FC = observer(() => {
           duration: callStore.duration,
           timestamp: Date.now(),
           status: 'missed',
-          callType: callStore.callType ?? callType ?? 'audio',
+          callType: callStore.callType ?? callTypeRef.current ?? 'audio',
         });
         toast('Нет ответа', 'error');
-        setTimeout(() => navigation.goBack(), 2000);
+        scheduleGoBack();
       }
     });
 
@@ -301,17 +319,17 @@ const CallScreenComponent: React.FC = observer(() => {
           duration: callStore.duration,
           timestamp: Date.now(),
           status: 'missed',
-          callType: callStore.callType ?? callType ?? 'audio',
+          callType: callStore.callType ?? callTypeRef.current ?? 'audio',
         });
         webrtcService.stopCall();
         toast('Соединение прервано', 'error');
-        setTimeout(() => navigation.goBack(), 2000);
+        scheduleGoBack();
       }
     };
     socketService.onDisconnected(handleDisconnected);
 
     return () => {
-      socketService.onDisconnected(null);
+      socketService.onDisconnected(() => {});
       unsubCallIncoming();
       unsubOfferSent();
       unsubAccepted();
@@ -324,6 +342,10 @@ const CallScreenComponent: React.FC = observer(() => {
       webrtcService.onRenegotiationNeeded = null;
       webrtcService.onIceCandidate = null;
       webrtcService.onRemoteStream = null;
+      if (goBackTimerRef.current) {
+        clearTimeout(goBackTimerRef.current);
+        goBackTimerRef.current = null;
+      }
     };
   }, []); // deps: []
 
@@ -385,7 +407,7 @@ const CallScreenComponent: React.FC = observer(() => {
     const secs = callStore.duration % 60;
     toast(`Звонок завершён (${mins}:${secs.toString().padStart(2, '0')})`, 'info');
 
-    setTimeout(() => navigation.goBack(), 2000);
+    scheduleGoBack();
   };
 
   const handleToggleMute = () => callStore.toggleMute();
@@ -561,7 +583,7 @@ export const CallScreen = CallScreenComponent;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
-  inactiveOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
+  inactiveOverlay: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.5)' },
   topSection: { alignItems: 'center' },
   contactName: { color: Colors.primary, fontSize: 28, fontWeight: '700' },
   statusText: { color: Colors.primary, fontSize: 16, marginTop: 8 },

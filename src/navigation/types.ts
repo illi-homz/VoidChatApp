@@ -11,6 +11,7 @@ export type RootStackParamList = {
     | {
         inviterUserId?: string;
         autoFriend?: boolean;
+        name?: string;
         initialName?: string;
         initialHost?: string;
         initialPort?: string;

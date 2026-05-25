@@ -128,6 +128,11 @@ export const HomeScreen = observer(function HomeScreen({
   }, [navigation, serverStore.activeServer?.name]);
 
   function setupSocketListeners(): void {
+    if (socketService.connectionStatus !== 'connected') {
+      console.warn('[HomeScreen] Socket not connected, skipping listener setup');
+      return;
+    }
+
     socketService.onKicked(handleKicked);
 
     socketService.onPresence(({ userId, online }) => {
@@ -340,17 +345,20 @@ export const HomeScreen = observer(function HomeScreen({
     // через независимые подписки (array-based callbacks в socket.ts)
   }
 
-  function handleAcceptFriend(request: { fromUserId: string; fromPublicKey: string | null }): void {
-    socketService.acceptFriend(request.fromUserId);
+  const handleAcceptFriend = useCallback(
+    (request: { fromUserId: string; fromPublicKey: string | null }): void => {
+      socketService.acceptFriend(request.fromUserId);
 
-    const newContact: Contact = {
-      userId: request.fromUserId,
-      publicKey: request.fromPublicKey ?? '',
-      createdAt: Date.now(),
-    };
+      const newContact: Contact = {
+        userId: request.fromUserId,
+        publicKey: request.fromPublicKey ?? '',
+        createdAt: Date.now(),
+      };
 
-    store.addContact(newContact);
-  }
+      store.addContact(newContact);
+    },
+    [],
+  );
 
   function showContactActions(contact: Contact): void {
     showSheet({

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { observer } from 'mobx-react-lite';
 import {
   View,
   Text,
@@ -30,7 +31,7 @@ import { CallButton } from '../components/CallButton';
 import { CallConfirmAlert } from '../components/CallConfirmAlert';
 import { StatusIcon } from '../components/StatusIcon';
 import { useToast } from '../components/Toast';
-import Animated, { FadeInDown, FadeInUp, FadeOut } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { selectionStore } from '../stores/SelectionStore';
 
@@ -45,19 +46,16 @@ interface MessageExt extends Message {
   status?: MessageStatus;
 }
 
-export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.Element {
+export const ChatScreen = observer(function ChatScreen({
+  navigation,
+  route,
+}: ChatScreenProps): React.JSX.Element {
   const { contactId, contactName } = route.params;
   const insets = useSafeAreaInsets();
   const store = useStore();
   const serverStore = useServerStore();
   const callStore = useCallStore();
   const { toast } = useToast();
-  const [messages, setMessages] = useState<MessageExt[]>(() =>
-    store.getMessages(contactId).map(m => ({
-      ...m,
-      status: m.from === 'me' ? (m.read ? ('read' as const) : ('sent' as const)) : undefined,
-    })),
-  );
   const [inputText, setInputText] = useState('');
   const [isSecretReady, setIsSecretReady] = useState(false);
   const sharedSecretRef = useRef<string | null>(null);
@@ -70,11 +68,33 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const selectedIdsRef = useRef(selectedIds);
   selectedIdsRef.current = selectedIds;
-  const messagesRef = useRef(messages);
-  messagesRef.current = messages;
   const contactIdRef = useRef(contactId);
   contactIdRef.current = contactId;
   const markerAnim = useRef(new RNAnimated.Value(0)).current;
+
+  // Refs + state for local-only UI concerns (not persisted in store)
+  const statusOverridesRef = useRef<Map<string, 'pending' | 'failed'>>(new Map());
+  // Used only via setStatusTick to trigger re-render after status override changes
+  const [, setStatusTick] = useState(0);
+  const decryptedCacheRef = useRef<Map<string, string>>(new Map());
+  // Used only via setDecryptVersion to trigger re-render after decryption cache fills
+  const [, setDecryptVersion] = useState(0);
+  const messagesRef = useRef<MessageExt[]>([]);
+
+  // Build display messages from MobX store + local overrides
+  const _storeMessages = store.getMessages(contactId);
+  const messages: MessageExt[] = _storeMessages.map(m => {
+    const ct =
+      m.from !== 'me' && decryptedCacheRef.current.has(m.id)
+        ? decryptedCacheRef.current.get(m.id)!
+        : m.ciphertext;
+    const status: MessageStatus | undefined =
+      m.from === 'me'
+        ? statusOverridesRef.current.get(m.nonce) || (m.read ? 'read' : 'sent')
+        : undefined;
+    return { ...m, ciphertext: ct, status };
+  });
+  messagesRef.current = messages;
 
   useEffect(() => {
     RNAnimated.timing(markerAnim, {
@@ -83,11 +103,6 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
       useNativeDriver: false,
     }).start();
   }, [selectionMode, markerAnim]);
-
-  // Запоминаем ID сообщений, которые уже были в чате при открытии
-  if (initialIdsRef.current === null && messages.length > 0) {
-    initialIdsRef.current = new Set(messages.map(m => m.id));
-  }
 
   useEffect(() => {
     navigation.setOptions({
@@ -112,6 +127,12 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
     // Отмечаем активный чат
     store.activeChatId = contactId;
 
+    // Запоминаем ID сообщений, которые уже были в чате при открытии
+    const existing = store.getMessages(contactId);
+    if (existing.length > 0) {
+      initialIdsRef.current = new Set(existing.map(m => m.id));
+    }
+
     // Подписки socket
     const unsubMessage = socketService.onMessage(handleIncomingMessage);
     socketService.onMessageSent(handleMessageSent);
@@ -119,8 +140,10 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
     socketService.onMessagesRead(handleMessagesRead);
 
     // Сбрасываем счётчик непрочитанных при открытии чата
-    store.markAsRead(contactId);
-    serverStore.recalculateServerUnread(store.currentServerId!);
+    store.markAsRead(contactId).catch(e => console.warn('Failed to mark as read:', e));
+    serverStore
+      .recalculateServerUnread(store.currentServerId!)
+      .catch(e => console.warn('Failed to recalculate unread:', e));
 
     // Уведомляем собеседника, что сообщения прочитаны
     socketService.sendMessageRead(contactId);
@@ -137,18 +160,22 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
   // Расшифровываем сообщения, загруженные из store (сохранённые HomeScreen в зашифрованном виде)
   useEffect(() => {
     if (!isSecretReady) return;
-    setMessages(prev =>
-      prev.map(m => {
-        if (m.from === 'me') return m; // свои сообщения уже в plaintext
+    let changed = false;
+    store.getMessages(contactId).forEach(m => {
+      if (m.from !== 'me' && !decryptedCacheRef.current.has(m.id)) {
         try {
           const decrypted = decryptMessage(m.ciphertext, m.nonce, sharedSecretRef.current!);
-          return { ...m, ciphertext: decrypted };
+          decryptedCacheRef.current.set(m.id, decrypted);
+          changed = true;
         } catch {
-          return m; // уже расшифровано в предыдущей сессии
+          // уже расшифровано в предыдущей сессии
         }
-      }),
-    );
-  }, [isSecretReady]);
+      }
+    });
+    if (changed) {
+      setDecryptVersion(v => v + 1);
+    }
+  }, [isSecretReady, contactId]);
 
   useEffect(() => {
     if (Platform.OS !== 'android') return;
@@ -192,7 +219,7 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
         sharedSecretRef.current,
       );
 
-      const message: MessageExt = {
+      const message: Message = {
         id: uuidv4(),
         from: serverMessage.from,
         ciphertext: decrypted,
@@ -201,10 +228,11 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
         read: false,
       };
 
-      setMessages(prev => [...prev, message]);
-      store.addMessage(contactId, message);
-      store.markAsRead(contactId);
-      serverStore.recalculateServerUnread(store.currentServerId!);
+      store.addMessage(contactId, message).catch(e => console.warn('Failed to save message:', e));
+      store.markAsRead(contactId).catch(e => console.warn('Failed to mark as read:', e));
+      serverStore
+        .recalculateServerUnread(store.currentServerId!)
+        .catch(e => console.warn('Failed to recalculate unread:', e));
       socketService.sendMessageRead(contactId);
     } catch {
       console.error('Decryption error');
@@ -212,21 +240,13 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
   }
 
   function handleMessageSent(data: { nonce: string }): void {
-    setMessages(prev =>
-      prev.map(m =>
-        m.from === 'me' && m.nonce === data.nonce ? { ...m, status: 'sent' as const } : m,
-      ),
-    );
+    statusOverridesRef.current.delete(data.nonce);
+    setStatusTick(t => t + 1);
   }
 
   function handleMessagesRead(data: { readBy: string }): void {
     // Собеседник прочитал наши сообщения — обновляем статус на 'read'
     if (data.readBy !== contactId) return;
-    setMessages(prev =>
-      prev.map(m =>
-        m.from === 'me' && m.status === 'sent' ? { ...m, status: 'read' as const } : m,
-      ),
-    );
     store
       .markMessagesRead(contactId)
       .catch(e => console.error('Failed to persist read status:', e));
@@ -236,11 +256,8 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
     if (data.to !== contactId) return;
     if (!data.nonce) return;
 
-    setMessages(prev =>
-      prev.map(m =>
-        m.from === 'me' && m.nonce === data.nonce ? { ...m, status: 'failed' as const } : m,
-      ),
-    );
+    statusOverridesRef.current.set(data.nonce, 'failed');
+    setStatusTick(t => t + 1);
   }
 
   function handleMessageLongPress(item: MessageExt): void {
@@ -303,7 +320,6 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
     const ids = [...selectedIdsRef.current];
     try {
       await store.deleteMessages(contactId, ids);
-      setMessages(prev => prev.filter(m => !ids.includes(m.id)));
       toast('Сообщения удалены', 'success');
     } catch {
       toast('Ошибка при удалении сообщений', 'error');
@@ -318,18 +334,18 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
 
     socketService.sendMessage(contactId, payload);
 
-    const message: MessageExt = {
+    const message: Message = {
       id: uuidv4(),
       from: 'me',
       ciphertext: inputText.trim(),
       nonce: payload.nonce,
       timestamp: Date.now(),
       read: false,
-      status: 'pending',
     };
 
-    setMessages(prev => [...prev, message]);
-    store.addMessage(contactId, message);
+    statusOverridesRef.current.set(payload.nonce, 'pending');
+    setStatusTick(t => t + 1);
+    store.addMessage(contactId, message).catch(e => console.warn('Failed to save message:', e));
     setInputText('');
   }
 
@@ -401,7 +417,7 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
     return bubble;
   }
 
-  const reversedMessages = useMemo(() => [...messages].reverse(), [messages]);
+  const reversedMessages = [...messages].reverse();
 
   const chatContent = (
     <>
@@ -414,7 +430,6 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
         extraData={selectedIds}
         style={{ flex: 1 }}
         contentContainerStyle={styles.messagesList}
-        showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps={'handled'}
         inverted
       />
@@ -496,7 +511,7 @@ export function ChatScreen({ navigation, route }: ChatScreenProps): React.JSX.El
       )}
     </>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

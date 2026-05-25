@@ -9,6 +9,7 @@ function keys(serverId: string) {
     CONTACTS: `${serverId}_contacts`,
     MESSAGES: `${serverId}_chat_messages`,
     UNREAD: `${serverId}_chat_unread`,
+    CALL_RECORDS: `${serverId}_call_records`,
   } as const;
 }
 
@@ -35,20 +36,34 @@ export class AppStore {
   async load(serverId: string): Promise<void> {
     this.currentServerId = serverId;
     const k = keys(serverId);
-    const [userData, contactsData, messagesData, unreadData] = await Promise.all([
-      AsyncStorage.getItem(k.USER),
-      AsyncStorage.getItem(k.CONTACTS),
-      AsyncStorage.getItem(k.MESSAGES),
-      AsyncStorage.getItem(k.UNREAD),
-    ]);
 
-    let parsedUser: User | null = null;
+    let userData: string | null = null;
+    let contactsData: string | null = null;
+    let messagesData: string | null = null;
+    let unreadData: string | null = null;
+    let callRecordsData: string | null = null;
+
+    try {
+      const results = await Promise.all([
+        AsyncStorage.getItem(k.USER),
+        AsyncStorage.getItem(k.CONTACTS),
+        AsyncStorage.getItem(k.MESSAGES),
+        AsyncStorage.getItem(k.UNREAD),
+        AsyncStorage.getItem(k.CALL_RECORDS),
+      ]);
+      [userData, contactsData, messagesData, unreadData, callRecordsData] = results;
+    } catch (e) {
+      console.warn('[AppStore] Failed to load data from AsyncStorage', e);
+    }
+
+    // Парсим ДО runInAction, чтобы TypeScript отследил тип
+    const parsedUserData: User | null = userData ? (JSON.parse(userData) as User) : null;
+    let parsedUser: User | null = parsedUserData;
 
     runInAction(() => {
-      if (userData) {
-        parsedUser = JSON.parse(userData);
+      if (parsedUserData) {
         // Сначала используем данные как есть (включая privateKey из AsyncStorage для миграции)
-        this.user = { ...parsedUser };
+        this.user = { ...parsedUserData };
       } else {
         this.user = null;
       }
@@ -70,6 +85,11 @@ export class AppStore {
         this.unreadCount = JSON.parse(unreadData);
       } else {
         this.unreadCount = {};
+      }
+      if (callRecordsData) {
+        this.callRecords = JSON.parse(callRecordsData);
+      } else {
+        this.callRecords = [];
       }
       this.presenceMap = {};
       this.activeChatId = null;
@@ -108,11 +128,15 @@ export class AppStore {
 
   async saveUser(user: User): Promise<void> {
     this.user = user;
-    // Сохраняем публичные данные (userId, publicKey) в AsyncStorage
-    await AsyncStorage.setItem(
-      this.KEYS.USER,
-      JSON.stringify({ userId: user.userId, publicKey: user.publicKey }),
-    );
+    try {
+      // Сохраняем публичные данные (userId, publicKey) в AsyncStorage
+      await AsyncStorage.setItem(
+        this.KEYS.USER,
+        JSON.stringify({ userId: user.userId, publicKey: user.publicKey }),
+      );
+    } catch (e) {
+      console.warn('[AppStore] Failed to save user to AsyncStorage', e);
+    }
     // Сохраняем приватный ключ в Keychain (Android Keystore / iOS Keychain)
     if (user.privateKey) {
       await Keychain.setGenericPassword(this.currentServerId || 'default', user.privateKey, {
@@ -134,14 +158,18 @@ export class AppStore {
   async addContact(contact: Contact): Promise<void> {
     const existing = this.contacts.find(c => c.userId === contact.userId);
     if (!existing) {
-      this.contacts.push(contact);
+      this.contacts = [...this.contacts, contact];
       if (!this.messages.has(contact.userId)) {
         this.messages.set(contact.userId, []);
       }
       if (this.unreadCount[contact.userId] === undefined) {
         this.unreadCount = { ...this.unreadCount, [contact.userId]: 0 };
       }
-      await AsyncStorage.setItem(this.KEYS.CONTACTS, JSON.stringify(this.contacts));
+      try {
+        await AsyncStorage.setItem(this.KEYS.CONTACTS, JSON.stringify(this.contacts));
+      } catch (e) {
+        console.warn('[AppStore] Failed to save contacts', e);
+      }
     }
   }
 
@@ -151,18 +179,26 @@ export class AppStore {
     const updated = { ...this.unreadCount };
     delete updated[userId];
     this.unreadCount = updated;
-    await Promise.all([
-      AsyncStorage.setItem(this.KEYS.CONTACTS, JSON.stringify(this.contacts)),
-      AsyncStorage.setItem(this.KEYS.MESSAGES, JSON.stringify(Object.fromEntries(this.messages))),
-      AsyncStorage.setItem(this.KEYS.UNREAD, JSON.stringify(this.unreadCount)),
-    ]);
+    try {
+      await Promise.all([
+        AsyncStorage.setItem(this.KEYS.CONTACTS, JSON.stringify(this.contacts)),
+        AsyncStorage.setItem(this.KEYS.MESSAGES, JSON.stringify(Object.fromEntries(this.messages))),
+        AsyncStorage.setItem(this.KEYS.UNREAD, JSON.stringify(this.unreadCount)),
+      ]);
+    } catch (e) {
+      console.warn('[AppStore] Failed to save after removing contact', e);
+    }
   }
 
   async setNickname(userId: string, nickname: string): Promise<void> {
     const contact = this.contacts.find(c => c.userId === userId);
     if (contact) {
       contact.nickname = nickname || undefined;
-      await AsyncStorage.setItem(this.KEYS.CONTACTS, JSON.stringify(this.contacts));
+      try {
+        await AsyncStorage.setItem(this.KEYS.CONTACTS, JSON.stringify(this.contacts));
+      } catch (e) {
+        console.warn('[AppStore] Failed to save after setting nickname', e);
+      }
     }
   }
 
@@ -170,12 +206,16 @@ export class AppStore {
     const contact = this.contacts.find(c => c.userId === userId);
     if (contact) {
       contact.publicKey = publicKey;
-      await AsyncStorage.setItem(this.KEYS.CONTACTS, JSON.stringify(this.contacts));
+      try {
+        await AsyncStorage.setItem(this.KEYS.CONTACTS, JSON.stringify(this.contacts));
+      } catch (e) {
+        console.warn('[AppStore] Failed to save after updating public key', e);
+      }
     }
   }
 
   updatePresence(userId: string, online: boolean): void {
-    this.presenceMap[userId] = online;
+    this.presenceMap = { ...this.presenceMap, [userId]: online };
   }
 
   getMessages(contactId: string): Message[] {
@@ -185,10 +225,14 @@ export class AppStore {
   async clearMessages(contactId: string): Promise<void> {
     this.messages.set(contactId, []);
     this.unreadCount = { ...this.unreadCount, [contactId]: 0 };
-    await Promise.all([
-      AsyncStorage.setItem(this.KEYS.MESSAGES, JSON.stringify(Object.fromEntries(this.messages))),
-      AsyncStorage.setItem(this.KEYS.UNREAD, JSON.stringify(this.unreadCount)),
-    ]);
+    try {
+      await Promise.all([
+        AsyncStorage.setItem(this.KEYS.MESSAGES, JSON.stringify(Object.fromEntries(this.messages))),
+        AsyncStorage.setItem(this.KEYS.UNREAD, JSON.stringify(this.unreadCount)),
+      ]);
+    } catch (e) {
+      console.warn('[AppStore] Failed to clear messages', e);
+    }
   }
 
   async addMessage(contactId: string, message: Message): Promise<void> {
@@ -198,10 +242,14 @@ export class AppStore {
     } else {
       this.messages.set(contactId, [message]);
     }
-    await AsyncStorage.setItem(
-      this.KEYS.MESSAGES,
-      JSON.stringify(Object.fromEntries(this.messages)),
-    );
+    try {
+      await AsyncStorage.setItem(
+        this.KEYS.MESSAGES,
+        JSON.stringify(Object.fromEntries(this.messages)),
+      );
+    } catch (e) {
+      console.warn('[AppStore] Failed to save messages after add', e);
+    }
   }
 
   async deleteMessages(contactId: string, messageIds: string[]): Promise<void> {
@@ -213,16 +261,24 @@ export class AppStore {
     const filtered = existing.filter(m => !idSet.has(m.id));
     this.messages.set(contactId, filtered);
 
-    await AsyncStorage.setItem(
-      this.KEYS.MESSAGES,
-      JSON.stringify(Object.fromEntries(this.messages)),
-    );
+    try {
+      await AsyncStorage.setItem(
+        this.KEYS.MESSAGES,
+        JSON.stringify(Object.fromEntries(this.messages)),
+      );
+    } catch (e) {
+      console.warn('[AppStore] Failed to save after deleting messages', e);
+    }
   }
 
   async markAsRead(contactId: string): Promise<void> {
     if (this.unreadCount[contactId] !== undefined) {
       this.unreadCount = { ...this.unreadCount, [contactId]: 0 };
-      await AsyncStorage.setItem(this.KEYS.UNREAD, JSON.stringify(this.unreadCount));
+      try {
+        await AsyncStorage.setItem(this.KEYS.UNREAD, JSON.stringify(this.unreadCount));
+      } catch (e) {
+        console.warn('[AppStore] Failed to save unread count after markAsRead', e);
+      }
     }
   }
 
@@ -241,20 +297,34 @@ export class AppStore {
 
     if (changed) {
       this.messages.set(contactId, updated);
-      await AsyncStorage.setItem(
-        this.KEYS.MESSAGES,
-        JSON.stringify(Object.fromEntries(this.messages)),
-      );
+      try {
+        await AsyncStorage.setItem(
+          this.KEYS.MESSAGES,
+          JSON.stringify(Object.fromEntries(this.messages)),
+        );
+      } catch (e) {
+        console.warn('[AppStore] Failed to save after marking messages read', e);
+      }
     }
   }
 
   async incrementUnread(contactId: string): Promise<void> {
     this.unreadCount = { ...this.unreadCount, [contactId]: (this.unreadCount[contactId] ?? 0) + 1 };
-    await AsyncStorage.setItem(this.KEYS.UNREAD, JSON.stringify(this.unreadCount));
+    try {
+      await AsyncStorage.setItem(this.KEYS.UNREAD, JSON.stringify(this.unreadCount));
+    } catch (e) {
+      console.warn('[AppStore] Failed to save unread count after increment', e);
+    }
   }
 
-  addCallRecord(record: CallRecord): void {
-    this.callRecords.push(record);
+  async addCallRecord(record: CallRecord): Promise<void> {
+    this.callRecords = [...this.callRecords, record];
+    try {
+      const key = `${this.currentServerId}_call_records`;
+      await AsyncStorage.setItem(key, JSON.stringify(this.callRecords));
+    } catch (e) {
+      console.warn('[AppStore] Failed to save call records', e);
+    }
   }
 
   async clearAll(): Promise<void> {
@@ -262,26 +332,39 @@ export class AppStore {
     this.contacts = [];
     this.messages.clear();
     this.unreadCount = {};
-    await Promise.all([
-      AsyncStorage.removeItem(this.KEYS.USER),
-      AsyncStorage.removeItem(this.KEYS.CONTACTS),
-      AsyncStorage.removeItem(this.KEYS.MESSAGES),
-      AsyncStorage.removeItem(this.KEYS.UNREAD),
-      this.currentServerId
-        ? Keychain.resetGenericPassword({ service: `voidchat_${this.currentServerId}` })
-        : Promise.resolve(),
-    ]);
+    this.presenceMap = {};
+    this.callRecords = [];
+    try {
+      await Promise.all([
+        AsyncStorage.removeItem(this.KEYS.USER),
+        AsyncStorage.removeItem(this.KEYS.CONTACTS),
+        AsyncStorage.removeItem(this.KEYS.MESSAGES),
+        AsyncStorage.removeItem(this.KEYS.UNREAD),
+        AsyncStorage.removeItem(this.KEYS.CALL_RECORDS),
+        this.currentServerId
+          ? Keychain.resetGenericPassword({ service: `voidchat_${this.currentServerId}` })
+          : Promise.resolve(),
+      ]);
+    } catch (e) {
+      console.warn('[AppStore] Failed to clear all data', e);
+    }
   }
 
   async clearServerData(serverId: string): Promise<void> {
     const k = keys(serverId);
-    await Promise.all([
-      AsyncStorage.removeItem(k.USER),
-      AsyncStorage.removeItem(k.CONTACTS),
-      AsyncStorage.removeItem(k.MESSAGES),
-      AsyncStorage.removeItem(k.UNREAD),
-      Keychain.resetGenericPassword({ service: `voidchat_${serverId}` }),
-    ]);
+    this.presenceMap = {};
+    try {
+      await Promise.all([
+        AsyncStorage.removeItem(k.USER),
+        AsyncStorage.removeItem(k.CONTACTS),
+        AsyncStorage.removeItem(k.MESSAGES),
+        AsyncStorage.removeItem(k.UNREAD),
+        AsyncStorage.removeItem(k.CALL_RECORDS),
+        Keychain.resetGenericPassword({ service: `voidchat_${serverId}` }),
+      ]);
+    } catch (e) {
+      console.warn('[AppStore] Failed to clear server data', e);
+    }
   }
 
   resetInMemoryState(): void {
@@ -290,6 +373,7 @@ export class AppStore {
     this.messages.clear();
     this.unreadCount = {};
     this.presenceMap = {};
+    this.callRecords = [];
     this.activeChatId = null;
     this.currentServerId = null;
     this.isReady = false;

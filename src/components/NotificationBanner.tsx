@@ -32,6 +32,13 @@ export function NotificationProvider({
   const opacity = useRef(new Animated.Value(0)).current;
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onPressRef = useRef<(() => void) | null>(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const hideBanner = useCallback(() => {
     Animated.parallel([
@@ -46,8 +53,10 @@ export function NotificationProvider({
         useNativeDriver: true,
       }),
     ]).start(() => {
-      setNotification(null);
-      onPressRef.current = null;
+      if (isMountedRef.current) {
+        setNotification(null);
+        onPressRef.current = null;
+      }
     });
   }, [translateY, opacity]);
 

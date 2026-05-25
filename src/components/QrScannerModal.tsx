@@ -339,7 +339,7 @@ const styles = StyleSheet.create({
   flashOverlay: {
     ...StyleSheet.absoluteFill,
     borderRadius: SCAN_BORDER_RADIUS,
-    backgroundColor: 'rgba(0, 204, 136, 0.3)'
+    backgroundColor: 'rgba(0, 204, 136, 0.3)',
   },
 
   overlayBottom: {

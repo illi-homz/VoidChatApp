@@ -8,6 +8,14 @@ import {
   permissions,
 } from 'react-native-webrtc';
 
+declare const __DEV__: boolean;
+
+/** RTCRtpSender предоставляется react-native-webrtc как глобальный тип. */
+interface RTCRtpSender {
+  replaceTrack(track: MediaStreamTrack | null): Promise<void>;
+  track: MediaStreamTrack | null;
+}
+
 /** ICE-сервер (локальный тип, т.к. библиотечный RTCIceServer не экспортируется). */
 interface IceServer {
   credential?: string;
@@ -508,9 +516,11 @@ class WebRTCService {
         const candidateStr = (json as any).candidate || '';
         const typeMatch = candidateStr.match(/ typ (\S+)/);
         const candidateType = typeMatch ? typeMatch[1] : 'unknown';
-        const addrMatch = candidateStr.match(/ (\d+\.\d+\.\d+\.\d+) /);
-        const address = addrMatch ? addrMatch[1] : '(n/a)';
-        console.log(`[WebRTC] 🧊 ICE candidate: ${candidateType}, addr=${address}`);
+        if (__DEV__) {
+          const addrMatch = candidateStr.match(/ (\d+\.\d+\.\d+\.\d+) /);
+          const address = addrMatch ? addrMatch[1] : '(n/a)';
+          console.log(`[WebRTC] 🧊 ICE candidate: ${candidateType}, addr=${address}`);
+        }
         if (this._onIceCandidate) {
           this._onIceCandidate(JSON.stringify(json));
         }

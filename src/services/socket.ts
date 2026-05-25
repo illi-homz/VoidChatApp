@@ -18,6 +18,7 @@ import type {
 import { webrtcService } from './WebRTCService';
 
 const HEARTBEAT_INTERVAL = 30000;
+const MAX_BUFFER_SIZE = 500;
 
 export type ConnectionStatus = 'connected' | 'reconnecting' | 'disconnected';
 
@@ -178,6 +179,7 @@ class SocketService {
         this.socket = null;
         reject(new Error('Connection timed out after 15 seconds'));
       }, 15_000);
+      let resolved = false;
 
       this.socket = io(serverUrl, {
         transports: ['polling', 'websocket'],
@@ -198,6 +200,7 @@ class SocketService {
 
       this.socket.on('registered', () => {
         clearTimeout(timeout);
+        resolved = true;
         this.userId = userId;
         this.publicKey = publicKey;
         this.connectedUrl = serverUrl;
@@ -216,6 +219,7 @@ class SocketService {
       });
 
       this.socket.on('connect_error', (err: Error) => {
+        clearTimeout(timeout);
         this.reconnectAttempt++;
         this.lastError = err.message;
         this._connected = false;
@@ -225,6 +229,9 @@ class SocketService {
           `[socket] connect_error (${this.reconnectAttempt}/${this.maxReconnectAttempts}):`,
           err.message,
         );
+        if (!resolved) {
+          reject(err);
+        }
       });
 
       this.socket.on('disconnect', (reason: string) => {
@@ -241,6 +248,9 @@ class SocketService {
           // Socket.IO будет пытаться переподключиться
           this.connectionStatus = 'reconnecting';
           console.warn('[socket] disconnected:', reason);
+        }
+        if (!resolved) {
+          reject(new Error('Disconnected before registration'));
         }
       });
 
@@ -309,6 +319,9 @@ class SocketService {
           }
         } else {
           this.messageBuffer.push(data);
+          if (this.messageBuffer.length > MAX_BUFFER_SIZE) {
+            this.messageBuffer.shift();
+          }
         }
       });
 

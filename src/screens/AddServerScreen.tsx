@@ -278,7 +278,7 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
             placeholderTextColor={Colors.textMuted}
             autoCapitalize='none'
             autoCorrect={false}
-            keyboardType='number-pad'
+            keyboardType='url'
             editable={!isConnecting}
           />
           {ip.length > 0 && !isConnecting && <ClearButton onPress={() => setIp('')} />}
@@ -323,7 +323,9 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
 
         <TouchableOpacity
           style={[styles.button, isConnecting && styles.buttonDisabled]}
-          onPress={handleAdd}
+          onPress={() => {
+            handleAdd();
+          }}
           disabled={isConnecting}
           activeOpacity={0.7}
         >

@@ -32,10 +32,19 @@ export function AddFriendScreen({ navigation }: AddFriendScreenProps): React.JSX
   const [showScanner, setShowScanner] = useState(false);
   const sentRequestId = useRef<string | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleErrorRef = useRef<((_: { message: string }) => void) | null>(null);
+  const handleRequestSentRef = useRef<
+    ((_: { targetUserId: string; targetPublicKey: string | null }) => void) | null
+  >(null);
 
   useEffect(() => {
-    socketService.onFriendRequestSent(handleRequestSent);
-    socketService.onError(handleError);
+    handleErrorRef.current = handleError;
+    handleRequestSentRef.current = handleRequestSent;
+  });
+
+  useEffect(() => {
+    socketService.onFriendRequestSent(data => handleRequestSentRef.current?.(data));
+    socketService.onError(data => handleErrorRef.current?.(data));
 
     return () => {
       sentRequestId.current = null;

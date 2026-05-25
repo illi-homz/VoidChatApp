@@ -35,7 +35,8 @@ export type IconName =
   | 'message-circle'
   | 'plus'
   | 'qr-code'
-  | 'broom';
+  | 'broom'
+  | 'server';
 
 interface IconProps {
   name: IconName;
@@ -338,6 +339,15 @@ const IconBase: React.FC<IconProps> = ({ name, size = 24, color = '#000', style 
             <Path d='M16 22c-1-2-2-3-4-5' />
             <Path d='M12 14v8' />
           </G>
+        </Svg>
+      );
+    case 'server':
+      return (
+        <Svg {...svgProps}>
+          <Rect width='20' height='8' x='2' y='2' rx='2' ry='2' />
+          <Rect width='20' height='8' x='2' y='14' rx='2' ry='2' />
+          <Line x1='6' y1='6' x2='6.01' y2='6' />
+          <Line x1='6' y1='18' x2='6.01' y2='18' />
         </Svg>
       );
     default:
