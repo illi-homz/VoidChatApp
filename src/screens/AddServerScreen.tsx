@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Text,
   TextInput,
@@ -11,12 +11,14 @@ import {
   Clipboard,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
 import { useServerStore, useStore } from '../stores';
 import { socketService } from '../services/socket';
 import { initCrypto, generateKeyPair } from '../services/crypto';
 import { useToast } from '../components/Toast';
+import { QrScannerModal } from '../components/QrScannerModal';
 import { v4 as uuidv4 } from 'uuid';
 import { Colors } from '../theme/colors';
 import { Icon } from '../components/Icon';
@@ -62,16 +64,43 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
   const serverStore = useServerStore();
   const appStore = useStore();
   const { toast } = useToast();
+  const route = useRoute<RouteProp<RootStackParamList, 'AddServer'>>();
+  const routeParams = route.params ?? {};
+  // Поддерживаем как внутренние имена (initialHost, inviterUserId),
+  // так и имена из deep link (host, port, user, auto)
+  const inviterUserId = routeParams.inviterUserId ?? routeParams.user ?? undefined;
+  const initialHost = routeParams.initialHost ?? routeParams.host ?? undefined;
+  const initialPort = routeParams.initialPort ?? routeParams.port ?? undefined;
+  const initialName = routeParams.initialName ?? routeParams.name ?? undefined;
+  // autoFriend: true если явно true в autoFriend или auto=1/true в deep link
+  const _autoRaw = routeParams.auto;
+  const autoFriend =
+    routeParams.autoFriend ??
+    (_autoRaw === true || _autoRaw === 'true' || _autoRaw === '1' ? true : undefined);
   const [name, setName] = useState('');
   const [ip, setIp] = useState('');
   const [port, setPort] = useState(DEFAULT_PORT);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+  const pendingInviterRef = useRef<string | null>(null);
+  const pendingAutoRef = useRef(false);
 
   useEffect(() => {
-    if (__DEV__) {
+    if (__DEV__ && !initialHost) {
       setName('Тестовый сервер');
       setIp('10.0.2.2');
       setPort(DEFAULT_PORT);
+    }
+    if (initialName) {
+      setName(initialName);
+    } else if (inviterUserId) {
+      setName('Сервер приглашения');
+    }
+    if (initialHost) {
+      setIp(initialHost);
+    }
+    if (initialPort) {
+      setPort(initialPort);
     }
   }, []);
 
@@ -87,10 +116,50 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
       });
   }
 
-  async function handleAdd(): Promise<void> {
-    const trimmedName = name.trim();
-    const trimmedIp = ip.trim();
-    const trimmedPort = port.trim() || DEFAULT_PORT;
+  function handleQrScan(data: string): void {
+    setShowScanner(false);
+
+    // Проверка: является ли QR invite-ссылкой
+    if (data.startsWith('voidchat://invite')) {
+      // Парсим параметры через regex (URL не поддерживается в React Native)
+      const params: Record<string, string> = {};
+      const queryString = data.split('?')[1] || '';
+      for (const pair of queryString.split('&')) {
+        const [key, value] = pair.split('=');
+        if (key && value) {
+          params[decodeURIComponent(key)] = decodeURIComponent(value);
+        }
+      }
+      const host = params['host'] || '';
+      const portValue = params['port'] || DEFAULT_PORT;
+      const userId = params['user'] || '';
+      const serverName = params['name'] || 'Сервер по приглашению';
+      const auto = params['auto'] === '1';
+
+      setName(serverName);
+      setIp(host);
+      setPort(portValue);
+      // Сохраняем inviterUserId и autoFriend для использования после подключения
+      // Используем ref чтобы не зависеть от цикла рендера
+      pendingInviterRef.current = userId;
+      pendingAutoRef.current = auto;
+
+      // Автоматически запускаем подключение — передаём значения напрямую,
+      // чтобы избежать stale closure (handleAdd из этого рендера видит старый state)
+      handleAdd({ ip: host, port: portValue, name: serverName });
+    } else {
+      toast('Неверный QR-код. Отсканируйте приглашение на сервер', 'error');
+    }
+  }
+
+  async function handleAdd(overrides?: {
+    ip?: string;
+    port?: string;
+    name?: string;
+  }): Promise<void> {
+    const trimmedName = (overrides?.name || name).trim();
+    const trimmedIp = (overrides?.ip || ip).trim();
+    const trimmedPort = (overrides?.port || port).trim() || DEFAULT_PORT;
 
     if (!trimmedName) {
       toast('Введите название сервера', 'error');
@@ -122,6 +191,18 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
       await appStore.saveUser({ userId: newUserId, publicKey, privateKey });
 
       await socketService.connect(serverUrl, newUserId, publicKey);
+
+      // Обработка приглашения
+      const targetUserId = pendingInviterRef.current || inviterUserId || undefined;
+      const isAuto = pendingAutoRef.current || autoFriend || false;
+
+      if (targetUserId) {
+        if (isAuto) {
+          await socketService.sendClaimInvite(targetUserId);
+        } else {
+          await socketService.sendFriendRequest(targetUserId);
+        }
+      }
 
       navigation.replace('Home');
     } catch (e) {
@@ -230,21 +311,38 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
         )}
       </View>
 
-      <TouchableOpacity
-        style={[styles.button, isConnecting && styles.buttonDisabled]}
-        onPress={handleAdd}
-        disabled={isConnecting}
-        activeOpacity={0.7}
-      >
-        {isConnecting ? (
-          <ActivityIndicator color='#000' />
-        ) : (
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-            <Icon name='plus' size={18} color='#000' />
-            <Text style={styles.buttonText}> Подключиться</Text>
-          </View>
-        )}
-      </TouchableOpacity>
+      <View style={styles.buttonsRow}>
+        <TouchableOpacity
+          style={styles.scanButton}
+          onPress={() => setShowScanner(true)}
+          disabled={isConnecting}
+          activeOpacity={0.7}
+        >
+          <Icon name='qr-code' size={22} color={Colors.primary} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.button, isConnecting && styles.buttonDisabled]}
+          onPress={handleAdd}
+          disabled={isConnecting}
+          activeOpacity={0.7}
+        >
+          {isConnecting ? (
+            <ActivityIndicator color='#000' />
+          ) : (
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name='plus' size={18} color='#000' />
+              <Text style={styles.buttonText}> Подключиться</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      <QrScannerModal
+        visible={showScanner}
+        onScan={handleQrScan}
+        onClose={() => setShowScanner(false)}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -315,12 +413,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   } as const,
+  buttonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+  },
+  scanButton: {
+    width: 50,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   button: {
+    flex: 1,
     backgroundColor: Colors.primary,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
-    marginTop: 16,
   },
   buttonDisabled: {
     opacity: 0.7,

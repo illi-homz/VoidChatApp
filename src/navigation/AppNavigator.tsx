@@ -20,10 +20,20 @@ interface AppNavigatorProps {
   onReady?: () => void;
 }
 
+const linking = {
+  prefixes: ['voidchat://'],
+  config: {
+    screens: {
+      AddServer: 'invite',
+      Home: '',
+    },
+  },
+};
+
 export function AppNavigator({ onReady }: AppNavigatorProps): React.JSX.Element {
   return (
     <View style={{ flex: 1 }}>
-      <NavigationContainer onReady={onReady}>
+      <NavigationContainer onReady={onReady} linking={linking}>
         <Stack.Navigator
           initialRouteName='Startup'
           screenOptions={{

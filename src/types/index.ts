@@ -106,3 +106,13 @@ export interface CallRecord {
   status: 'missed' | 'completed' | 'declined';
   callType: CallType;
 }
+
+export interface AutoFriendAddedPayload {
+  userId: string;
+  publicKey: string | null;
+}
+
+export interface InviteClaimedPayload {
+  inviterUserId: string;
+  publicKey: string | null;
+}

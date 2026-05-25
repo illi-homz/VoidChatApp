@@ -68,6 +68,10 @@ class SocketService {
       callEndedCallbacks: false,
       iceCandidateCallbacks: false,
       callTimedOutCallbacks: false,
+      autoFriendAddedCallbacks: false,
+      inviteClaimedCallbacks: false,
+      autoFriendAddedBuffer: false,
+      inviteClaimedBuffer: false,
       callIncomingBuffer: false,
       callOfferSentBuffer: false,
       callAcceptedBuffer: false,
@@ -140,6 +144,21 @@ class SocketService {
   private callEndedBuffer: CallEnded[] = [];
   private iceCandidateBuffer: CallIceCandidate[] = [];
   private callTimedOutBuffer: CallTimedOut[] = [];
+
+  private autoFriendAddedCallbacks: Array<
+    (_: { userId: string; publicKey: string | null }) => void
+  > = [];
+  private inviteClaimedCallbacks: Array<
+    (_: { inviterUserId: string; publicKey: string | null }) => void
+  > = [];
+  private autoFriendAddedBuffer: Array<{
+    userId: string;
+    publicKey: string | null;
+  }> = [];
+  private inviteClaimedBuffer: Array<{
+    inviterUserId: string;
+    publicKey: string | null;
+  }> = [];
 
   connect(serverUrl: string, userId: string, publicKey: string): Promise<void> {
     if (this.socket) {
@@ -368,6 +387,25 @@ class SocketService {
         }
       });
 
+      this.socket.on('auto_friend_added', (data: { userId: string; publicKey: string | null }) => {
+        if (this.autoFriendAddedCallbacks.length > 0) {
+          for (const cb of this.autoFriendAddedCallbacks) cb(data);
+        } else {
+          this.autoFriendAddedBuffer.push(data);
+        }
+      });
+
+      this.socket.on(
+        'invite_claimed',
+        (data: { inviterUserId: string; publicKey: string | null }) => {
+          if (this.inviteClaimedCallbacks.length > 0) {
+            for (const cb of this.inviteClaimedCallbacks) cb(data);
+          } else {
+            this.inviteClaimedBuffer.push(data);
+          }
+        },
+      );
+
       this.socket.on('error', (data: { message: string }) => {
         console.error('Socket error:', data.message);
         this.errorCallback?.(data);
@@ -445,6 +483,10 @@ class SocketService {
     this.iceCandidateBuffer = [];
     this.callTimedOutCallbacks = [];
     this.callTimedOutBuffer = [];
+    this.autoFriendAddedCallbacks = [];
+    this.autoFriendAddedBuffer = [];
+    this.inviteClaimedCallbacks = [];
+    this.inviteClaimedBuffer = [];
   }
 
   sendFriendRequest(targetUserId: string): void {
@@ -768,6 +810,44 @@ class SocketService {
 
   getConnectedAt(): number | null {
     return this.connectedAt;
+  }
+
+  sendClaimInvite(inviterUserId: string): void {
+    this.socket?.emit('claim_invite', { inviterUserId });
+  }
+
+  onAutoFriendAdded(
+    callback: (_: { userId: string; publicKey: string | null }) => void,
+  ): () => void {
+    this.autoFriendAddedCallbacks.push(callback);
+    while (this.autoFriendAddedBuffer.length > 0) {
+      callback(this.autoFriendAddedBuffer.shift()!);
+    }
+    return () => {
+      this.autoFriendAddedCallbacks = this.autoFriendAddedCallbacks.filter(cb => cb !== callback);
+    };
+  }
+
+  offAutoFriendAdded(): void {
+    this.autoFriendAddedCallbacks = [];
+    this.autoFriendAddedBuffer = [];
+  }
+
+  onInviteClaimed(
+    callback: (_: { inviterUserId: string; publicKey: string | null }) => void,
+  ): () => void {
+    this.inviteClaimedCallbacks.push(callback);
+    while (this.inviteClaimedBuffer.length > 0) {
+      callback(this.inviteClaimedBuffer.shift()!);
+    }
+    return () => {
+      this.inviteClaimedCallbacks = this.inviteClaimedCallbacks.filter(cb => cb !== callback);
+    };
+  }
+
+  offInviteClaimed(): void {
+    this.inviteClaimedCallbacks = [];
+    this.inviteClaimedBuffer = [];
   }
 }
 

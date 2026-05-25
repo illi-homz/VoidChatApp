@@ -7,7 +7,20 @@ export type RootStackParamList = {
   ServerList: { errorMessage?: string; returnToHome?: boolean } | undefined;
   Chat: { contactId: string; contactName: string };
   AddFriend: undefined;
-  AddServer: undefined;
+  AddServer:
+    | {
+        inviterUserId?: string;
+        autoFriend?: boolean;
+        initialName?: string;
+        initialHost?: string;
+        initialPort?: string;
+        // Deep link params (передаются через linking конфиг)
+        host?: string;
+        port?: string;
+        user?: string;
+        auto?: string | boolean;
+      }
+    | undefined;
   Call:
     | {
         contactId: string;

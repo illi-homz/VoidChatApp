@@ -21,7 +21,7 @@ interface QrScannerModalProps {
   /** Управляет видимостью модалки */
   visible: boolean;
   /** Вызывается при успешном распознавании QR-кода */
-  onScan: (userId: string) => void;
+  onScan: (data: string) => void;
   /** Вызывается при закрытии модалки */
   onClose: () => void;
 }
@@ -31,7 +31,7 @@ interface QrScannerModalProps {
 // ---------------------------------------------------------------------------
 
 const SCAN_BOX_SIZE = 250;
-const SCAN_BORDER_RADIUS = 16;
+const SCAN_BORDER_RADIUS = 0;
 const FLASH_DURATION_IN = 100;
 const FLASH_DURATION_OUT = 400;
 
@@ -251,9 +251,6 @@ export function QrScannerModal({
         >
           <Icon name='x' size={24} color={Colors.textPrimary} />
         </TouchableOpacity>
-
-        {/* Заголовок в верхней части */}
-        <Text style={[styles.titleText, { top: insets.top + 12 }]}>Сканирование QR</Text>
       </View>
     </View>
   );
@@ -342,7 +339,7 @@ const styles = StyleSheet.create({
   flashOverlay: {
     ...StyleSheet.absoluteFill,
     borderRadius: SCAN_BORDER_RADIUS,
-    backgroundColor: Colors.success, // #00FF88 — зелёный
+    backgroundColor: 'rgba(0, 204, 136, 0.3)'
   },
 
   overlayBottom: {

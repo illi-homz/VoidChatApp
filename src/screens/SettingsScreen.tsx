@@ -1,11 +1,10 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Share,
   Clipboard,
   ActivityIndicator,
   Animated,
@@ -18,12 +17,19 @@ import type { RootStackParamList } from '../navigation/types';
 import { useStore, useServerStore } from '../stores';
 import { socketService } from '../services/socket';
 import { useToast } from '../components/Toast';
+import { QrScannerModal } from '../components/QrScannerModal';
 import { Colors } from '../theme';
 import { Icon } from '../components/Icon';
 import { version } from '../../package.json';
 
 interface SettingsScreenProps {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Settings'>;
+}
+
+function parseServerUrl(url: string): { host: string; port: string } {
+  const clean = url.replace(/^https?:\/\//, '');
+  const parts = clean.split(':');
+  return { host: parts[0], port: parts[1] || '9001' };
 }
 
 export const SettingsScreen = observer(function SettingsScreen({
@@ -41,6 +47,7 @@ export const SettingsScreen = observer(function SettingsScreen({
   }, []);
 
   const [reconnecting, setReconnecting] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
 
   // --- Анимированная пульсация точки для состояния переподключения ---
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -70,9 +77,22 @@ export const SettingsScreen = observer(function SettingsScreen({
     }
   }, [connectionStatus, pulseAnim]);
 
+  const server = serverStore.activeServer;
+  const user = store.user;
+
+  const parsedUrl = useMemo(() => (server ? parseServerUrl(server.url) : null), [server?.url]);
+
+  const inviteLink = useMemo(() => {
+    if (!parsedUrl || !user) return '';
+    return `voidchat://invite?host=${parsedUrl.host}&port=${parsedUrl.port}&user=${encodeURIComponent(user.userId)}&name=${encodeURIComponent(server?.name || '')}&auto=1`;
+  }, [parsedUrl, user?.userId]);
+
+  const cleanUrl = useMemo(
+    () => (server ? server.url.replace(/^https?:\/\//, '') : ''),
+    [server?.url],
+  );
+
   const handleReconnect = useCallback(async () => {
-    const server = serverStore.activeServer;
-    const user = store.user;
     if (!server || !user) return;
 
     setReconnecting(true);
@@ -84,32 +104,62 @@ export const SettingsScreen = observer(function SettingsScreen({
     } finally {
       setReconnecting(false);
     }
-  }, [serverStore.activeServer, store.user, toast]);
+  }, [server, user, toast]);
 
   function formatDuration(ms: number): string {
-    if (!Number.isFinite(ms) || ms < 0) return '0 сек';
+    if (!Number.isFinite(ms) || ms < 0) return '0:00';
     const totalSeconds = Math.floor(ms / 1000);
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
-    if (minutes === 0) return `${seconds} сек`;
-    if (minutes < 60) return `${minutes} мин ${seconds} сек`;
     const hours = Math.floor(minutes / 60);
     const remainingMinutes = minutes % 60;
-    return `${hours} ч ${remainingMinutes} мин`;
+    if (hours > 0) {
+      return `${String(hours).padStart(2, '0')}:${String(remainingMinutes).padStart(2, '0')}`;
+    }
+    return `${String(remainingMinutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
   }
 
   function copyId() {
-    if (!store.user) return;
-    Clipboard.setString(store.user.userId);
+    if (!user) return;
+    Clipboard.setString(user.userId);
     toast('ID скопирован', 'success');
   }
 
-  async function shareId() {
-    if (!store.user) return;
-    try {
-      await Share.share({ message: `VoidChat ID: ${store.user.userId}` });
-    } catch {
-      toast('Не удалось поделиться ID', 'error');
+  function copyInviteLink() {
+    if (!inviteLink) return;
+    Clipboard.setString(inviteLink);
+    toast('Ссылка приглашения скопирована', 'success');
+  }
+
+  function handleQrScan(data: string): void {
+    if (data.startsWith('voidchat://invite')) {
+      setShowScanner(false);
+      const queryString = data.split('?')[1] || '';
+      const params: Record<string, string> = {};
+      queryString.split('&').forEach(pair => {
+        const [key, value] = pair.split('=');
+        if (key && value) {
+          params[decodeURIComponent(key)] = decodeURIComponent(value);
+        }
+      });
+      const host = params['host'] || '';
+      const port = params['port'] || '9001';
+      const userId = params['user'] || '';
+      const serverName = params['name'] || '';
+      const auto = params['auto'] === '1';
+      if (!host || !userId) {
+        toast('Неверный формат приглашения', 'error');
+        return;
+      }
+      navigation.navigate('AddServer', {
+        initialHost: host,
+        initialPort: port,
+        initialName: serverName,
+        inviterUserId: userId,
+        autoFriend: auto,
+      });
+    } else {
+      toast('Отсканируйте QR-код приглашения на сервер', 'error');
     }
   }
 
@@ -120,9 +170,9 @@ export const SettingsScreen = observer(function SettingsScreen({
         <Text style={styles.sectionTitle}>МОЙ КОНТАКТ</Text>
         <View style={styles.sectionCard}>
           <View style={styles.qrContainer}>
-            {store.user ? (
+            {user ? (
               <QRCode
-                value={store.user.userId}
+                value={user.userId}
                 size={150}
                 backgroundColor={Colors.surface}
                 color={Colors.primary}
@@ -132,21 +182,15 @@ export const SettingsScreen = observer(function SettingsScreen({
             )}
           </View>
 
-          {store.user && (
+          {user && (
             <>
               <TouchableOpacity style={styles.idContainer} onPress={copyId} activeOpacity={0.7}>
                 <Text style={styles.idLabel}>Ваш ID:</Text>
                 <Text style={styles.idValue} numberOfLines={1} ellipsizeMode='middle'>
-                  {store.user.userId}
+                  {user.userId}
                 </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.shareButton} onPress={shareId} activeOpacity={0.7}>
-                <View
-                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
-                >
-                  <Icon name='share-2' size={16} color='#000' />
-                  <Text style={styles.shareButtonText}> Поделиться</Text>
+                <View style={styles.idCopyIcon}>
+                  <Icon name='copy' size={14} color={Colors.textMuted} />
                 </View>
               </TouchableOpacity>
             </>
@@ -156,91 +200,128 @@ export const SettingsScreen = observer(function SettingsScreen({
         {/* Секция: Сервер */}
         <Text style={styles.sectionTitle}>СЕРВЕР</Text>
         <View style={styles.serverCard}>
-          {serverStore.activeServer ? (
+          {server && inviteLink ? (
             <>
-              <View style={styles.serverCardBody}>
-                <View style={styles.serverInfo}>
-                  <Text style={styles.serverUrl}>{serverStore.activeServer.url}</Text>
+              {/* QR-код приглашения (как в секции Мой контакт) */}
+              <View style={styles.qrContainer}>
+                <QRCode
+                  value={inviteLink}
+                  size={150}
+                  backgroundColor={Colors.surface}
+                  color={Colors.primary}
+                />
+              </View>
 
-                  {/* --- Индикатор статуса соединения (3 состояния) --- */}
+              {/* IP + статус, кнопки справа */}
+              <View style={styles.serverInfoRow}>
+                <View style={styles.serverInfoBlock}>
+                  <View style={styles.serverInfoTop}>
+                    {/* Точка статуса — слева от IP */}
+                    {socketService.connectionStatus === 'connected' ? (
+                      <View style={[styles.statusDotSm, { backgroundColor: Colors.success }]} />
+                    ) : socketService.connectionStatus === 'reconnecting' ? (
+                      <Animated.View
+                        style={[
+                          styles.statusDotSm,
+                          { backgroundColor: Colors.warning, opacity: pulseAnim },
+                        ]}
+                      />
+                    ) : (
+                      <View style={[styles.statusDotSm, { backgroundColor: Colors.error }]} />
+                    )}
+                    <Text style={styles.serverUrlClean}>{cleanUrl}</Text>
+                  </View>
+
+                  {/* Текст статуса — под IP */}
                   {socketService.connectionStatus === 'connected' ? (
-                    <>
-                      <View style={styles.statusRow}>
-                        <View style={[styles.statusDot, { backgroundColor: Colors.success }]} />
-                        <Text style={styles.connectedSince}>
-                          {socketService.getConnectedAt()
-                            ? `Подключен ${formatDuration(now - socketService.getConnectedAt()!)}`
-                            : 'Подключен'}
-                        </Text>
-                      </View>
-                    </>
+                    <Text style={styles.statusTime}>
+                      {socketService.getConnectedAt()
+                        ? formatDuration(now - socketService.getConnectedAt()!)
+                        : ''}
+                    </Text>
                   ) : socketService.connectionStatus === 'reconnecting' ? (
-                    <>
-                      <View style={styles.statusRow}>
-                        <Animated.View
-                          style={[
-                            styles.statusDot,
-                            { backgroundColor: Colors.warning, opacity: pulseAnim },
-                          ]}
-                        />
-                        <View>
-                          <Text style={styles.connectedSince}>
-                            Подключается... {socketService.reconnectAttempt}/
-                            {socketService.maxReconnectAttempts}
-                          </Text>
-                          {socketService.estimatedReconnectDelay && (
-                            <Text style={styles.statusSecondary}>
-                              через ~{Math.round(socketService.estimatedReconnectDelay / 1000)} с
-                            </Text>
-                          )}
-                        </View>
-                      </View>
-                    </>
+                    <View style={styles.statusDetails}>
+                      <Text style={styles.statusTime}>
+                        {socketService.reconnectAttempt}/{socketService.maxReconnectAttempts}
+                      </Text>
+                      {socketService.estimatedReconnectDelay && (
+                        <Text style={styles.statusSecondary}>
+                          ~{Math.round(socketService.estimatedReconnectDelay / 1000)}с
+                        </Text>
+                      )}
+                    </View>
                   ) : (
-                    <>
-                      <View style={styles.statusRow}>
-                        <View style={[styles.statusDot, { backgroundColor: Colors.error }]} />
-                        <View>
-                          <Text style={styles.connectedSince}>Нет соединения</Text>
-                          {socketService.lastError && (
-                            <Text style={styles.statusSecondary} numberOfLines={2}>
-                              {socketService.lastError}
-                            </Text>
-                          )}
-                        </View>
-                      </View>
-                    </>
+                    <View style={styles.statusDetails}>
+                      <Text style={styles.statusTime}>Нет соединения</Text>
+                      {socketService.lastError && (
+                        <Text style={styles.statusSecondary} numberOfLines={2}>
+                          {socketService.lastError}
+                        </Text>
+                      )}
+                    </View>
                   )}
                 </View>
+
+                {/* Кнопки: копировать + переподключиться */}
+                <View style={styles.serverActions}>
+                  <TouchableOpacity
+                    style={styles.serverActionButton}
+                    onPress={copyInviteLink}
+                    activeOpacity={0.6}
+                  >
+                    <Icon name='share-2' size={18} color={Colors.primary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.reconnectButton,
+                      socketService.connectionStatus === 'reconnecting' && { opacity: 0.4 },
+                    ]}
+                    onPress={handleReconnect}
+                    disabled={reconnecting || socketService.connectionStatus === 'reconnecting'}
+                    activeOpacity={0.6}
+                  >
+                    {reconnecting ? (
+                      <ActivityIndicator size='small' color='#000' />
+                    ) : (
+                      <Icon name='refresh-cw' size={18} color='#000' />
+                    )}
+                  </TouchableOpacity>
+                </View>
               </View>
-              <TouchableOpacity
-                style={[
-                  styles.reconnectButton,
-                  socketService.connectionStatus === 'reconnecting' && { opacity: 0.4 },
-                ]}
-                onPress={handleReconnect}
-                disabled={reconnecting || socketService.connectionStatus === 'reconnecting'}
-                activeOpacity={0.6}
-              >
-                {reconnecting ? (
-                  <ActivityIndicator size='small' color='#000' />
-                ) : (
-                  <Icon name='refresh-cw' size={18} color='#000' />
-                )}
-              </TouchableOpacity>
+
+              {/* Кнопки: сканер QR + переключение сервера */}
+              <View style={styles.serverBottomRow}>
+                <TouchableOpacity
+                  style={styles.serverQrButton}
+                  onPress={() => setShowScanner(true)}
+                  activeOpacity={0.7}
+                >
+                  <Icon name='camera' size={22} color={Colors.primary} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.shareButton, { flex: 1 }]}
+                  onPress={() => navigation.navigate('ServerList', { returnToHome: false })}
+                  activeOpacity={0.7}
+                >
+                  <View
+                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    <Icon name='server' size={16} color='#000' />
+                    <Text style={styles.shareButtonText}> Переключить сервер</Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
+
+              <QrScannerModal
+                visible={showScanner}
+                onScan={handleQrScan}
+                onClose={() => setShowScanner(false)}
+              />
             </>
           ) : (
             <Text style={styles.connectedSince}>Сервер не выбран</Text>
           )}
         </View>
-
-        <TouchableOpacity
-          style={styles.switchButton}
-          onPress={() => navigation.navigate('ServerList', { returnToHome: false })}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.switchButtonText}>Переключить сервер</Text>
-        </TouchableOpacity>
 
         {/* Секция: О приложении */}
         <Text style={styles.sectionTitle}>О ПРИЛОЖЕНИИ</Text>
@@ -284,6 +365,7 @@ const styles = StyleSheet.create({
   qrContainer: {
     alignItems: 'center',
     marginBottom: 16,
+    paddingTop: 8,
   },
   qrPlaceholder: {
     width: 150,
@@ -295,9 +377,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 10,
-    marginBottom: 12,
     borderWidth: 1,
     borderColor: Colors.border,
+    position: 'relative',
   },
   idLabel: {
     fontSize: 12,
@@ -309,6 +391,16 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     fontFamily: 'monospace',
     letterSpacing: 0.5,
+    paddingRight: 24,
+  },
+  idCopyIcon: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   shareButton: {
     backgroundColor: Colors.primary,
@@ -320,6 +412,19 @@ const styles = StyleSheet.create({
     color: '#000',
     fontSize: 15,
     fontWeight: '600',
+  },
+  serverBottomRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+  },
+  serverQrButton: {
+    width: 50,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   menuRow: {
     flexDirection: 'row',
@@ -353,28 +458,61 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  serverCardBody: {
-    paddingRight: 44,
+  serverInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
   },
-  serverInfo: {
+  serverInfoBlock: {
     flex: 1,
   },
+  serverInfoTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusDotSm: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  statusTime: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginTop: 2,
+    marginLeft: 14,
+  },
+  statusDetails: {
+    marginTop: 2,
+  },
+  serverActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginLeft: 12,
+  },
+  serverActionButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.surfaceLight,
+    borderWidth: 1,
+    borderColor: Colors.borderGold,
+  },
   reconnectButton: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: Colors.primary,
   },
-  serverUrl: {
+  serverUrlClean: {
     fontSize: 14,
     color: Colors.textSecondary,
     fontFamily: 'monospace',
-    marginBottom: 8,
+    flex: 1,
   },
   statusRow: {
     flexDirection: 'row',
@@ -384,32 +522,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.textPrimary,
   },
-  statusDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginRight: 8,
-  },
+
   statusSecondary: {
     fontSize: 12,
     color: Colors.textMuted,
-    marginTop: 4,
-    marginLeft: 18, // выравнивание с текстом первой строки (10px точка + 8px gap)
+    marginTop: 2,
   },
-  switchButton: {
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    alignItems: 'center',
-  },
-  switchButtonText: {
-    color: Colors.primary,
-    fontSize: 15,
-    fontWeight: '600',
-  },
+
   aboutContainer: {
     alignItems: 'center',
     paddingVertical: 16,

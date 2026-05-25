@@ -203,7 +203,12 @@ export const ServerListScreen = observer(function ServerListScreen({
               setDeletingId(server.id);
               try {
                 await serverStore.remove(server.id);
-                toast('Сервер удалён', 'success');
+                if (serverStore.servers.length === 0) {
+                  toast('Удалён последний сервер — добавьте новый, чтобы продолжить', 'info');
+                  navigation.reset({ index: 0, routes: [{ name: 'AddServer' }] });
+                } else {
+                  toast('Сервер удалён', 'success');
+                }
               } catch {
                 toast('Ошибка при удалении сервера', 'error');
               } finally {

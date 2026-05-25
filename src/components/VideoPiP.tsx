@@ -31,12 +31,7 @@ export function VideoPiP({ streamURL, style, onLayout }: VideoPiPProps): React.J
       accessibilityRole='none'
       accessibilityLabel='Моё видео'
     >
-      <RTCView
-        streamURL={streamURL}
-        style={styles.video}
-        objectFit='cover'
-        mirror={true}
-      />
+      <RTCView streamURL={streamURL} style={styles.video} objectFit='cover' mirror={true} />
     </View>
   );
 }

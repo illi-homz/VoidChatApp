@@ -93,6 +93,8 @@ export const HomeScreen = observer(function HomeScreen({
       socketService.offFriendDeclined();
       socketService.offFriendRequestSent();
       socketService.offFriendConfirmed();
+      socketService.offAutoFriendAdded();
+      socketService.offInviteClaimed();
       socketService.offKicked();
       socketService.offCallIncoming();
       socketService.offCallEnded();
@@ -204,6 +206,45 @@ export const HomeScreen = observer(function HomeScreen({
         };
         store.addContact(newContact);
       }
+    });
+
+    socketService.onAutoFriendAdded(data => {
+      const { userId, publicKey } = data;
+      const existing = store.contacts.find(c => c.userId === userId);
+      if (!existing) {
+        const newContact: Contact = {
+          userId,
+          publicKey: publicKey ?? '',
+          createdAt: Date.now(),
+        };
+        store.addContact(newContact);
+        toast(`Пользователь ${maskUserId(userId)} присоединился по приглашению`, 'success');
+
+        // Отправляем friend_accept, чтобы инициатор получил наш publicKey
+        // Только если контакт новый — защита от дублирования при повторном auto_friend_added
+        socketService.acceptFriend(userId);
+      } else {
+        // Если контакт уже существует, но publicKey пустой — обновляем
+        if (publicKey && !existing.publicKey) {
+          store.updateContactPublicKey(userId, publicKey);
+        }
+      }
+    });
+
+    socketService.onInviteClaimed(data => {
+      const { inviterUserId, publicKey } = data;
+      const existing = store.contacts.find(c => c.userId === inviterUserId);
+      if (!existing) {
+        const newContact: Contact = {
+          userId: inviterUserId,
+          publicKey: publicKey ?? '',
+          createdAt: Date.now(),
+        };
+        store.addContact(newContact);
+      } else if (publicKey) {
+        store.updateContactPublicKey(inviterUserId, publicKey);
+      }
+      toast(`Вы добавили сервер и контакт ${maskUserId(inviterUserId)}`, 'success');
     });
 
     socketService.onFriendDeclined(userId => {

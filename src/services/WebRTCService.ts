@@ -255,7 +255,9 @@ class WebRTCService {
       // Создаём новый видео-трек
       try {
         await permissions.request({ name: 'camera' });
-      } catch { /* permissions API может быть недоступен */ }
+      } catch {
+        /* permissions API может быть недоступен */
+      }
 
       const newStream = await mediaDevices.getUserMedia({
         audio: false,
@@ -790,10 +792,15 @@ class WebRTCService {
    * 4. Возвращает answer SDP как JSON-строку
    */
   async handleRenegotiationOffer(offerSdp: string): Promise<string> {
-    console.log('[WebRTC] 🔄 handleRenegotiationOffer, sigState=' + (this._pc?.signalingState ?? 'no-pc'));
+    console.log(
+      '[WebRTC] 🔄 handleRenegotiationOffer, sigState=' + (this._pc?.signalingState ?? 'no-pc'),
+    );
     const offer = JSON.parse(offerSdp) as SdpInfo;
     await this._pc?.setRemoteDescription(new RTCSessionDescription(offer));
-    console.log('[WebRTC] 🔄 setRemoteDescription(offer) OK, sigState=' + (this._pc?.signalingState ?? 'no-pc'));
+    console.log(
+      '[WebRTC] 🔄 setRemoteDescription(offer) OK, sigState=' +
+        (this._pc?.signalingState ?? 'no-pc'),
+    );
     await this._flushPendingCandidates();
     const answer = (await this._pc?.createAnswer()) as SdpInfo;
     console.log('[WebRTC] 🔄 createAnswer OK');

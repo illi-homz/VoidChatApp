@@ -112,7 +112,12 @@ const CallScreenComponent: React.FC = observer(() => {
       }
     };
     webrtcService.onRenegotiationNeeded = sdp => {
-      console.log('[CallScreen] onRenegotiationNeeded, callId=' + callStore.callId + ', contactId=' + callStore.contactId);
+      console.log(
+        '[CallScreen] onRenegotiationNeeded, callId=' +
+          callStore.callId +
+          ', contactId=' +
+          callStore.contactId,
+      );
       if (callStore.callId && callStore.contactId) {
         socketService.sendCallOffer(callStore.contactId, sdp, callStore.callId, callStore.callType);
         console.log('[CallScreen] ✅ sendCallOffer sent for renegotiation');
@@ -168,7 +173,14 @@ const CallScreenComponent: React.FC = observer(() => {
   useEffect(() => {
     // Для входящих слушаем call_incoming (renegotiation)
     const unsubCallIncoming = socketService.onCallIncoming(data => {
-      console.log('[CallScreen] call_incoming received, callId=' + data.callId + ', myCallId=' + callStore.callId + ', status=' + callStore.status);
+      console.log(
+        '[CallScreen] call_incoming received, callId=' +
+          data.callId +
+          ', myCallId=' +
+          callStore.callId +
+          ', status=' +
+          callStore.status,
+      );
       if (data.callId === callStore.callId && callStore.status === 'connected') {
         console.log('[CallScreen] 🔄 processing renegotiation offer');
         webrtcService
@@ -478,7 +490,10 @@ const CallScreenComponent: React.FC = observer(() => {
       )}
 
       <View style={styles.controlsSection}>
-        <ScaleBtn style={[styles.controlButton, isMuted && styles.controlButtonActive]} onPress={handleToggleMute}>
+        <ScaleBtn
+          style={[styles.controlButton, isMuted && styles.controlButtonActive]}
+          onPress={handleToggleMute}
+        >
           <Icon
             name={isMuted ? 'mic-off' : 'mic'}
             size={24}
@@ -512,7 +527,10 @@ const CallScreenComponent: React.FC = observer(() => {
             <Icon name='refresh-cw' size={24} color={Colors.textPrimary} />
           </ScaleBtn>
         )}
-        <ScaleBtn style={[styles.controlButton, isSpeakerOn && styles.controlButtonActive]} onPress={handleToggleSpeaker}>
+        <ScaleBtn
+          style={[styles.controlButton, isSpeakerOn && styles.controlButtonActive]}
+          onPress={handleToggleSpeaker}
+        >
           <Icon
             name={isSpeakerOn ? 'volume-2' : 'volume-1'}
             size={24}
@@ -526,7 +544,11 @@ const CallScreenComponent: React.FC = observer(() => {
           { paddingBottom: Math.max(insets.bottom + 24, MIN_BOTTOM_INSET) },
         ]}
       >
-        <ScaleBtn style={styles.endCallButton} onPress={handleEndCall} accessibilityLabel='Завершить звонок'>
+        <ScaleBtn
+          style={styles.endCallButton}
+          onPress={handleEndCall}
+          accessibilityLabel='Завершить звонок'
+        >
           <CallIcon size={28} color={Colors.textPrimary} />
         </ScaleBtn>
         {!showControls && !isInactive && <Text style={styles.endCallLabel}>Завершить</Text>}

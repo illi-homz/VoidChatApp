@@ -107,15 +107,52 @@ export function AddFriendScreen({ navigation }: AddFriendScreenProps): React.JSX
     await submitFriendRequest(friendId);
   }
 
-  function handleQrScan(userId: string): void {
+  function handleQrScan(data: string): void {
+    // Проверка: является ли QR invite-ссылкой
+    if (data.startsWith('voidchat://invite')) {
+      setShowScanner(false);
+
+      // Парсим параметры через простой split (URL API недоступен в RN)
+      const queryString = data.split('?')[1] || '';
+      const params: Record<string, string> = {};
+      queryString.split('&').forEach(pair => {
+        const [key, value] = pair.split('=');
+        if (key && value) {
+          params[decodeURIComponent(key)] = decodeURIComponent(value);
+        }
+      });
+
+      const host = params['host'] || '';
+      const port = params['port'] || '9001';
+      const userId = params['user'] || '';
+      const serverName = params['name'] || '';
+      const auto = params['auto'] === '1';
+
+      if (!host || !userId) {
+        toast('Неверный формат приглашения', 'error');
+        return;
+      }
+
+      // Навигируем на AddServerScreen с параметрами
+      navigation.replace('AddServer', {
+        initialHost: host,
+        initialPort: port,
+        initialName: serverName,
+        inviterUserId: userId,
+        autoFriend: auto,
+      });
+      return;
+    }
+
+    // Старое поведение — это userId
     // Проверка: не сканируем свой же QR
-    if (store.user && userId === store.user.userId) {
+    if (store.user && data === store.user.userId) {
       toast('Нельзя добавить самого себя', 'error');
       return;
     }
 
     // Проверка: контакт уже существует
-    if (store.contacts.some(c => c.userId === userId)) {
+    if (store.contacts.some(c => c.userId === data)) {
       toast('Пользователь уже в контактах', 'error');
       return;
     }
@@ -123,10 +160,10 @@ export function AddFriendScreen({ navigation }: AddFriendScreenProps): React.JSX
     setShowScanner(false);
 
     // Заполняем поле ввода (для UX)
-    setFriendId(userId);
+    setFriendId(data);
 
     // Автоматически отправляем friend request
-    submitFriendRequest(userId);
+    submitFriendRequest(data);
   }
 
   return (
