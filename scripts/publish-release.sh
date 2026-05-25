@@ -165,12 +165,35 @@ if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
     printf '🔗 <a href="%s">Полный список изменений</a>\n' "$CHANGELOG_URL"
   } > /tmp/voidchat_caption.txt
 
-  curl -s -S -X POST \
+  # Пробуем отправить APK с caption. Если caption не проходит (macOS curl),
+  # отправляем текст отдельным сообщением.
+  if curl -s -S -X POST \
     -F "chat_id=${TELEGRAM_CHAT_ID}" \
     -F "document=@${APK}" \
     -F "caption=</tmp/voidchat_caption.txt" \
     -F "parse_mode=HTML" \
-    "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" || warn "Telegram notification failed (non-fatal)"
+    "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" 2>/dev/null | grep -q '"ok":true'; then
+    : # success
+  else
+    warn "Telegram sendDocument failed, sending APK + text..."
+    curl -s -S -X POST \
+      "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+      -F "chat_id=${TELEGRAM_CHAT_ID}" \
+      -F "document=@${APK}" \
+      -F "caption=${TAG}" > /dev/null 2>&1 || true
+    NOTES_FLAT=$(echo "$NOTES" | tr '\n' ' ' | head -c 400)
+    curl -s -S -X POST \
+      "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+      -d "chat_id=${TELEGRAM_CHAT_ID}" \
+      -d "parse_mode=HTML" \
+      -d "text=<b>VoidChatApp ${TAG}</b>
+
+<b>Что нового:</b>
+${NOTES_FLAT}
+
+<a href=\"${CHANGELOG_URL}\">Полный список изменений</a>" > /dev/null 2>&1 || true
+    info "Telegram notification sent as two messages"
+  fi
 else
   warn "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set — skipping notification"
 fi
