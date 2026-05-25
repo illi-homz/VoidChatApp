@@ -352,20 +352,29 @@ export const ServerListScreen = observer(function ServerListScreen({
                   setEditIp(prevIp => {
                     const isDeleting = text.length < prevIp.length;
                     let clean = text.replace(/[^0-9.]/g, '');
+                    const endsWithDot = clean.endsWith('.');
                     const rawSegments = clean.split('.');
                     const processed: string[] = [];
                     for (const segment of rawSegments) {
+                      if (segment === '') continue;
                       for (let i = 0; i < segment.length; i += 3) {
+                        if (processed.length >= 4) break;
                         processed.push(segment.slice(i, i + 3));
                       }
+                      if (processed.length >= 4) break;
                     }
                     const final = processed.slice(0, 4);
                     let result = final.join('.');
-                    if (!isDeleting && final.length < 4) {
+                    // Авто-добавление точки только если набрано ровно 3 цифры
+                    if (!isDeleting && !endsWithDot && final.length < 4) {
                       const last = final[final.length - 1];
                       if (last && last.length === 3) {
                         result += '.';
                       }
+                    }
+                    // Сохраняем вручную поставленную точку (для сегментов < 3 цифр)
+                    if (endsWithDot && final.length < 4) {
+                      result += '.';
                     }
                     return result;
                   })
