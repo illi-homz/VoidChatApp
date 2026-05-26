@@ -15,6 +15,7 @@ export type RootStackParamList = {
         initialName?: string;
         initialHost?: string;
         initialPort?: string;
+        existingServerId?: string;
         // Deep link params (передаются через linking конфиг)
         host?: string;
         port?: string;

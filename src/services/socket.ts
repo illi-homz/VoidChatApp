@@ -843,7 +843,7 @@ class SocketService {
 
   offAutoFriendAdded(): void {
     this.autoFriendAddedCallbacks = [];
-    this.autoFriendAddedBuffer = [];
+    // НЕ очищаем буфер — события не должны теряться при переустановке слушателей
   }
 
   onInviteClaimed(
@@ -860,7 +860,7 @@ class SocketService {
 
   offInviteClaimed(): void {
     this.inviteClaimedCallbacks = [];
-    this.inviteClaimedBuffer = [];
+    // НЕ очищаем буфер — события не должны теряться при переустановке слушателей
   }
 }
 

@@ -31,15 +31,21 @@ export const IncomingCallBanner = React.memo(function IncomingCallBanner({
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.9)).current;
   const glowOpacity = useRef(new Animated.Value(0)).current;
+  const isMountedRef = useRef(true);
+  const animRef = useRef<Animated.CompositeAnimation | null>(null);
 
   useEffect(() => {
+    isMountedRef.current = true;
+    animRef.current?.stop();
+    animRef.current = null;
+
     if (visible) {
       opacity.setValue(0);
       scale.setValue(0.9);
       glowOpacity.setValue(0);
       setShowModal(true);
 
-      Animated.parallel([
+      const anim = Animated.parallel([
         Animated.timing(opacity, {
           toValue: 1,
           duration: 300,
@@ -63,16 +69,28 @@ export const IncomingCallBanner = React.memo(function IncomingCallBanner({
             useNativeDriver: true,
           }),
         ]),
-      ]).start();
+      ]);
+      animRef.current = anim;
+      anim.start();
     } else {
-      Animated.timing(opacity, {
+      const anim = Animated.timing(opacity, {
         toValue: 0,
         duration: 200,
         useNativeDriver: true,
-      }).start(() => {
-        setShowModal(false);
+      });
+      animRef.current = anim;
+      anim.start(() => {
+        if (isMountedRef.current) {
+          setShowModal(false);
+        }
       });
     }
+
+    return () => {
+      isMountedRef.current = false;
+      animRef.current?.stop();
+      animRef.current = null;
+    };
   }, [visible, opacity, scale, glowOpacity]);
 
   const initialLetter = contactName[0]?.toUpperCase() ?? contactId[0]?.toUpperCase() ?? '?';

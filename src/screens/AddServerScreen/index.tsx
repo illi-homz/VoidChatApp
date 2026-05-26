@@ -58,6 +58,7 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
   const initialHost = routeParams.initialHost ?? routeParams.host ?? undefined;
   const initialPort = routeParams.initialPort ?? routeParams.port ?? undefined;
   const initialName = routeParams.initialName ?? routeParams.name ?? undefined;
+  const existingServerId = routeParams.existingServerId ?? undefined;
   // autoFriend: true если явно true в autoFriend или auto=1/true в deep link
   const _autoRaw = routeParams.auto;
   const autoFriend =
@@ -112,6 +113,45 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
       setIsConnecting(true);
 
       try {
+        if (existingServerId) {
+          // Переключаемся на существующий сервер без создания дубликата
+          const existing = serverStore.servers.find(s => s.id === existingServerId);
+          if (!existing) {
+            toast('Сервер не найден', 'error');
+            setIsConnecting(false);
+            return;
+          }
+          await serverStore.setActive(existingServerId);
+          await appStore.load(existingServerId);
+
+          // Используем существующего пользователя на этом сервере
+          const user = appStore.user;
+          if (user) {
+            await socketService.connect(existing.url, user.userId, user.publicKey);
+          } else {
+            // Если пользователя нет — создаём нового (крайний случай)
+            await initCrypto();
+            const { publicKey, privateKey } = generateKeyPair();
+            const newUserId = uuidv4();
+            await appStore.saveUser({ userId: newUserId, publicKey, privateKey });
+            await socketService.connect(existing.url, newUserId, publicKey);
+          }
+
+          // Отправляем приглашение
+          const targetUserId = pendingInviterRef.current || inviterUserId || undefined;
+          const isAuto = pendingAutoRef.current || autoFriend || false;
+          if (targetUserId) {
+            if (isAuto) {
+              await socketService.sendClaimInvite(targetUserId);
+            } else {
+              await socketService.sendFriendRequest(targetUserId);
+            }
+          }
+
+          navigation.replace('Home');
+          return;
+        }
+
         await initCrypto();
         const { publicKey, privateKey } = generateKeyPair();
         const newUserId = uuidv4();

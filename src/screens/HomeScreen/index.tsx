@@ -238,14 +238,11 @@ export const HomeScreen = observer(function HomeScreen({
       socketService.offCallTimedOut();
       onMessageCleanupRef.current?.();
     };
-  }, [serverStore.activeServerId]);
+  }, [serverStore.activeServerId, socketService.connectionStatus]);
 
   function setupSocketListeners(): void {
-    if (socketService.connectionStatus !== 'connected') {
-      console.warn('[HomeScreen] Socket not connected, skipping listener setup');
-      return;
-    }
-
+    // Слушатели устанавливаются всегда, даже если сокет не подключён.
+    // Буферизация в socket.ts гарантирует, что события не потеряются.
     socketService.onKicked(handleKicked);
 
     socketService.onPresence(({ userId, online }) => {

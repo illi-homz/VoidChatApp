@@ -152,6 +152,35 @@ export const SettingsScreen = observer(function SettingsScreen({
           toast('Неверный формат приглашения', 'error');
           return;
         }
+
+        // Если сервер уже есть в списке и активен — отправляем приглашение напрямую
+        const serverUrl = `http://${host}:${port}`;
+        const existingServer = serverStore.servers.find(s => s.url === serverUrl);
+        if (existingServer && existingServer.id === serverStore.activeServerId) {
+          if (socketService.connectionStatus !== 'connected') {
+            toast('Нет соединения с сервером', 'error');
+            return;
+          }
+          socketService.sendClaimInvite(userId);
+          toast('Запрос дружбы отправлен', 'success');
+          return;
+        }
+
+        // Если сервер есть, но не активен — переключаемся на него и отправляем запрос
+        if (existingServer) {
+          toast('Переключение на сервер...', 'success');
+          navigation.navigate('AddServer', {
+            initialHost: host,
+            initialPort: port,
+            initialName: existingServer.name,
+            inviterUserId: userId,
+            autoFriend: auto,
+            existingServerId: existingServer.id,
+          });
+          return;
+        }
+
+        // Сервера нет — стандартный переход на AddServerScreen
         navigation.navigate('AddServer', {
           initialHost: host,
           initialPort: port,
@@ -163,7 +192,7 @@ export const SettingsScreen = observer(function SettingsScreen({
         toast('Отсканируйте QR-код приглашения на сервер', 'error');
       }
     },
-    [navigation, toast],
+    [navigation, toast, serverStore, socketService],
   );
 
   const runUpdate = useCallback(async () => {

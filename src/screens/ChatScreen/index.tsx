@@ -74,11 +74,9 @@ export const ChatScreen = observer(function ChatScreen({
 
   // Refs + state for local-only UI concerns (not persisted in store)
   const statusOverridesRef = useRef<Map<string, 'pending' | 'failed'>>(new Map());
-  // Used only via setStatusTick to trigger re-render after status override changes
-  const [, setStatusTick] = useState(0);
   const decryptedCacheRef = useRef<Map<string, string>>(new Map());
-  // Used only via setDecryptVersion to trigger re-render after decryption cache fills
-  const [, setDecryptVersion] = useState(0);
+  // Tick to force useMemo recalculation when status or decryption cache changes
+  const [tick, setTick] = useState(0);
   const messagesRef = useRef<MessageExt[]>([]);
 
   const initializeChat = useCallback((): void => {
@@ -128,7 +126,7 @@ export const ChatScreen = observer(function ChatScreen({
 
   const handleMessageSent = useCallback((data: { nonce: string }): void => {
     statusOverridesRef.current.delete(data.nonce);
-    setStatusTick(t => t + 1);
+    setTick(t => t + 1);
   }, []);
 
   const handleMessagesRead = useCallback(
@@ -146,7 +144,7 @@ export const ChatScreen = observer(function ChatScreen({
       if (data.to !== contactId) return;
       if (!data.nonce) return;
       statusOverridesRef.current.set(data.nonce, 'failed');
-      setStatusTick(t => t + 1);
+      setTick(t => t + 1);
     },
     [contactId],
   );
@@ -320,7 +318,7 @@ export const ChatScreen = observer(function ChatScreen({
       read: false,
     };
     statusOverridesRef.current.set(payload.nonce, 'pending');
-    setStatusTick(t => t + 1);
+    setTick(t => t + 1);
     store.addMessage(contactId, message).catch(e => console.warn('Failed to save message:', e));
     setInputText('');
   }, [inputText, contactId, store, socketService]);
@@ -376,7 +374,7 @@ export const ChatScreen = observer(function ChatScreen({
             : undefined;
         return { ...m, ciphertext: ct, status };
       }),
-    [_storeMessages, decryptedCacheRef, statusOverridesRef],
+    [_storeMessages, tick],
   );
   messagesRef.current = messages;
 
@@ -445,7 +443,7 @@ export const ChatScreen = observer(function ChatScreen({
       }
     });
     if (changed) {
-      setDecryptVersion(v => v + 1);
+      setTick(t => t + 1);
     }
   }, [isSecretReady, contactId]);
 

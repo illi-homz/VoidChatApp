@@ -238,7 +238,7 @@ export class AppStore {
   async addMessage(contactId: string, message: Message): Promise<void> {
     const existing = this.messages.get(contactId);
     if (existing) {
-      existing.push(message);
+      this.messages.set(contactId, [...existing, message]);
     } else {
       this.messages.set(contactId, [message]);
     }
