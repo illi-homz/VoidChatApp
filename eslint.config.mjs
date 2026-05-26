@@ -12,6 +12,7 @@ export default [
 			'jest.config.js',
 			'index.js',
 			'__tests__/**',
+			'src/**/__tests__/**',
 			'node_modules/**',
 			'android/**',
 			'ios/**',

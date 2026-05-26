@@ -1,0 +1,155 @@
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { observer } from 'mobx-react-lite';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../../navigation/types';
+import { useStore, useServerStore } from '../../stores';
+import { socketService } from '../../services/socket';
+import { Colors } from '../../theme/colors';
+import { Icon } from '../../components/Icon';
+import { styles } from './styles';
+
+interface StartupScreenProps {
+  navigation: NativeStackNavigationProp<RootStackParamList, 'Startup'>;
+}
+
+type StartupStatus = 'loading' | 'connecting' | 'error' | 'no_user';
+
+export const StartupScreen = observer(function StartupScreen({ navigation }: StartupScreenProps) {
+  const appStore = useStore();
+  const serverStore = useServerStore();
+  const [status, setStatus] = useState<StartupStatus>('loading');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [serverName, setServerName] = useState('');
+  const startedRef = useRef(false);
+
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    doStartup();
+  }, [doStartup]);
+
+  const doStartup = useCallback(async (): Promise<void> => {
+    try {
+      // 1. Ждём загрузки стора
+      if (!serverStore.isReady) {
+        setStatus('loading');
+        // Ждём небольшую паузу для загрузки
+        await new Promise<void>(resolve => setTimeout(resolve, 500));
+        if (!serverStore.isReady) {
+          // Если всё ещё не готов — подождём ещё
+          await new Promise<void>(resolve => {
+            const check = setInterval(() => {
+              if (serverStore.isReady) {
+                clearInterval(check);
+                resolve();
+              }
+            }, 100);
+          });
+        }
+      }
+
+      // 2. Если нет серверов — AddServer
+      if (serverStore.servers.length === 0) {
+        navigation.replace('AddServer');
+        return;
+      }
+
+      // 3. Определяем целевой сервер
+      const targetId = serverStore.activeServerId ?? serverStore.servers[0].id;
+      const targetServer = serverStore.servers.find(s => s.id === targetId);
+      if (!targetServer) {
+        setErrorMessage('Сервер не найден');
+        setStatus('error');
+        return;
+      }
+      setServerName(targetServer.name);
+      setStatus('connecting');
+
+      // 4. Загружаем данные сервера
+      await appStore.load(targetServer.id);
+
+      if (!appStore.user) {
+        setErrorMessage('Пользователь не найден на этом сервере');
+        setStatus('no_user');
+        return;
+      }
+
+      // 5. Устанавливаем активный сервер
+      await serverStore.setActive(targetServer.id);
+
+      // 6. Подключаемся к сокету с таймаутом 30 секунд
+      const timeoutId = setTimeout(() => {
+        socketService.disconnect();
+      }, 30000);
+
+      try {
+        await socketService.connect(
+          targetServer.url,
+          appStore.user.userId,
+          appStore.user.publicKey,
+        );
+        clearTimeout(timeoutId);
+      } catch (err) {
+        clearTimeout(timeoutId);
+        throw err;
+      }
+
+      // 7. Успех — на Home
+      navigation.replace('Home');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Неизвестная ошибка';
+      setErrorMessage(msg);
+      setStatus('error');
+    }
+  }, [serverStore, appStore, navigation, socketService]);
+
+  const handleRetry = useCallback(async (): Promise<void> => {
+    setStatus('loading');
+    setErrorMessage('');
+    startedRef.current = false;
+    await doStartup();
+  }, [doStartup]);
+
+  const handleSwitchServer = useCallback((): void => {
+    navigation.replace('ServerList', {
+      errorMessage: 'Сервер недоступен. Выберите другой сервер.',
+    });
+  }, [navigation]);
+
+  // RENDER STATES
+
+  if (status === 'loading' || status === 'connecting') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Text style={styles.logo}>VOID CHAT</Text>
+        <ActivityIndicator size='large' color={Colors.primary} style={styles.spinner} />
+        <Text style={styles.statusText}>
+          {status === 'loading' ? 'Загрузка...' : `Подключение к ${serverName}...`}
+        </Text>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <Text style={styles.logo}>VOID CHAT</Text>
+      <Icon name='triangle-alert' size={48} color={Colors.error} />
+      <Text style={styles.errorTitle}>Ошибка подключения</Text>
+      <Text style={styles.errorText}>{errorMessage}</Text>
+
+      <TouchableOpacity style={styles.retryButton} onPress={handleRetry} activeOpacity={0.7}>
+        <Text style={styles.retryButtonText}>Повторить</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.switchButton}
+        onPress={handleSwitchServer}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.switchButtonText}>Переключить сервер</Text>
+      </TouchableOpacity>
+    </SafeAreaView>
+  );
+});

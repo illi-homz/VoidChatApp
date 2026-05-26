@@ -1,0 +1,146 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, Modal, Animated } from 'react-native';
+import { Colors } from '../../theme/colors';
+import { Icon } from '../Icon';
+import { type CallType } from '../../types';
+import { styles } from './styles';
+
+interface IncomingCallBannerProps {
+  visible: boolean;
+  contactName: string;
+  contactId: string;
+  callType: CallType;
+  onAccept: () => void;
+  onDecline: () => void;
+}
+
+/**
+ * IncomingCallBanner — модальное окно входящего звонка.
+ * Появляется поверх любого экрана с анимацией золотого свечения.
+ * Содержит аватар контакта, имя, кнопки "Ответить" и "Отклонить".
+ */
+export const IncomingCallBanner = React.memo(function IncomingCallBanner({
+  visible,
+  contactName,
+  contactId,
+  callType,
+  onAccept,
+  onDecline,
+}: IncomingCallBannerProps): React.JSX.Element {
+  const [showModal, setShowModal] = useState(false);
+  const opacity = useRef(new Animated.Value(0)).current;
+  const scale = useRef(new Animated.Value(0.9)).current;
+  const glowOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      opacity.setValue(0);
+      scale.setValue(0.9);
+      glowOpacity.setValue(0);
+      setShowModal(true);
+
+      Animated.parallel([
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scale, {
+          toValue: 1,
+          friction: 6,
+          tension: 60,
+          useNativeDriver: true,
+        }),
+        Animated.sequence([
+          Animated.timing(glowOpacity, {
+            toValue: 0.5,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+          Animated.timing(glowOpacity, {
+            toValue: 0,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+        ]),
+      ]).start();
+    } else {
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start(() => {
+        setShowModal(false);
+      });
+    }
+  }, [visible, opacity, scale, glowOpacity]);
+
+  const initialLetter = contactName[0]?.toUpperCase() ?? contactId[0]?.toUpperCase() ?? '?';
+
+  return (
+    <Modal
+      visible={showModal}
+      transparent
+      animationType='none'
+      statusBarTranslucent
+      onRequestClose={onDecline}
+    >
+      <Animated.View style={[styles.overlay, { opacity }]}>
+        {/* Золотое свечение за карточкой */}
+        <Animated.View style={[styles.glow, { opacity: glowOpacity }]} pointerEvents='none' />
+
+        {/* Основная карточка */}
+        <Animated.View style={[styles.card, { transform: [{ scale }] }]}>
+          {/* Аватар */}
+          <View style={styles.avatarContainer}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{initialLetter}</Text>
+            </View>
+          </View>
+
+          {/* Текст */}
+          <View style={styles.callTypeRow}>
+            <Icon
+              name={callType === 'video' ? 'camera' : 'phone'}
+              size={16}
+              color={Colors.primary}
+            />
+            <Text style={styles.incomingLabel}>
+              {callType === 'video' ? 'ВИДЕОЗВОНОК' : 'АУДИОЗВОНОК'}
+            </Text>
+          </View>
+          <Text style={styles.contactName} numberOfLines={1}>
+            {contactName}
+          </Text>
+
+          {/* Кнопки */}
+          <View style={styles.buttonsRow}>
+            <TouchableOpacity
+              style={styles.declineButton}
+              onPress={onDecline}
+              activeOpacity={0.7}
+              accessibilityRole='button'
+              accessibilityLabel='Отклонить вызов'
+            >
+              <Icon name='x' size={24} color={Colors.background} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.acceptButton}
+              onPress={onAccept}
+              activeOpacity={0.7}
+              accessibilityRole='button'
+              accessibilityLabel={`Ответить на ${callType === 'video' ? 'видео' : 'аудио'}звонок`}
+            >
+              <Icon
+                name={callType === 'video' ? 'camera' : 'phone'}
+                size={24}
+                color={Colors.background}
+              />
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      </Animated.View>
+    </Modal>
+  );
+});
