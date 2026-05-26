@@ -36,7 +36,8 @@ export type IconName =
   | 'plus'
   | 'qr-code'
   | 'broom'
-  | 'server';
+  | 'server'
+  | 'download';
 
 interface IconProps {
   name: IconName;
@@ -348,6 +349,14 @@ const IconBase: React.FC<IconProps> = ({ name, size = 24, color = '#000', style 
           <Rect width='20' height='8' x='2' y='14' rx='2' ry='2' />
           <Line x1='6' y1='6' x2='6.01' y2='6' />
           <Line x1='6' y1='18' x2='6.01' y2='18' />
+        </Svg>
+      );
+    case 'download':
+      return (
+        <Svg {...svgProps}>
+          <Path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' />
+          <Polyline points='7 10 12 15 17 10' />
+          <Line x1='12' y1='15' x2='12' y2='3' />
         </Svg>
       );
     default:

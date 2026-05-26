@@ -78,6 +78,7 @@ src/
 │   ├── AddFriendScreen  # Отправка запроса дружбы (ждёт подтверждения сервера), кнопка вставки из буфера, умное сканирование QR (проверяет — есть ли сервер)
 │   └── AddServerScreen  # Добавление нового сервера (название + URL, генерация keypair)
 ├── services/
+│   ├── AppUpdater.ts    # Auto-update: проверка версии на GitHub, загрузка и установка APK
 │   ├── crypto.ts        # tweetnacl: X25519 + XSalsa20-Poly1305 (pure JS)
 │   ├── socket.ts        # Socket.IO клиент + heartbeat (30с) + все события
 │   ├── storage.ts       # AsyncStorage (in-memory cache для синхронного чтения)
@@ -310,6 +311,7 @@ tweetnacl-util ^0.15.1 — base64 + utf8 для tweetnacl
 socket.io-client ^4.8.3 — WebSocket relay
 react-native-get-random-values ^1.11.0 — полифилл crypto для Hermes
 react-native-qrcode-svg ^6.3.14 — QR-коды
+react-native-blob-util ^0.21.2 — загрузка файлов (APK для автообновления)
 uuid       ^10.0.0   — генерация ID
 ```
 

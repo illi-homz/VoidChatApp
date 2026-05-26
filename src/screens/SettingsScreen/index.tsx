@@ -17,11 +17,16 @@ import { useStore, useServerStore } from '../../stores';
 import { socketService } from '../../services/socket';
 import { useToast } from '../../components/Toast';
 import { QrScannerModal } from '../../components/QrScannerModal';
+import { ConfirmAlert } from '../../components/ConfirmAlert';
 import { Colors } from '../../theme';
 import { Icon } from '../../components/Icon';
 import { version } from '../../../package.json';
 import { formatDurationMs } from '../../utils/formatDuration';
 import { parseServerUrl } from '../../utils/parseServerUrl';
+import {
+  checkForUpdates,
+  downloadAndInstall,
+} from '../../services/AppUpdater';
 import { styles } from './styles';
 
 interface SettingsScreenProps {
@@ -44,6 +49,10 @@ export const SettingsScreen = observer(function SettingsScreen({
 
   const [reconnecting, setReconnecting] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
+  const [updateState, setUpdateState] = useState<
+    'idle' | 'checking' | 'downloading'
+  >('idle');
+  const [showUpdateConfirm, setShowUpdateConfirm] = useState(false);
 
   // --- Анимированная пульсация точки для состояния переподключения ---
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -156,6 +165,45 @@ export const SettingsScreen = observer(function SettingsScreen({
     },
     [navigation, toast],
   );
+
+  const runUpdate = useCallback(async () => {
+    setUpdateState('checking');
+    try {
+      const result = await checkForUpdates();
+
+      if (!result.hasUpdate) {
+        toast(
+          `У вас последняя версия v${version}`,
+          'success',
+        );
+        setUpdateState('idle');
+        return;
+      }
+
+      if (!result.downloadUrl) {
+        toast('APK не найден в релизе на GitHub', 'warning');
+        setUpdateState('idle');
+        return;
+      }
+
+      setUpdateState('downloading');
+      const fileName = `VoidChatApp-v${result.latestVersion}.apk`;
+      await downloadAndInstall(result.downloadUrl, fileName);
+
+      // После запуска установки возвращаемся в idle
+      setUpdateState('idle');
+      toast('Загрузка завершена, установите APK', 'success');
+    } catch (err: any) {
+      const message =
+        err?.message || 'Неизвестная ошибка';
+      toast(message, 'error');
+      setUpdateState('idle');
+    }
+  }, [toast]);
+
+  const handleUpdate = useCallback(() => {
+    setShowUpdateConfirm(true);
+  }, []);
 
   return (
     <View style={[styles.container, { paddingBottom: insets.bottom }]}>
@@ -313,6 +361,23 @@ export const SettingsScreen = observer(function SettingsScreen({
           onClose={() => setShowScanner(false)}
         />
 
+        <ConfirmAlert
+          visible={showUpdateConfirm}
+          title='Обновить приложение?'
+          message='Будет проверена последняя версия на GitHub. При наличии обновления будет загружен APK для установки.'
+          confirmText='Обновить'
+          cancelText='Отмена'
+          confirmIcon='download'
+          cancelIcon='x'
+          confirmBgColor='rgba(0,204,136,0.15)'
+          confirmTextColor={Colors.success}
+          onConfirm={() => {
+            setShowUpdateConfirm(false);
+            runUpdate();
+          }}
+          onCancel={() => setShowUpdateConfirm(false)}
+        />
+
         {/* Секция: О приложении */}
         <Text style={styles.sectionTitle}>О ПРИЛОЖЕНИИ</Text>
         <View style={styles.sectionCard}>
@@ -335,6 +400,33 @@ export const SettingsScreen = observer(function SettingsScreen({
               <Text style={styles.aboutQrHint}>Скачать последнюю версию</Text>
             </View>
           </View>
+
+          <TouchableOpacity
+            style={[
+              styles.updateButton,
+              updateState !== 'idle' && styles.updateButtonDisabled,
+            ]}
+            onPress={handleUpdate}
+            disabled={updateState !== 'idle'}
+            activeOpacity={0.7}
+          >
+            {updateState === 'checking' ? (
+              <>
+                <ActivityIndicator size={18} color={Colors.primary} />
+                <Text style={styles.updateButtonText}> Проверка...</Text>
+              </>
+            ) : updateState === 'downloading' ? (
+              <>
+                <ActivityIndicator size={18} color={Colors.primary} />
+                <Text style={styles.updateButtonText}> Загрузка...</Text>
+              </>
+            ) : (
+              <>
+                <Icon name='download' size={18} color={Colors.primary} />
+                <Text style={styles.updateButtonText}> Обновить</Text>
+              </>
+            )}
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </View>

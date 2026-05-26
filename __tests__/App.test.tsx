@@ -16,6 +16,14 @@ jest.mock(
   { virtual: true },
 );
 
+jest.mock('react-native-blob-util', () => ({
+  fs: { dirs: { CacheDir: '/cache' } },
+  config: jest.fn(() => ({
+    fetch: jest.fn(() => Promise.resolve({ path: () => '/tmp/test.apk' })),
+  })),
+  android: { actionViewIntent: jest.fn() },
+}));
+
 jest.mock('react-native-webrtc', () => ({
   mediaDevices: {
     getUserMedia: jest.fn(() =>
