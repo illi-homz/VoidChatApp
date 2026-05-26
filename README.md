@@ -75,9 +75,8 @@ src/
 │   ├── HomeScreen       # Список контактов, обработка запросов дружбы
 │   ├── ChatScreen       # E2E-чат с индикацией доставки сообщений
 │   ├── CallScreen       # Экран голосового звонка (fullScreenModal)
-│   ├── AddFriendScreen  # Отправка запроса дружбы (ждёт подтверждения сервера), кнопка вставки из буфера
-│   ├── AddServerScreen  # Добавление нового сервера (название + URL, генерация keypair)
-│   └── ShareIdScreen    # QR-код + текст для шаринга ID
+│   ├── AddFriendScreen  # Отправка запроса дружбы (ждёт подтверждения сервера), кнопка вставки из буфера, умное сканирование QR (проверяет — есть ли сервер)
+│   └── AddServerScreen  # Добавление нового сервера (название + URL, генерация keypair)
 ├── services/
 │   ├── crypto.ts        # tweetnacl: X25519 + XSalsa20-Poly1305 (pure JS)
 │   ├── socket.ts        # Socket.IO клиент + heartbeat (30с) + все события

@@ -104,7 +104,7 @@ export const ServerListScreen = observer(function ServerListScreen({
           onPress={() => navigation.navigate('AddServer')}
           activeOpacity={0.7}
         >
-          <Text style={styles.addHeaderButtonText}>+</Text>
+          <Icon name='plus' size={22} color='#000' />
         </TouchableOpacity>
       ),
     });
@@ -585,19 +585,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   addHeaderButton: {
-    backgroundColor: Colors.primary,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: Colors.primary,
     borderWidth: 1.5,
-    borderColor: Colors.primaryDark,
-  },
-  addHeaderButtonText: {
-    color: '#000',
-    fontSize: 22,
-    fontWeight: '700',
-    lineHeight: 24,
+    borderColor: Colors.primaryDark || '#F0C080',
   },
 });

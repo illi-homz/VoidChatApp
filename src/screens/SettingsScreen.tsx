@@ -131,6 +131,12 @@ export const SettingsScreen = observer(function SettingsScreen({
     toast('Ссылка приглашения скопирована', 'success');
   }
 
+  function copyApkLink() {
+    const apkUrl = `https://github.com/illi-homz/VoidChatApp/releases/latest`;
+    Clipboard.setString(apkUrl);
+    toast('Ссылка на APK скопирована', 'success');
+  }
+
   function handleQrScan(data: string): void {
     if (data.startsWith('voidchat://invite')) {
       setShowScanner(false);
@@ -169,31 +175,16 @@ export const SettingsScreen = observer(function SettingsScreen({
         {/* Секция: Мой контакт */}
         <Text style={styles.sectionTitle}>МОЙ КОНТАКТ</Text>
         <View style={styles.sectionCard}>
-          <View style={styles.qrContainer}>
-            {user ? (
-              <QRCode
-                value={user.userId}
-                size={150}
-                backgroundColor={Colors.surface}
-                color={Colors.primary}
-              />
-            ) : (
-              <View style={[styles.qrPlaceholder, { backgroundColor: Colors.surface }]} />
-            )}
-          </View>
-
           {user && (
-            <>
-              <TouchableOpacity style={styles.idContainer} onPress={copyId} activeOpacity={0.7}>
-                <Text style={styles.idLabel}>Ваш ID:</Text>
-                <Text style={styles.idValue} numberOfLines={1} ellipsizeMode='middle'>
-                  {user.userId}
-                </Text>
-                <View style={styles.idCopyIcon}>
-                  <Icon name='copy' size={14} color={Colors.textMuted} />
-                </View>
-              </TouchableOpacity>
-            </>
+            <TouchableOpacity style={styles.idContainer} onPress={copyId} activeOpacity={0.7}>
+              <Text style={styles.idLabel}>Ваш ID:</Text>
+              <Text style={styles.idValue} numberOfLines={1} ellipsizeMode='middle'>
+                {user.userId}
+              </Text>
+              <View style={styles.idCopyIcon}>
+                <Icon name='copy' size={14} color={Colors.textMuted} />
+              </View>
+            </TouchableOpacity>
           )}
         </View>
 
@@ -311,25 +302,50 @@ export const SettingsScreen = observer(function SettingsScreen({
                   </View>
                 </TouchableOpacity>
               </View>
-
-              <QrScannerModal
-                visible={showScanner}
-                onScan={handleQrScan}
-                onClose={() => setShowScanner(false)}
-              />
             </>
           ) : (
-            <Text style={styles.connectedSince}>Сервер не выбран</Text>
+            <View style={styles.noServerContainer}>
+              <Text style={styles.noServerText}>Сервер не выбран</Text>
+              <TouchableOpacity
+                style={styles.noServerScanButton}
+                onPress={() => setShowScanner(true)}
+                activeOpacity={0.7}
+              >
+                <Icon name='camera' size={22} color='#000' />
+                <Text style={styles.noServerScanText}> Отсканировать QR приглашения</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
+
+        {/* QrScannerModal всегда рендерится, чтобы работать при любом состоянии сервера */}
+        <QrScannerModal
+          visible={showScanner}
+          onScan={handleQrScan}
+          onClose={() => setShowScanner(false)}
+        />
 
         {/* Секция: О приложении */}
         <Text style={styles.sectionTitle}>О ПРИЛОЖЕНИИ</Text>
         <View style={styles.sectionCard}>
-          <View style={styles.aboutContainer}>
-            <Text style={styles.aboutLogo}>VOID CHAT</Text>
-            <Text style={styles.aboutVersion}>v{version}</Text>
-            <Text style={styles.aboutBuilt}>Developed by illi-homz</Text>
+          <View style={styles.aboutRow}>
+            <View style={styles.aboutLeft}>
+              <Text style={styles.aboutLogo}>VOID CHAT</Text>
+              <TouchableOpacity onPress={copyApkLink} activeOpacity={0.7} style={styles.versionRow}>
+                <Text style={styles.aboutVersion}>v{version}</Text>
+                <Icon name='copy' size={14} color={Colors.textMuted} />
+              </TouchableOpacity>
+              <Text style={styles.aboutBuilt}>Developed by illi-homz</Text>
+            </View>
+            <View style={styles.aboutRight}>
+              <QRCode
+                value='https://github.com/illi-homz/VoidChatApp/releases/latest'
+                size={110}
+                backgroundColor={Colors.surface}
+                color={Colors.primary}
+              />
+              <Text style={styles.aboutQrHint}>Скачать последнюю версию</Text>
+            </View>
           </View>
         </View>
       </ScrollView>
@@ -529,9 +545,17 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  aboutContainer: {
+  aboutRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 16,
+  },
+  aboutLeft: {
+    flex: 1,
+    marginRight: 16,
+  },
+  aboutRight: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   aboutLogo: {
     fontSize: 28,
@@ -539,13 +563,47 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     marginBottom: 8,
   },
+  versionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
   aboutVersion: {
     fontSize: 14,
     color: Colors.textSecondary,
-    marginBottom: 4,
   },
   aboutBuilt: {
     fontSize: 12,
     color: Colors.textMuted,
+  },
+  aboutQrHint: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+
+  noServerContainer: {
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+  noServerText: {
+    fontSize: 13,
+    color: Colors.textPrimary,
+    marginBottom: 16,
+  },
+  noServerScanButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+  },
+  noServerScanText: {
+    color: '#000',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

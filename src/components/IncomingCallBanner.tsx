@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, Modal, StyleSheet, Animated } from 'react-native';
 import { Colors } from '../theme/colors';
-import { CallIcon } from './CallIcon';
 import { Icon } from './Icon';
 import { type CallType } from '../types';
 
@@ -122,8 +121,7 @@ export function IncomingCallBanner({
               accessibilityRole='button'
               accessibilityLabel='Отклонить вызов'
             >
-              <Icon name='x' size={20} color={Colors.error} />
-              <Text style={styles.declineText}>Отклонить</Text>
+              <Icon name='x' size={24} color={Colors.background} />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -133,8 +131,11 @@ export function IncomingCallBanner({
               accessibilityRole='button'
               accessibilityLabel={`Ответить на ${callType === 'video' ? 'видео' : 'аудио'}звонок`}
             >
-              <CallIcon size={20} color={Colors.background} />
-              <Text style={styles.acceptText}>Ответить</Text>
+              <Icon
+                name={callType === 'video' ? 'camera' : 'phone'}
+                size={24}
+                color={Colors.background}
+              />
             </TouchableOpacity>
           </View>
         </Animated.View>
@@ -223,43 +224,28 @@ const styles = StyleSheet.create({
   },
   buttonsRow: {
     flexDirection: 'row',
-    width: '100%',
-    gap: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 20,
   },
   acceptButton: {
-    flex: 1,
-    height: 52,
-    borderRadius: 12,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: Colors.success,
     justifyContent: 'center',
     alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8,
     borderWidth: 1.5,
     borderColor: 'rgba(0, 255, 136, 0.3)',
   },
-  acceptText: {
-    color: Colors.background,
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
   declineButton: {
-    flex: 1,
-    height: 52,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 68, 68, 0.15)',
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: Colors.error,
     justifyContent: 'center',
     alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8,
     borderWidth: 1.5,
-    borderColor: Colors.error,
-  },
-  declineText: {
-    color: Colors.error,
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 0.5,
+    borderColor: 'rgba(255, 68, 68, 0.5)',
   },
 });

@@ -245,7 +245,7 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
             onChangeText={text =>
               setIp(prevIp => {
                 const isDeleting = text.length < prevIp.length;
-                let clean = text.replace(/[^0-9.]/g, '');
+                let clean = text.replace(/,/g, '.').replace(/[^0-9.]/g, '');
                 const endsWithDot = clean.endsWith('.');
                 const rawSegments = clean.split('.');
                 // Разбиваем длинные группы цифр на сегменты по 3
@@ -278,7 +278,7 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
             placeholderTextColor={Colors.textMuted}
             autoCapitalize='none'
             autoCorrect={false}
-            keyboardType='url'
+            keyboardType='number-pad'
             editable={!isConnecting}
           />
           {ip.length > 0 && !isConnecting && <ClearButton onPress={() => setIp('')} />}

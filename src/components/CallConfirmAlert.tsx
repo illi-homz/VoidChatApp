@@ -1,8 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, Modal, StyleSheet, Animated } from 'react-native';
 import { Colors } from '../theme/colors';
-import { CallIcon } from './CallIcon';
-import { CameraIcon } from './CameraIcon';
+import { Icon } from './Icon';
 
 interface CallConfirmAlertProps {
   visible: boolean;
@@ -76,7 +75,7 @@ export function CallConfirmAlert({
           {/* Декоративная иконка */}
           <View style={styles.iconContainer}>
             <View style={styles.iconCircle}>
-              <CallIcon size={32} color={Colors.primary} />
+              <Icon name='phone' size={32} color={Colors.primary} />
             </View>
           </View>
 
@@ -87,37 +86,37 @@ export function CallConfirmAlert({
           <Text style={styles.contactName}>{contactName}?</Text>
 
           {/* Кнопки */}
-          <TouchableOpacity
-            style={styles.videoButton}
-            onPress={onVideoCall}
-            activeOpacity={0.7}
-            accessibilityRole='button'
-            accessibilityLabel='Видеозвонок'
-          >
-            <CameraIcon size={20} color={Colors.background} />
-            <Text style={styles.actionText}>Видеозвонок</Text>
-          </TouchableOpacity>
+          <View style={styles.buttonsRow}>
+            <TouchableOpacity
+              style={styles.videoButton}
+              onPress={onVideoCall}
+              activeOpacity={0.7}
+              accessibilityRole='button'
+              accessibilityLabel='Видеозвонок'
+            >
+              <Icon name='camera' size={24} color={Colors.background} />
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.audioButton}
-            onPress={onAudioCall}
-            activeOpacity={0.7}
-            accessibilityRole='button'
-            accessibilityLabel='Аудиозвонок'
-          >
-            <CallIcon size={20} color={Colors.background} />
-            <Text style={styles.actionText}>Аудиозвонок</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.audioButton}
+              onPress={onAudioCall}
+              activeOpacity={0.7}
+              accessibilityRole='button'
+              accessibilityLabel='Аудиозвонок'
+            >
+              <Icon name='phone' size={24} color={Colors.background} />
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.cancelButton}
-            onPress={onCancel}
-            activeOpacity={0.7}
-            accessibilityRole='button'
-            accessibilityLabel='Отменить вызов'
-          >
-            <Text style={styles.cancelText}>Отмена</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={onCancel}
+              activeOpacity={0.7}
+              accessibilityRole='button'
+              accessibilityLabel='Отменить вызов'
+            >
+              <Icon name='x' size={24} color={Colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
         </Animated.View>
       </Animated.View>
     </Modal>
@@ -174,52 +173,40 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     textAlign: 'center',
   },
+  buttonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
   videoButton: {
-    width: '100%',
-    height: 48,
-    borderRadius: 12,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: Colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8,
     borderWidth: 1.5,
     borderColor: 'rgba(255, 215, 0, 0.3)',
-    marginBottom: 12,
   },
   audioButton: {
-    width: '100%',
-    height: 48,
-    borderRadius: 12,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: Colors.primaryDark,
     justifyContent: 'center',
     alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8,
     borderWidth: 1.5,
     borderColor: 'rgba(255, 215, 0, 0.3)',
-    marginBottom: 16,
-  },
-  actionText: {
-    color: Colors.background,
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 0.5,
   },
   cancelButton: {
-    width: '100%',
-    height: 48,
-    borderRadius: 12,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1.5,
     borderColor: Colors.border,
     backgroundColor: Colors.surface,
-  },
-  cancelText: {
-    color: Colors.textSecondary,
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: 0.5,
   },
 });

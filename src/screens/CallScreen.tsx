@@ -6,7 +6,6 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Colors } from '../theme/colors';
 import { Icon } from '../components/Icon';
-import { CallIcon } from '../components/CallIcon';
 import { callStore } from '../stores/CallStore';
 import { webrtcService } from '../services/WebRTCService';
 import { socketService } from '../services/socket';
@@ -447,7 +446,6 @@ const CallScreenComponent: React.FC = observer(() => {
   const showFailed = callStatus === 'failed';
   const showTimer = callStatus === 'connected';
   const showPulse = callStatus === 'calling' || callStatus === 'ringing';
-  const showControls = callStatus === 'connected';
   const isInactive = callStatus === 'ended' || callStatus === 'failed';
 
   return (
@@ -571,9 +569,8 @@ const CallScreenComponent: React.FC = observer(() => {
           onPress={handleEndCall}
           accessibilityLabel='Завершить звонок'
         >
-          <CallIcon size={28} color={Colors.textPrimary} />
+          <Icon name='phone-off' size={28} color={Colors.textPrimary} />
         </ScaleBtn>
-        {!showControls && !isInactive && <Text style={styles.endCallLabel}>Завершить</Text>}
       </View>
     </View>
   );
@@ -635,16 +632,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(5, 18, 13, 0.55)',
   },
   controlButtonActive: { borderColor: Colors.primary, backgroundColor: Colors.surface },
-  controlLabel: { fontSize: 12, color: Colors.textSecondary, marginTop: 4 },
-  controlLabelActive: { color: Colors.primary },
   endCallSection: { alignItems: 'center' },
   endCallButton: {
     width: 64,
     height: 64,
     borderRadius: 32,
+    borderWidth: 2,
+    borderColor: Colors.error,
     backgroundColor: Colors.error,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  endCallLabel: { color: Colors.error, fontSize: 12, marginTop: 8 },
 });

@@ -9,10 +9,11 @@ import {
   Clipboard,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { observer } from 'mobx-react-lite';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
 import type { Contact } from '../types';
-import { useStore } from '../stores';
+import { useStore, useServerStore } from '../stores';
 import { socketService } from '../services/socket';
 import { useToast } from '../components/Toast';
 import { QrScannerModal } from '../components/QrScannerModal';
@@ -23,9 +24,12 @@ interface AddFriendScreenProps {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AddFriend'>;
 }
 
-export function AddFriendScreen({ navigation }: AddFriendScreenProps): React.JSX.Element {
+export const AddFriendScreen = observer(function AddFriendScreen({
+  navigation,
+}: AddFriendScreenProps): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const store = useStore();
+  const serverStore = useServerStore();
   const { toast } = useToast();
   const [friendId, setFriendId] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -142,7 +146,20 @@ export function AddFriendScreen({ navigation }: AddFriendScreenProps): React.JSX
         return;
       }
 
-      // Навигируем на AddServerScreen с параметрами
+      // Проверяем: есть ли уже этот сервер в списке и активен ли он
+      const inviteUrl = `http://${host}:${port}`;
+      const existingServer = serverStore.servers.find(s => s.url === inviteUrl);
+
+      if (existingServer && serverStore.activeServerId === existingServer.id) {
+        // Сервер уже есть и активен — отправляем friend request напрямую.
+        // Параметр auto=1 не используется здесь осознанно: будучи на сервере,
+        // пользователь добавляет контакт через обычный friend_request
+        // (с подтверждением), а не через claim_invite (без подтверждения).
+        submitFriendRequest(userId);
+        return;
+      }
+
+      // Сервера нет или он не активен — навигируем на AddServerScreen
       navigation.replace('AddServer', {
         initialHost: host,
         initialPort: port,
@@ -238,7 +255,7 @@ export function AddFriendScreen({ navigation }: AddFriendScreenProps): React.JSX
       />
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {
