@@ -103,15 +103,10 @@ export const ChatScreen = observer(function ChatScreen({
           serverMessage.nonce,
           sharedSecretRef.current,
         );
-        const message: Message = {
-          id: uuidv4(),
-          from: serverMessage.from,
-          ciphertext: decrypted,
-          nonce: serverMessage.nonce,
-          timestamp: serverMessage.timestamp,
-          read: false,
-        };
-        store.addMessage(contactId, message).catch(e => console.warn('Failed to save message:', e));
+        // Сохраняем расшифрованный текст в кеш — HomeScreen уже сохранил
+        // зашифрованное сообщение в store. Не дублируем сохранение.
+        decryptedCacheRef.current.set(serverMessage.nonce, decrypted);
+        setTick(t => t + 1);
         store.markAsRead(contactId).catch(e => console.warn('Failed to mark as read:', e));
         serverStore
           .recalculateServerUnread(store.currentServerId!)
