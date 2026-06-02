@@ -426,6 +426,8 @@ export const ChatScreen = observer(function ChatScreen({
   }, [contactId]);
 
   // Расшифровываем сообщения, загруженные из store (сохранённые HomeScreen в зашифрованном виде)
+  // Зависимость messageCount — чтобы эффект срабатывал после холодной загрузки из SQLite
+  const messageCount = store.getMessages(contactId).length;
   useEffect(() => {
     if (!isSecretReady) return;
     let changed = false;
@@ -443,7 +445,7 @@ export const ChatScreen = observer(function ChatScreen({
     if (changed) {
       setTick(t => t + 1);
     }
-  }, [isSecretReady, contactId]);
+  }, [isSecretReady, contactId, messageCount]);
 
   useEffect(() => {
     if (Platform.OS !== 'android') return;
