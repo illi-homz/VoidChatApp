@@ -144,5 +144,21 @@ export async function downloadAndInstall(downloadUrl: string, fileName: string):
         'Установка приложения',
       );
     }
+
+    // Cleanup: best-effort удаление старых APK из кэша.
+    // Текущий файл (fileName) не удаляем — на Android 7-9 PackageInstaller
+    // может читать напрямую из URI, не копируя APK.
+    try {
+      const cacheDir = ReactNativeBlobUtil.fs.dirs.CacheDir;
+      const files = await ReactNativeBlobUtil.fs.ls(cacheDir);
+      const oldApks = files.filter(
+        f => f.startsWith('VoidChatApp-v') && f.endsWith('.apk') && f !== fileName,
+      );
+      await Promise.all(
+        oldApks.map(f => ReactNativeBlobUtil.fs.unlink(`${cacheDir}/${f}`).catch(() => {})),
+      );
+    } catch (_e) {
+      // Не критично — файлы удаляются по возможности
+    }
   }
 }

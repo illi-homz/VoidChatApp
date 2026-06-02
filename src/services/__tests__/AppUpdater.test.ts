@@ -1,11 +1,16 @@
 jest.mock('react-native-blob-util', () => ({
-  fs: { dirs: { CacheDir: '/cache' } },
+  fs: {
+    dirs: { CacheDir: '/cache' },
+    ls: jest.fn(() => Promise.resolve([])),
+    unlink: jest.fn(() => Promise.resolve()),
+  },
   config: jest.fn(() => ({
     fetch: jest.fn(() => Promise.resolve({ path: () => '/tmp/test.apk' })),
   })),
   android: { actionViewIntent: jest.fn() },
 }));
 
+import { Platform } from 'react-native';
 import { parseGithubTag, compareVersions, downloadLatestApk } from '../AppUpdater';
 
 describe('parseGithubTag', () => {
@@ -108,5 +113,37 @@ describe('downloadLatestApk', () => {
   it('бросает ошибку если в ответе нет tag_name и APK отсутствует', async () => {
     mockFetch(200, { assets: [] });
     await expect(downloadLatestApk()).rejects.toThrow('APK не найден в последнем релизе на GitHub');
+  });
+
+  it('удаляет старые APK из кэша, сохраняя текущий', async () => {
+    jest.replaceProperty(Platform, 'OS', 'android');
+
+    const ReactNativeBlobUtil = require('react-native-blob-util');
+    const lsMock = ReactNativeBlobUtil.fs.ls;
+    const unlinkMock = ReactNativeBlobUtil.fs.unlink;
+
+    // В кэше есть старый APK + какой-то другой файл
+    lsMock.mockResolvedValue([
+      'VoidChatApp-v1.4.0.apk',
+      'VoidChatApp-v1.3.0.apk',
+      'some_other_file.tmp',
+    ]);
+
+    mockFetch(200, successBody);
+    await downloadLatestApk();
+
+    // ls вызван с CacheDir
+    expect(lsMock).toHaveBeenCalledWith('/cache');
+
+    // Удалены только старые APK (2 штуки), не текущий
+    expect(unlinkMock).toHaveBeenCalledTimes(2);
+    expect(unlinkMock).toHaveBeenCalledWith('/cache/VoidChatApp-v1.4.0.apk');
+    expect(unlinkMock).toHaveBeenCalledWith('/cache/VoidChatApp-v1.3.0.apk');
+
+    // Файл some_other_file.tmp не тронут
+    expect(unlinkMock).not.toHaveBeenCalledWith('/cache/some_other_file.tmp');
+
+    // Текущий APK (VoidChatApp-v1.5.0.apk) не удалён
+    expect(unlinkMock).not.toHaveBeenCalledWith('/cache/VoidChatApp-v1.5.0.apk');
   });
 });
