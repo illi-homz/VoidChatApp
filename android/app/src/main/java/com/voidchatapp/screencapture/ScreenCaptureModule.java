@@ -1,5 +1,6 @@
 package com.voidchatapp.screencapture;
 
+import android.app.Activity;
 import android.util.Log;
 import android.view.WindowManager;
 
@@ -25,31 +26,41 @@ public class ScreenCaptureModule extends ReactContextBaseJavaModule {
 
     @ReactMethod
     public void allowScreenCapture() {
-        try {
-            var activity = getCurrentActivity();
-            if (activity == null) {
-                Log.w(TAG, "allowScreenCapture: current activity is null");
-                return;
-            }
-            activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        runOnUiThread(window -> {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
             Log.d(TAG, "allowScreenCapture: FLAG_SECURE removed");
-        } catch (Exception e) {
-            Log.e(TAG, "allowScreenCapture error", e);
-        }
+        });
     }
 
     @ReactMethod
     public void disallowScreenCapture() {
+        runOnUiThread(window -> {
+            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+            Log.d(TAG, "disallowScreenCapture: FLAG_SECURE set");
+        });
+    }
+
+    /** Выполняет действие с Window на UI потоке. */
+    private void runOnUiThread(WindowCallback callback) {
         try {
-            var activity = getCurrentActivity();
+            Activity activity = getCurrentActivity();
             if (activity == null) {
-                Log.w(TAG, "disallowScreenCapture: current activity is null");
+                Log.w(TAG, "runOnUiThread: current activity is null");
                 return;
             }
-            activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
-            Log.d(TAG, "disallowScreenCapture: FLAG_SECURE set");
+            activity.runOnUiThread(() -> {
+                try {
+                    callback.run(activity.getWindow());
+                } catch (Exception e) {
+                    Log.e(TAG, "Window operation error", e);
+                }
+            });
         } catch (Exception e) {
-            Log.e(TAG, "disallowScreenCapture error", e);
+            Log.e(TAG, "runOnUiThread error", e);
         }
+    }
+
+    private interface WindowCallback {
+        void run(android.view.Window window);
     }
 }

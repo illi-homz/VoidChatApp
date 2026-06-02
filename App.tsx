@@ -5,6 +5,7 @@ import BootSplash from 'react-native-bootsplash';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { serverStore } from './src/stores/ServerStore';
 import { dbService } from './src/services/DatabaseService';
+import { screenCapture } from './src/services/ScreenCapture';
 import { StoreProvider } from './src/stores';
 import { ToastProvider } from './src/components/Toast';
 import { NotificationProvider } from './src/components/NotificationBanner';
@@ -22,6 +23,13 @@ function App(): React.JSX.Element {
       }
       serverStore.load();
     })();
+  }, []);
+
+  // В debug-сборке разрешаем скриншоты с самого старта
+  useEffect(() => {
+    if (__DEV__) {
+      screenCapture.allowScreenCapture();
+    }
   }, []);
 
   const handleNavigationReady = useCallback(() => {
