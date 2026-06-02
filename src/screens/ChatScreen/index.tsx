@@ -357,10 +357,20 @@ export const ChatScreen = observer(function ChatScreen({
   }, []);
 
   // Build display messages from MobX store + local overrides
+  // Decrypt on-the-fly (before first render) to prevent flash of encrypted content
   const _storeMessages = store.getMessages(contactId);
   const messages: MessageExt[] = useMemo(
     () =>
       _storeMessages.map(m => {
+        // Decrypt synchronously if not yet cached (cold load from SQLite)
+        if (m.from !== 'me' && sharedSecretRef.current && !decryptedCacheRef.current.has(m.id)) {
+          try {
+            const decrypted = decryptMessage(m.ciphertext, m.nonce, sharedSecretRef.current);
+            decryptedCacheRef.current.set(m.id, decrypted);
+          } catch {
+            // keep ciphertext
+          }
+        }
         const ct =
           m.from !== 'me' && decryptedCacheRef.current.has(m.id)
             ? decryptedCacheRef.current.get(m.id)!
