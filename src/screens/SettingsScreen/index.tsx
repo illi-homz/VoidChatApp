@@ -25,6 +25,7 @@ import { formatDurationMs } from '../../utils/formatDuration';
 import { parseServerUrl } from '../../utils/parseServerUrl';
 import { getHitSlop } from '../../utils/getHitSlop';
 import { checkForUpdates, downloadAndInstall, downloadLatestApk } from '../../services/AppUpdater';
+import { screenCapture } from '../../services/ScreenCapture';
 import { styles } from './styles';
 
 interface SettingsScreenProps {
@@ -36,6 +37,7 @@ export const SettingsScreen = observer(function SettingsScreen({
 }: SettingsScreenProps) {
   const insets = useSafeAreaInsets();
   const store = useStore();
+  const { devMode } = store;
   const serverStore = useServerStore();
   const { toast } = useToast();
 
@@ -54,7 +56,6 @@ export const SettingsScreen = observer(function SettingsScreen({
     'idle',
   );
   const [showForceUpdateConfirm, setShowForceUpdateConfirm] = useState(false);
-  const [devMode, setDevMode] = useState(false);
 
   // --- Анимированная пульсация точки для состояния переподключения ---
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -83,6 +84,15 @@ export const SettingsScreen = observer(function SettingsScreen({
       pulseAnim.setValue(1);
     }
   }, [connectionStatus, pulseAnim]);
+
+  // Синхронизация FLAG_SECURE с dev mode
+  useEffect(() => {
+    if (devMode) {
+      screenCapture.allowScreenCapture();
+    } else {
+      screenCapture.disallowScreenCapture();
+    }
+  }, [devMode]);
 
   const server = serverStore.activeServer;
   const user = store.user;
@@ -265,11 +275,13 @@ export const SettingsScreen = observer(function SettingsScreen({
 
     if (versionTapCountRef.current >= 10) {
       versionTapCountRef.current = 0;
-      const newMode = !devMode;
-      setDevMode(newMode);
-      toast(newMode ? 'Режим разработчика включён' : 'Режим разработчика выключен', 'success');
+      store.toggleDevMode();
+      toast(
+        store.devMode ? 'Режим разработчика включён' : 'Режим разработчика выключен',
+        'success',
+      );
     }
-  }, [devMode, toast]);
+  }, [toast]);
 
   return (
     <View style={[styles.container, { paddingBottom: insets.bottom }]}>

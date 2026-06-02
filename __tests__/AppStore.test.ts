@@ -188,3 +188,42 @@ describe('AppStore.deleteMessages', () => {
     expect(deleteMessagesSpy).not.toHaveBeenCalled();
   });
 });
+
+// =====================================================================
+// AppStore.devMode
+// =====================================================================
+
+describe('AppStore.devMode', () => {
+  let store: AppStore;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    store = new AppStore();
+  });
+
+  it('должен быть false по умолчанию', () => {
+    expect(store.devMode).toBe(false);
+  });
+
+  it('toggleDevMode переключает на true', () => {
+    store.toggleDevMode();
+    expect(store.devMode).toBe(true);
+  });
+
+  it('toggleDevMode переключает обратно на false', () => {
+    store.toggleDevMode();
+    store.toggleDevMode();
+    expect(store.devMode).toBe(false);
+  });
+
+  it('setDevMode(true) устанавливает true', () => {
+    store.setDevMode(true);
+    expect(store.devMode).toBe(true);
+  });
+
+  it('setDevMode(false) устанавливает false', () => {
+    store.setDevMode(true);
+    store.setDevMode(false);
+    expect(store.devMode).toBe(false);
+  });
+});

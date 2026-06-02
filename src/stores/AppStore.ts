@@ -13,6 +13,7 @@ export class AppStore {
   unreadCount: Record<string, number> = {};
   currentServerId: string | null = null;
   callRecords: CallRecord[] = [];
+  devMode: boolean = false;
 
   /** Хранилище функций отписки от reactive subscriptions */
   private _unsubscribers: Map<string, () => void> = new Map();
@@ -341,6 +342,16 @@ export class AppStore {
     // reactive subscription обновит this.callRecords
   }
 
+  // ===== DEV MODE =====
+
+  toggleDevMode(): void {
+    this.devMode = !this.devMode;
+  }
+
+  setDevMode(value: boolean): void {
+    this.devMode = value;
+  }
+
   // ===== ОЧИСТКА =====
 
   async clearAll(): Promise<void> {
@@ -352,6 +363,7 @@ export class AppStore {
       this.unreadCount = {};
       this.presenceMap = {};
       this.callRecords = [];
+      this.devMode = false;
     });
     if (this.currentServerId) {
       await Promise.all([
@@ -379,6 +391,7 @@ export class AppStore {
     this.unreadCount = {};
     this.presenceMap = {};
     this.callRecords = [];
+    this.devMode = false;
     this.activeChatId = null;
     this.currentServerId = null;
     this.isReady = false;

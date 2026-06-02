@@ -9,6 +9,7 @@ import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.voidchatapp.audiorouter.AudioRouterPackage
 import com.voidchatapp.clipboard.ClipboardPackage
 import com.voidchatapp.installapk.InstallApkPackage
+import com.voidchatapp.screencapture.ScreenCapturePackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -18,6 +19,7 @@ class MainApplication : Application(), ReactApplication {
       packageList =
         PackageList(this).packages.apply {
           add(ClipboardPackage())
+          add(ScreenCapturePackage())
           add(AudioRouterPackage())
           add(InstallApkPackage())
         },
