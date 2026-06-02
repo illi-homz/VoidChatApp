@@ -388,7 +388,7 @@ export class DatabaseService {
     await this.getDb().transaction(async (tx: Transaction) => {
       await tx.execute(
         `UPDATE messages SET read = 1
-         WHERE server_id = ? AND contact_id = ? AND from_me = 0 AND read = 0`,
+         WHERE server_id = ? AND contact_id = ? AND from_me = 1 AND read = 0`,
         [serverId, contactId],
       );
     });
