@@ -6,7 +6,7 @@ jest.mock('react-native-blob-util', () => ({
   android: { actionViewIntent: jest.fn() },
 }));
 
-import { parseGithubTag, compareVersions } from '../AppUpdater';
+import { parseGithubTag, compareVersions, downloadLatestApk } from '../AppUpdater';
 
 describe('parseGithubTag', () => {
   it('removes v prefix', () => {
@@ -57,5 +57,56 @@ describe('compareVersions', () => {
 
   it('returns 1 when version length differs and a > b', () => {
     expect(compareVersions('1.0.1', '1.0')).toBe(1);
+  });
+});
+
+const mockFetch = (status: number, body: any) => {
+  global.fetch = jest.fn().mockResolvedValue({
+    ok: status >= 200 && status < 300,
+    status,
+    json: () => Promise.resolve(body),
+  } as Response);
+};
+
+const successBody = {
+  tag_name: 'v1.5.0',
+  assets: [
+    { name: 'VoidChatApp-v1.5.0.apk', browser_download_url: 'https://github.com/illi-homz/VoidChatApp/releases/download/v1.5.0/app.apk' },
+  ],
+};
+
+describe('downloadLatestApk', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('скачивает APK при успешном ответе GitHub API', async () => {
+    mockFetch(200, successBody);
+    await expect(downloadLatestApk()).resolves.not.toThrow();
+  });
+
+  it('бросает ошибку если APK не найден в assets', async () => {
+    mockFetch(200, { tag_name: 'v1.5.0', assets: [] });
+    await expect(downloadLatestApk()).rejects.toThrow('APK не найден в последнем релизе на GitHub');
+  });
+
+  it('бросает ошибку при 403 (rate limit)', async () => {
+    mockFetch(403, { message: 'API rate limit exceeded' });
+    await expect(downloadLatestApk()).rejects.toThrow('Превышен лимит запросов к GitHub');
+  });
+
+  it('бросает ошибку при 429 (rate limit)', async () => {
+    mockFetch(429, { message: 'Too many requests' });
+    await expect(downloadLatestApk()).rejects.toThrow('Превышен лимит запросов к GitHub');
+  });
+
+  it('бросает ошибку при 500', async () => {
+    mockFetch(500, { message: 'Internal Server Error' });
+    await expect(downloadLatestApk()).rejects.toThrow('GitHub API error: 500');
+  });
+
+  it('бросает ошибку если в ответе нет tag_name и APK отсутствует', async () => {
+    mockFetch(200, { assets: [] });
+    await expect(downloadLatestApk()).rejects.toThrow('APK не найден в последнем релизе на GitHub');
   });
 });

@@ -23,10 +23,8 @@ import { Icon } from '../../components/Icon';
 import { version } from '../../../package.json';
 import { formatDurationMs } from '../../utils/formatDuration';
 import { parseServerUrl } from '../../utils/parseServerUrl';
-import {
-  checkForUpdates,
-  downloadAndInstall,
-} from '../../services/AppUpdater';
+import { getHitSlop } from '../../utils/getHitSlop';
+import { checkForUpdates, downloadAndInstall, downloadLatestApk } from '../../services/AppUpdater';
 import { styles } from './styles';
 
 interface SettingsScreenProps {
@@ -49,10 +47,14 @@ export const SettingsScreen = observer(function SettingsScreen({
 
   const [reconnecting, setReconnecting] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
-  const [updateState, setUpdateState] = useState<
-    'idle' | 'checking' | 'downloading'
-  >('idle');
+  const [updateState, setUpdateState] = useState<'idle' | 'checking' | 'downloading'>('idle');
   const [showUpdateConfirm, setShowUpdateConfirm] = useState(false);
+
+  const [updateForceState, setUpdateForceState] = useState<'idle' | 'checking' | 'downloading'>(
+    'idle',
+  );
+  const [showForceUpdateConfirm, setShowForceUpdateConfirm] = useState(false);
+  const [devMode, setDevMode] = useState(false);
 
   // --- Анимированная пульсация точки для состояния переподключения ---
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -126,7 +128,7 @@ export const SettingsScreen = observer(function SettingsScreen({
   }, [inviteLink, toast]);
 
   const copyApkLink = useCallback(() => {
-    const apkUrl = `https://github.com/illi-homz/VoidChatApp/releases/latest`;
+    const apkUrl = 'https://github.com/illi-homz/VoidChatApp/releases/latest';
     Clipboard.setString(apkUrl);
     toast('Ссылка на APK скопирована', 'success');
   }, [toast]);
@@ -201,10 +203,7 @@ export const SettingsScreen = observer(function SettingsScreen({
       const result = await checkForUpdates();
 
       if (!result.hasUpdate) {
-        toast(
-          `У вас последняя версия v${version}`,
-          'success',
-        );
+        toast(`У вас последняя версия v${version}`, 'success');
         setUpdateState('idle');
         return;
       }
@@ -223,16 +222,54 @@ export const SettingsScreen = observer(function SettingsScreen({
       setUpdateState('idle');
       toast('Загрузка завершена, установите APK', 'success');
     } catch (err: any) {
-      const message =
-        err?.message || 'Неизвестная ошибка';
+      const message = err?.message || 'Неизвестная ошибка';
       toast(message, 'error');
       setUpdateState('idle');
     }
   }, [toast]);
 
+  const runForceUpdate = useCallback(async () => {
+    setUpdateForceState('checking');
+    try {
+      await downloadLatestApk();
+      setUpdateForceState('idle');
+      toast('Загрузка завершена, установите APK', 'success');
+    } catch (err: any) {
+      const message = err?.message || 'Неизвестная ошибка';
+      toast(message, 'error');
+      setUpdateForceState('idle');
+    }
+  }, [toast]);
+
+  const handleForceUpdate = useCallback(() => {
+    setShowForceUpdateConfirm(true);
+  }, []);
+
   const handleUpdate = useCallback(() => {
     setShowUpdateConfirm(true);
   }, []);
+
+  const versionTapCountRef = useRef(0);
+  const versionTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleVersionTap = useCallback(() => {
+    versionTapCountRef.current += 1;
+
+    if (versionTapTimerRef.current) {
+      clearTimeout(versionTapTimerRef.current);
+    }
+
+    versionTapTimerRef.current = setTimeout(() => {
+      versionTapCountRef.current = 0;
+    }, 3000);
+
+    if (versionTapCountRef.current >= 10) {
+      versionTapCountRef.current = 0;
+      const newMode = !devMode;
+      setDevMode(newMode);
+      toast(newMode ? 'Режим разработчика включён' : 'Режим разработчика выключен', 'success');
+    }
+  }, [devMode, toast]);
 
   return (
     <View style={[styles.container, { paddingBottom: insets.bottom }]}>
@@ -413,10 +450,14 @@ export const SettingsScreen = observer(function SettingsScreen({
           <View style={styles.aboutRow}>
             <View style={styles.aboutLeft}>
               <Text style={styles.aboutLogo}>VOID CHAT</Text>
-              <TouchableOpacity onPress={copyApkLink} activeOpacity={0.7} style={styles.versionRow}>
-                <Text style={styles.aboutVersion}>v{version}</Text>
-                <Icon name='copy' size={14} color={Colors.textMuted} />
-              </TouchableOpacity>
+              <View style={styles.versionRow}>
+                <TouchableOpacity onPress={handleVersionTap} activeOpacity={1}>
+                  <Text style={styles.aboutVersion}>v{version}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={copyApkLink} hitSlop={getHitSlop(5)} activeOpacity={0.7}>
+                  <Icon name='copy' size={14} color={Colors.textMuted} />
+                </TouchableOpacity>
+              </View>
               <Text style={styles.aboutBuilt}>Developed by illi-homz</Text>
             </View>
             <View style={styles.aboutRight}>
@@ -431,10 +472,7 @@ export const SettingsScreen = observer(function SettingsScreen({
           </View>
 
           <TouchableOpacity
-            style={[
-              styles.updateButton,
-              updateState !== 'idle' && styles.updateButtonDisabled,
-            ]}
+            style={[styles.updateButton, updateState !== 'idle' && styles.updateButtonDisabled]}
             onPress={handleUpdate}
             disabled={updateState !== 'idle'}
             activeOpacity={0.7}
@@ -456,6 +494,54 @@ export const SettingsScreen = observer(function SettingsScreen({
               </>
             )}
           </TouchableOpacity>
+
+          {devMode && (
+            <>
+              <TouchableOpacity
+                style={[
+                  styles.reinstallButton,
+                  updateForceState !== 'idle' && styles.reinstallButtonDisabled,
+                ]}
+                onPress={handleForceUpdate}
+                disabled={updateForceState !== 'idle'}
+                activeOpacity={0.7}
+              >
+                {updateForceState === 'checking' ? (
+                  <>
+                    <ActivityIndicator size={18} color={Colors.warning} />
+                    <Text style={styles.reinstallButtonText}> Проверка...</Text>
+                  </>
+                ) : updateForceState === 'downloading' ? (
+                  <>
+                    <ActivityIndicator size={18} color={Colors.warning} />
+                    <Text style={styles.reinstallButtonText}> Загрузка...</Text>
+                  </>
+                ) : (
+                  <>
+                    <Icon name='refresh-cw' size={18} color={Colors.warning} />
+                    <Text style={styles.reinstallButtonText}> Переустановить</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <ConfirmAlert
+                visible={showForceUpdateConfirm}
+                title='Переустановить приложение?'
+                message='Будет загружен и установлен APK последней версии с GitHub.'
+                confirmText='Переустановить'
+                cancelText='Отмена'
+                confirmIcon='refresh-cw'
+                cancelIcon='x'
+                confirmBgColor='rgba(255, 165, 0, 0.15)'
+                confirmTextColor={Colors.warning}
+                onConfirm={() => {
+                  setShowForceUpdateConfirm(false);
+                  runForceUpdate();
+                }}
+                onCancel={() => setShowForceUpdateConfirm(false)}
+              />
+            </>
+          )}
         </View>
       </ScrollView>
     </View>

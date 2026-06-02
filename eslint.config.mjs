@@ -30,6 +30,7 @@ export default [
 				clearInterval: 'readonly',
 				require: 'readonly',
 				fetch: 'readonly',
+				__DEV__: 'readonly',
 			},
 		},
 		plugins: {

@@ -252,6 +252,26 @@ export const styles = StyleSheet.create({
   updateButtonDisabled: {
     opacity: 0.4,
   },
+  reinstallButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: Colors.warning,
+    paddingVertical: 12,
+    marginTop: 8,
+    gap: 8,
+  },
+  reinstallButtonText: {
+    color: Colors.warning,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  reinstallButtonDisabled: {
+    opacity: 0.4,
+  },
 
   noServerContainer: {
     alignItems: 'center',

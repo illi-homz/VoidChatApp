@@ -8,6 +8,7 @@ import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.voidchatapp.audiorouter.AudioRouterPackage
 import com.voidchatapp.clipboard.ClipboardPackage
+import com.voidchatapp.installapk.InstallApkPackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -18,6 +19,7 @@ class MainApplication : Application(), ReactApplication {
         PackageList(this).packages.apply {
           add(ClipboardPackage())
           add(AudioRouterPackage())
+          add(InstallApkPackage())
         },
     )
   }
