@@ -92,6 +92,8 @@ export const ChatScreen = observer(function ChatScreen({
         setIsSecretReady(false);
       }
     }
+    // Загружаем сообщения из SQLite (холодный старт + reactive подписка)
+    store.subscribeChat(contactId);
   }, [contactId, store]);
 
   const handleIncomingMessage = useCallback(
@@ -415,6 +417,7 @@ export const ChatScreen = observer(function ChatScreen({
 
     return () => {
       store.activeChatId = null;
+      store.unsubscribeChat(contactId);
       unsubMessage();
       socketService.offMessageSent();
       socketService.offMessageFailed();
