@@ -78,11 +78,17 @@ src/
 │   ├── AddFriendScreen  # Отправка запроса дружбы (ждёт подтверждения сервера), кнопка вставки из буфера, умное сканирование QR (проверяет — есть ли сервер)
 │   └── AddServerScreen  # Добавление нового сервера (название + URL, генерация keypair)
 ├── services/
-│   ├── AppUpdater.ts    # Auto-update: проверка версии на GitHub, загрузка и установка APK
-│   ├── crypto.ts        # tweetnacl: X25519 + XSalsa20-Poly1305 (pure JS)
-│   ├── socket.ts        # Socket.IO клиент + heartbeat (30с) + все события
-│   ├── storage.ts       # AsyncStorage (in-memory cache для синхронного чтения)
-│   └── WebRTCService.ts # P2P WebRTC (Opus 32kbps + RED/FEC), STUN/TURN
+│   ├── AppUpdater.ts        # Auto-update: проверка версии на GitHub, загрузка и установка APK
+│   ├── crypto.ts            # tweetnacl: X25519 + XSalsa20-Poly1305 (pure JS)
+│   ├── DatabaseService.ts   # SQLite CRUD singleton + reactive subscriptions
+│   ├── db/
+│   │   ├── schema.ts             # SQL-схема БД (8 таблиц + индексы)
+│   │   ├── migrations.ts         # Система миграций (версия 1)
+│   │   ├── migrateFromAsyncStorage.ts  # Одноразовая миграция AsyncStorage → SQLite
+│   │   ├── pruning.ts            # Auto-pruning старых сообщений (3 стратегии)
+│   │   └── paths.ts              # Константы путей для будущих медиа
+│   ├── socket.ts            # Socket.IO клиент + heartbeat (30с) + все события
+│   └── WebRTCService.ts     # P2P WebRTC (Opus 32kbps + RED/FEC), STUN/TURN
 ├── stores/
 │   ├── AppStore.ts      # MobX store (user, contacts, messages, unread, callRecords)
 │   ├── ServerStore.ts   # MobX store (список серверов, активный сервер)
@@ -102,7 +108,7 @@ src/
 | Сервер | Node.js + Socket.IO | Relay, heartbeat, presence |
 | Клиент | React Native CLI 0.85 | Мобильное приложение |
 | Состояние | **MobX** 6 + mobx-react-lite 4 | Реактивное управление состоянием |
-| Персистентность | **AsyncStorage** (вместо MMKV) | Сохранение пользователя и контактов |
+| Персистентность | **@op-engineering/op-sqlite** (SQLite) | CRUD + reactive subscriptions, авто-миграция с AsyncStorage |
 | Криптография | **tweetnacl** (pure JS, вместо libsodium-wrappers) | X25519 + XSalsa20-Poly1305 |
 | QR | react-native-qrcode-svg | Генерация QR для обмена ID |
 | Навигация | @react-navigation/native-stack | Stack-навигация (6 экранов) |
@@ -120,13 +126,16 @@ class AppStore {
   contacts: Contact[]             // список контактов (реактивный массив)
   presenceMap: Record<string, boolean>  // онлайн-статусы контактов
   activeChatId: string | null     // какой чат сейчас открыт (для push-уведомлений)
-  isReady: boolean                // загружено ли из AsyncStorage
+  isReady: boolean                // загружено ли из SQLite (холодный старт)
   messages: Map<string, Message[]>       // сообщения по контактам
   unreadCount: Record<string, number>    // счётчик непрочитанных
   currentServerId: string | null         // ID активного сервера
 
-  load(serverId)           // загружает данные для конкретного сервера (runInAction)
-  saveUser(user)           // сохраняет пользователя
+  load(serverId)           // холодная загрузка через DatabaseService +
+                           // reactive subscriptions (subscribeContacts,
+                           // subscribeUnreadCounts, subscribeCallRecords)
+  saveUser(user)           // сохраняет публичные данные в SQLite (dbService.saveUser)
+                           // + privateKey в Keychain
   addContact(contact)      // добавляет контакт (с проверкой дубликата)
   removeContact(userId)    // удаляет контакт + сообщения + unread
   addMessage() / getMessages()   // управление сообщениями
@@ -141,7 +150,7 @@ class AppStore {
 class ServerStore {
   servers: ServerConfig[]         // список серверов
   activeServerId: string | null   // выбранный сервер
-  isReady: boolean                // загружено ли из AsyncStorage
+  isReady: boolean                // загружено ли из SQLite
 
   get activeServer(): ServerConfig | null  // активный сервер
   load()                    // загружает список серверов
@@ -151,7 +160,7 @@ class ServerStore {
 }
 ```
 
-**Key Reactivity detail:** `unreadCount` использует `Record<string, number>` и все мутации делаются через замену объекта (`this.unreadCount = { ...this.unreadCount, [key]: val }`). Все данные привязаны к серверу через префикс `{serverId}_` в AsyncStorage.
+**Key Reactivity detail:** `unreadCount` использует `Record<string, number>` для in-memory MobX-реактивности; персистентность осуществляется через SQLite reactive subscription (`dbService.subscribeUnreadCounts`). Изоляция серверов — через колонку `server_id` в SQLite.
 
 Экраны используют `useStore()` / `useServerStore()` + оборачиваются в `observer()` для реактивного обновления.
 
@@ -285,6 +294,7 @@ class ServerStore {
 | Один сервер на всё приложение (`SERVER_URL` в конфиге) | ServerStore + AddServerScreen: мультисерверная архитектура, каждый сервер свой userId/keypair/data |
 | Не было push-уведомлений о новых сообщениях | NotificationBanner — полупрозрачный баннер сверху при получении сообщения вне активного чата |
 | Звонки не работали — 12 критических/значительных багов | Исправлено 14 багов: ICE buffering, negotiationneeded, userActiveCall, graceful shutdown, rate-limit, двойные уведомления, потеря CallRecord, гонка входящих звонков и др. Версия v0.1.7 |
+| AsyncStorage → SQLite | @op-engineering/op-sqlite: DatabaseService с reactive subscriptions и auto-pruning. Миграция существующих данных (серверы, контакты, звонки). `storage.ts` удалён |
 
 ### Текущие
 
@@ -305,7 +315,8 @@ class ServerStore {
 ```
 mobx       ^6.15.3   — реактивное состояние
 mobx-react-lite ^4.1.1 — React интеграция
-@react-native-async-storage/async-storage ^3.0.2 — персистентность
+@op-engineering/op-sqlite ^16.2.0 — SQLite CRUD + reactive subscriptions
+@react-native-async-storage/async-storage ^3.0.2 — только для одноразовой миграции
 tweetnacl  ^1.0.3    — X25519 + XSalsa20-Poly1305 (pure JS)
 tweetnacl-util ^0.15.1 — base64 + utf8 для tweetnacl
 socket.io-client ^4.8.3 — WebSocket relay

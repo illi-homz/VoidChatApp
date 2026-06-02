@@ -10,5 +10,6 @@ module.exports = {
     '^react-native-vision-camera$': '<rootDir>/__mocks__/react-native-vision-camera.js',
     '^@react-native-async-storage/async-storage$':
       '<rootDir>/node_modules/@react-native-async-storage/async-storage/lib/module/jest/AsyncStorageMock.js',
+    '^@op-engineering/op-sqlite$': '<rootDir>/__mocks__/@op-engineering/op-sqlite.js',
   },
 };

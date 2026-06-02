@@ -18,20 +18,77 @@ jest.mock('react-native-keychain', () => ({
   resetGenericPassword: jest.fn(),
 }));
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppStore } from '../src/stores/AppStore';
+import { dbService } from '../src/services/DatabaseService';
 import type { Message } from '../src/types';
+
+// =====================================================================
+// AppStore.markMessagesRead
+// =====================================================================
 
 describe('AppStore.markMessagesRead', () => {
   let store: AppStore;
-  let setItemSpy: jest.SpyInstance;
+  let markMessagesReadSpy: jest.SpyInstance;
 
-  const makeMsg = (
-    id: string,
-    from: string,
-    read: boolean,
-    ts = Date.now(),
-  ): Message => ({
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // Подменяем метод dbService, чтобы не выбрасывал Database not initialized
+    markMessagesReadSpy = jest
+      .spyOn(dbService, 'markMessagesRead')
+      .mockResolvedValue(undefined);
+    store = new AppStore();
+    store.currentServerId = 'test-server';
+  });
+
+  afterEach(() => {
+    markMessagesReadSpy.mockRestore();
+  });
+
+  it('should not throw when called with existing contactId', async () => {
+    const contactId = 'user-contact-1';
+    const messages: Message[] = [
+      { id: 'm1', from: contactId, ciphertext: 'enc', nonce: 'n1', timestamp: 100, read: false },
+      { id: 'm2', from: 'me', ciphertext: 'enc', nonce: 'n2', timestamp: 200, read: false },
+    ];
+    store.messages.set(contactId, messages);
+
+    await expect(store.markMessagesRead(contactId)).resolves.toBeUndefined();
+    expect(markMessagesReadSpy).toHaveBeenCalledWith('test-server', contactId);
+  });
+
+  it('should not throw when called with non-existent contactId', async () => {
+    await expect(
+      store.markMessagesRead('non-existent-contact'),
+    ).resolves.toBeUndefined();
+    expect(markMessagesReadSpy).toHaveBeenCalledWith(
+      'test-server',
+      'non-existent-contact',
+    );
+  });
+
+  it('should not throw with empty messages list', async () => {
+    const contactId = 'user-contact-4';
+    store.messages.set(contactId, []);
+    await expect(store.markMessagesRead(contactId)).resolves.toBeUndefined();
+    expect(markMessagesReadSpy).toHaveBeenCalledWith('test-server', contactId);
+  });
+
+  it('should do nothing if currentServerId is not set', async () => {
+    store.currentServerId = null;
+    await expect(store.markMessagesRead('any')).resolves.toBeUndefined();
+    expect(markMessagesReadSpy).not.toHaveBeenCalled();
+  });
+});
+
+// =====================================================================
+// AppStore.deleteMessages
+// =====================================================================
+
+describe('AppStore.deleteMessages', () => {
+  let store: AppStore;
+  let deleteMessagesSpy: jest.SpyInstance;
+
+  const makeMsg = (id: string, from: string, read = false, ts = Date.now()): Message => ({
     id,
     from,
     ciphertext: `enc_${id}`,
@@ -42,193 +99,92 @@ describe('AppStore.markMessagesRead', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    // Оборачиваем setItem в spy (сохраняя оригинальную функциональность)
-    setItemSpy = jest.spyOn(AsyncStorage, 'setItem');
+    deleteMessagesSpy = jest
+      .spyOn(dbService, 'deleteMessages')
+      .mockResolvedValue(undefined);
     store = new AppStore();
     store.currentServerId = 'test-server';
   });
 
   afterEach(() => {
-    setItemSpy.mockRestore();
+    deleteMessagesSpy.mockRestore();
   });
 
-  // ========== Сценарий 1: успешная отметка прочтения ==========
-
-  it('should mark all "me" messages as read', async () => {
-    const contactId = 'user-contact-1';
+  it('should optimistically remove specified messages from store', async () => {
+    const contactId = 'user-1';
     const messages: Message[] = [
-      makeMsg('m1', 'me', false, 100),
-      makeMsg('m2', 'me', false, 200),
-      makeMsg('m3', 'other-user', false, 300),
+      makeMsg('m1', 'me'),
+      makeMsg('m2', 'other'),
+      makeMsg('m3', 'me'),
+      makeMsg('m4', 'other'),
     ];
     store.messages.set(contactId, messages);
 
-    await store.markMessagesRead(contactId);
+    await store.deleteMessages(contactId, ['m2', 'm3']);
 
-    const updated = store.messages.get(contactId)!;
-
-    // Два "me" сообщения стали read: true
-    expect(updated[0].read).toBe(true);
-    expect(updated[0].from).toBe('me');
-    expect(updated[1].read).toBe(true);
-    expect(updated[1].from).toBe('me');
-
-    // Чужое сообщение не изменилось
-    expect(updated[2].read).toBe(false);
-    expect(updated[2].from).toBe('other-user');
-
-    // Сообщения не мутировали оригиналы (проверяем иммутабельность через map)
-    expect(messages[0].read).toBe(false);
-    expect(messages[1].read).toBe(false);
+    const remaining = store.messages.get(contactId)!;
+    expect(remaining).toHaveLength(2);
+    expect(remaining[0].id).toBe('m1');
+    expect(remaining[1].id).toBe('m4');
   });
 
-  // ========== Сценарий 2: нет непрочитанных "me" сообщений ==========
-
-  it('should not call AsyncStorage if no unread "me" messages', async () => {
-    const contactId = 'user-contact-2';
+  it('should not mutate original array', async () => {
+    const contactId = 'user-2';
     const messages: Message[] = [
-      makeMsg('m1', 'me', true, 100),
-      makeMsg('m2', 'me', true, 200),
-      makeMsg('m3', 'other-user', false, 300),
+      makeMsg('m1', 'me'),
+      makeMsg('m2', 'other'),
     ];
     store.messages.set(contactId, messages);
+    const originalRef = store.messages.get(contactId);
 
-    await store.markMessagesRead(contactId);
+    await store.deleteMessages(contactId, ['m1']);
 
-    expect(AsyncStorage.setItem).not.toHaveBeenCalled();
+    // В Map лежит новый массив (иммутабельность)
+    expect(store.messages.get(contactId)).not.toBe(originalRef);
+    // Оригинальный массив не изменился
+    expect(originalRef).toHaveLength(2);
   });
 
-  // ========== Сценарий 3: несуществующий contactId ==========
+  it('should call dbService.deleteMessages with correct args', async () => {
+    const contactId = 'user-3';
+    store.messages.set(contactId, [makeMsg('m1', 'me')]);
 
-  it('should do nothing if contact has no messages (undefined)', async () => {
-    // Не добавляем сообщения — messages.get(contactId) вернёт undefined
+    await store.deleteMessages(contactId, ['m1']);
 
-    await expect(
-      store.markMessagesRead('non-existent-contact'),
-    ).resolves.toBeUndefined();
-
-    expect(AsyncStorage.setItem).not.toHaveBeenCalled();
+    expect(deleteMessagesSpy).toHaveBeenCalledTimes(1);
+    expect(deleteMessagesSpy).toHaveBeenCalledWith('test-server', contactId, ['m1']);
   });
 
-  // ========== Сценарий 4: пустой список сообщений ==========
-
-  it('should handle empty messages list', async () => {
-    const contactId = 'user-contact-4';
-    store.messages.set(contactId, []);
-
-    await expect(
-      store.markMessagesRead(contactId),
-    ).resolves.toBeUndefined();
-
-    expect(AsyncStorage.setItem).not.toHaveBeenCalled();
+  it('should do nothing for non-existent contactId', async () => {
+    // dbService.deleteMessages всё равно вызовется (AppStore не проверяет наличие контакта)
+    await store.deleteMessages('non-existent', ['m1']);
+    expect(deleteMessagesSpy).toHaveBeenCalledWith('test-server', 'non-existent', ['m1']);
   });
 
-  // ========== Сценарий 5: сохранение в AsyncStorage при изменениях ==========
-
-  it('should persist to AsyncStorage when changed', async () => {
-    const contactId = 'user-contact-5';
-    const messages: Message[] = [
-      makeMsg('m1', 'me', false, 100),
-      makeMsg('m2', 'other-user', false, 200),
-    ];
-    store.messages.set(contactId, messages);
-
-    await store.markMessagesRead(contactId);
-
-    // setItem вызван ровно 1 раз
-    expect(AsyncStorage.setItem).toHaveBeenCalledTimes(1);
-
-    // Проверяем правильный ключ
-    expect(AsyncStorage.setItem).toHaveBeenCalledWith(
-      'test-server_chat_messages',
-      expect.any(String),
-    );
-
-    // Проверяем переданные данные
-    const [, jsonData] = (AsyncStorage.setItem as jest.Mock).mock.calls[0];
-    const parsed = JSON.parse(jsonData as string);
-    expect(parsed[contactId]).toBeDefined();
-    expect(parsed[contactId][0].read).toBe(true);
-    expect(parsed[contactId][0].from).toBe('me');
-    expect(parsed[contactId][1].read).toBe(false);
-    expect(parsed[contactId][1].from).toBe('other-user');
+  it('should skip dbService call with empty messageIds array', async () => {
+    store.messages.set('user-4', [makeMsg('m1', 'me')]);
+    await store.deleteMessages('user-4', []);
+    expect(store.messages.get('user-4')).toHaveLength(1);
+    expect(deleteMessagesSpy).not.toHaveBeenCalled();
   });
 
-  // =====================================================================
-  // AppStore.deleteMessages
-  // =====================================================================
+  it('should handle deleting all messages', async () => {
+    const contactId = 'user-5';
+    store.messages.set(contactId, [makeMsg('m1', 'me'), makeMsg('m2', 'other')]);
 
-  describe('AppStore.deleteMessages', () => {
-    const makeMsg = (
-      id: string,
-      from: string,
-      read = false,
-      ts = Date.now(),
-    ): Message => ({
-      id,
-      from,
-      ciphertext: `enc_${id}`,
-      nonce: `nonce_${id}`,
-      timestamp: ts,
-      read,
-    });
+    await store.deleteMessages(contactId, ['m1', 'm2']);
 
-    it('should remove specified messages from the store', async () => {
-      const contactId = 'user-1';
-      const messages: Message[] = [
-        makeMsg('m1', 'me'),
-        makeMsg('m2', 'other'),
-        makeMsg('m3', 'me'),
-        makeMsg('m4', 'other'),
-      ];
-      store.messages.set(contactId, messages);
+    const remaining = store.messages.get(contactId)!;
+    expect(remaining).toHaveLength(0);
+    expect(deleteMessagesSpy).toHaveBeenCalledTimes(1);
+  });
 
-      await store.deleteMessages(contactId, ['m2', 'm3']);
-
-      const remaining = store.messages.get(contactId)!;
-      expect(remaining).toHaveLength(2);
-      expect(remaining[0].id).toBe('m1');
-      expect(remaining[1].id).toBe('m4');
-    });
-
-    it('should persist to AsyncStorage', async () => {
-      const contactId = 'user-2';
-      store.messages.set(contactId, [makeMsg('m1', 'me'), makeMsg('m2', 'other')]);
-
-      await store.deleteMessages(contactId, ['m1']);
-
-      expect(AsyncStorage.setItem).toHaveBeenCalledTimes(1);
-      expect(AsyncStorage.setItem).toHaveBeenCalledWith(
-        'test-server_chat_messages',
-        expect.any(String),
-      );
-      const [, json] = (AsyncStorage.setItem as jest.Mock).mock.calls[0];
-      const parsed = JSON.parse(json as string);
-      expect(parsed[contactId]).toHaveLength(1);
-      expect(parsed[contactId][0].id).toBe('m2');
-    });
-
-    it('should do nothing if contactId does not exist', async () => {
-      await store.deleteMessages('non-existent', ['m1']);
-      expect(AsyncStorage.setItem).not.toHaveBeenCalled();
-    });
-
-    it('should do nothing with empty messageIds array', async () => {
-      store.messages.set('user-3', [makeMsg('m1', 'me')]);
-      await store.deleteMessages('user-3', []);
-      expect(store.messages.get('user-3')).toHaveLength(1);
-      expect(AsyncStorage.setItem).not.toHaveBeenCalled();
-    });
-
-    it('should handle deleting all messages', async () => {
-      const contactId = 'user-4';
-      store.messages.set(contactId, [makeMsg('m1', 'me'), makeMsg('m2', 'other')]);
-
-      await store.deleteMessages(contactId, ['m1', 'm2']);
-
-      const remaining = store.messages.get(contactId)!;
-      expect(remaining).toHaveLength(0);
-      expect(AsyncStorage.setItem).toHaveBeenCalled();
-    });
+  it('should do nothing if currentServerId is not set', async () => {
+    store.currentServerId = null;
+    store.messages.set('user-6', [makeMsg('m1', 'me')]);
+    await store.deleteMessages('user-6', ['m1']);
+    // Массив не изменился — ранний return из-за отсутствия currentServerId
+    expect(store.messages.get('user-6')).toHaveLength(1);
+    expect(deleteMessagesSpy).not.toHaveBeenCalled();
   });
 });

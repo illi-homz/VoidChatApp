@@ -99,6 +99,8 @@ export interface CallTimedOut {
 }
 
 export interface CallRecord {
+  /** Опциональный ID для персистентности в SQLite (генерируется автоматически, если не указан) */
+  id?: string;
   contactId: string;
   direction: 'outgoing' | 'incoming';
   duration: number;

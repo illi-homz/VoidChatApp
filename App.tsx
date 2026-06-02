@@ -4,6 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import BootSplash from 'react-native-bootsplash';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { serverStore } from './src/stores/ServerStore';
+import { dbService } from './src/services/DatabaseService';
 import { StoreProvider } from './src/stores';
 import { ToastProvider } from './src/components/Toast';
 import { NotificationProvider } from './src/components/NotificationBanner';
@@ -13,7 +14,14 @@ function App(): React.JSX.Element {
   const [splashVisible, setSplashVisible] = useState(true);
 
   useEffect(() => {
-    serverStore.load();
+    (async () => {
+      try {
+        await dbService.initialize();
+      } catch (e) {
+        console.error('[App] Database initialization failed', e);
+      }
+      serverStore.load();
+    })();
   }, []);
 
   const handleNavigationReady = useCallback(() => {
