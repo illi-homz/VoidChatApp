@@ -85,9 +85,11 @@ export const SettingsScreen = observer(function SettingsScreen({
     }
   }, [connectionStatus, pulseAnim]);
 
-  // Синхронизация FLAG_SECURE с dev mode
+  // Синхронизация FLAG_SECURE:
+  // - в __DEV__ (debug build) скриншоты всегда разрешены
+  // - в production: скриншоты разрешены только если включён devMode (10 тапов на версии)
   useEffect(() => {
-    if (devMode) {
+    if (devMode || __DEV__) {
       screenCapture.allowScreenCapture();
     } else {
       screenCapture.disallowScreenCapture();
