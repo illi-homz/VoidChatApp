@@ -121,10 +121,13 @@ export const ChatScreen = observer(function ChatScreen({
     [contactId, store, serverStore, socketService],
   );
 
-  const handleMessageSent = useCallback((data: { nonce: string }): void => {
+  const handleMessageSent = useCallback((data: { nonce: string; timestamp: number }): void => {
     statusOverridesRef.current.delete(data.nonce);
+    store.updateMessageTimestamp(contactId, data.nonce, data.timestamp).catch(e =>
+      console.warn('Failed to update message timestamp:', e),
+    );
     setTick(t => t + 1);
-  }, []);
+  }, [contactId, store]);
 
   const handleMessagesRead = useCallback(
     (data: { readBy: string }): void => {

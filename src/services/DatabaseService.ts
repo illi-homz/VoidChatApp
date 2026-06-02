@@ -331,6 +331,13 @@ export class DatabaseService {
     });
   }
 
+  async updateMessageTimestamp(serverId: string, nonce: string, newTimestamp: number): Promise<void> {
+    await this.getDb().execute(
+      `UPDATE messages SET timestamp = ? WHERE server_id = ? AND nonce = ?`,
+      [newTimestamp, serverId, nonce],
+    );
+  }
+
   async getMessages(
     serverId: string,
     contactId: string,

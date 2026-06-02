@@ -288,6 +288,22 @@ export class AppStore {
     // reactive subscription потом синхронизирует
   }
 
+  async updateMessageTimestamp(contactId: string, nonce: string, newTimestamp: number): Promise<void> {
+    if (!this.currentServerId) return;
+
+    runInAction(() => {
+      const existing = this.messages.get(contactId);
+      if (!existing) return;
+      const idx = existing.findIndex(m => m.nonce === nonce);
+      if (idx === -1) return;
+      const updated = [...existing];
+      updated[idx] = { ...updated[idx], timestamp: newTimestamp };
+      this.messages.set(contactId, updated);
+    });
+
+    await dbService.updateMessageTimestamp(this.currentServerId, nonce, newTimestamp);
+  }
+
   async deleteMessages(contactId: string, messageIds: string[]): Promise<void> {
     if (!this.currentServerId || messageIds.length === 0) return;
 
