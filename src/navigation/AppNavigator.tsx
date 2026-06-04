@@ -10,6 +10,7 @@ import { SettingsScreen } from '../screens/SettingsScreen';
 import { ServerListScreen } from '../screens/ServerListScreen';
 import { AddFriendScreen } from '../screens/AddFriendScreen';
 import { AddServerScreen } from '../screens/AddServerScreen';
+import { StorageScreen } from '../screens/StorageScreen';
 import { CallScreen } from '../screens/CallScreen';
 import { Colors } from '../theme/colors';
 import { SelectionOverlay } from '../components/SelectionOverlay';
@@ -77,6 +78,11 @@ export function AppNavigator({ onReady }: AppNavigatorProps): React.JSX.Element 
             name='AddServer'
             component={AddServerScreen}
             options={{ headerTitle: '' }}
+          />
+          <Stack.Screen
+            name='Storage'
+            component={StorageScreen}
+            options={{ title: 'Управление хранилищем' }}
           />
         </Stack.Navigator>
       </NavigationContainer>

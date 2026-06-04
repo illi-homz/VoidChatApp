@@ -1,7 +1,7 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 import * as Keychain from 'react-native-keychain';
 import { dbService } from '../services/DatabaseService';
-import type { Contact, User, Message, CallRecord } from '../types';
+import type { Contact, User, Message, CallRecord, VoiceStorageInfo } from '../types';
 
 export class AppStore {
   user: User | null = null;
@@ -269,6 +269,11 @@ export class AppStore {
 
   async clearMessages(contactId: string): Promise<void> {
     if (!this.currentServerId) return;
+
+    // Удаляем файлы голосовых сообщений с диска
+    const messages = this.messages.get(contactId) ?? [];
+    await this._deleteVoiceFiles(messages);
+
     runInAction(() => {
       this.messages.set(contactId, []);
     });
@@ -288,7 +293,11 @@ export class AppStore {
     // reactive subscription потом синхронизирует
   }
 
-  async updateMessageTimestamp(contactId: string, nonce: string, newTimestamp: number): Promise<void> {
+  async updateMessageTimestamp(
+    contactId: string,
+    nonce: string,
+    newTimestamp: number,
+  ): Promise<void> {
     if (!this.currentServerId) return;
 
     runInAction(() => {
@@ -307,9 +316,13 @@ export class AppStore {
   async deleteMessages(contactId: string, messageIds: string[]): Promise<void> {
     if (!this.currentServerId || messageIds.length === 0) return;
 
+    // Удаляем файлы голосовых сообщений с диска
+    const existing = this.messages.get(contactId) ?? [];
+    const toDelete = existing.filter(m => messageIds.includes(m.id));
+    await this._deleteVoiceFiles(toDelete);
+
     // Оптимистичное удаление из памяти
     runInAction(() => {
-      const existing = this.messages.get(contactId);
       if (existing) {
         const idSet = new Set(messageIds);
         this.messages.set(
@@ -356,6 +369,162 @@ export class AppStore {
     if (!this.currentServerId) return;
     await dbService.addCallRecord(this.currentServerId, record);
     // reactive subscription обновит this.callRecords
+  }
+
+  // ===== VOICE MESSAGES STORAGE =====
+
+  /**
+   * Получить информацию о хранилище голосовых сообщений.
+   */
+  async getVoiceStorageInfo(): Promise<VoiceStorageInfo> {
+    if (!this.currentServerId) {
+      return { totalSize: 0, voiceCount: 0, perChat: {} };
+    }
+
+    const [totalSize, perChat] = await Promise.all([
+      dbService.getVoiceStorageSize(this.currentServerId),
+      dbService.getVoiceStoragePerContact(this.currentServerId),
+    ]);
+
+    let voiceCount = 0;
+    for (const entry of Object.values(perChat)) {
+      voiceCount += entry.count;
+    }
+
+    return { totalSize, voiceCount, perChat };
+  }
+
+  /**
+   * Удалить голосовые сообщения старше указанного количества дней.
+   */
+  async clearVoiceOlderThan(days: number): Promise<void> {
+    if (!this.currentServerId) return;
+    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+
+    // Получаем файлы для удаления
+    const entries = await dbService.getVoiceFilePathsByAge(this.currentServerId, cutoff);
+
+    // Удаляем файлы с диска
+    for (const entry of entries) {
+      if (entry.filePath) {
+        try {
+          const ReactNativeBlobUtil = require('react-native-blob-util').default;
+          const exists = await ReactNativeBlobUtil.fs.exists(entry.filePath);
+          if (exists) {
+            await ReactNativeBlobUtil.fs.unlink(entry.filePath);
+          }
+        } catch {
+          // игнорируем ошибки файловых операций
+        }
+      }
+    }
+
+    // Удаляем сообщения из БД
+    const voiceIds = entries.map(e => e.id);
+    if (voiceIds.length > 0) {
+      await dbService.deleteMessages(this.currentServerId, '', voiceIds);
+    }
+
+    // Обновляем in-memory messages для всех открытых чатов
+    runInAction(() => {
+      const voiceIdsSet = new Set(voiceIds);
+      for (const [contactId, msgs] of this.messages.entries()) {
+        this.messages.set(
+          contactId,
+          msgs.filter(m => !voiceIdsSet.has(m.id)),
+        );
+      }
+    });
+  }
+
+  /**
+   * Удалить все голосовые сообщения для указанного контакта.
+   */
+  async clearVoiceForContact(contactId: string): Promise<void> {
+    if (!this.currentServerId) return;
+
+    const messages = this.messages.get(contactId) ?? [];
+    const voiceMessages = messages.filter(m => m.mediaType === 'voice');
+
+    await this._deleteVoiceFiles(voiceMessages);
+
+    // Удаляем записи из БД
+    const voiceIds = voiceMessages.map(m => m.id);
+    if (voiceIds.length > 0) {
+      await dbService.deleteMessages(this.currentServerId, contactId, voiceIds);
+    }
+
+    // Обновляем in-memory
+    runInAction(() => {
+      const voiceIdsSet = new Set(voiceIds);
+      this.messages.set(
+        contactId,
+        messages.filter(m => !voiceIdsSet.has(m.id)),
+      );
+    });
+  }
+
+  /**
+   * Удалить все голосовые сообщения во всех чатах.
+   */
+  async clearAllVoice(): Promise<void> {
+    if (!this.currentServerId) return;
+
+    // Собираем все голосовые сообщения из всех открытых чатов
+    const allVoiceMessages: Message[] = [];
+    for (const [, msgs] of this.messages.entries()) {
+      for (const m of msgs) {
+        if (m.mediaType === 'voice' && m.filePath) {
+          allVoiceMessages.push(m);
+        }
+      }
+    }
+
+    await this._deleteVoiceFiles(allVoiceMessages);
+
+    // Удаляем из БД все голосовые для этого сервера
+    const voiceIds = allVoiceMessages.map(m => m.id);
+    if (voiceIds.length > 0) {
+      // Проходим по контактам
+      for (const [contactId, msgs] of this.messages.entries()) {
+        const contactVoiceIds = msgs.filter(m => m.mediaType === 'voice').map(m => m.id);
+        if (contactVoiceIds.length > 0) {
+          await dbService.deleteMessages(this.currentServerId, contactId, contactVoiceIds);
+        }
+      }
+    }
+
+    // Обновляем in-memory
+    runInAction(() => {
+      for (const [contactId, msgs] of this.messages.entries()) {
+        this.messages.set(
+          contactId,
+          msgs.filter(m => m.mediaType !== 'voice'),
+        );
+      }
+    });
+  }
+
+  /**
+   * Удалить файлы голосовых сообщений с диска.
+   */
+  private async _deleteVoiceFiles(messages: Message[]): Promise<void> {
+    const voiceMessages = messages.filter(m => m.mediaType === 'voice' && m.filePath);
+    if (voiceMessages.length === 0) return;
+
+    const ReactNativeBlobUtil = require('react-native-blob-util').default;
+    for (const msg of voiceMessages) {
+      if (msg.filePath) {
+        try {
+          const exists = await ReactNativeBlobUtil.fs.exists(msg.filePath);
+          if (exists) {
+            await ReactNativeBlobUtil.fs.unlink(msg.filePath);
+          }
+        } catch {
+          // игнорируем ошибки файловых операций
+        }
+      }
+    }
   }
 
   // ===== DEV MODE =====

@@ -37,7 +37,9 @@ export type IconName =
   | 'qr-code'
   | 'broom'
   | 'server'
-  | 'download';
+  | 'download'
+  | 'play'
+  | 'pause';
 
 interface IconProps {
   name: IconName;
@@ -357,6 +359,19 @@ const IconBase: React.FC<IconProps> = ({ name, size = 24, color = '#000', style 
           <Path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' />
           <Polyline points='7 10 12 15 17 10' />
           <Line x1='12' y1='15' x2='12' y2='3' />
+        </Svg>
+      );
+    case 'play':
+      return (
+        <Svg {...svgProps}>
+          <Path d='m7 5 11 7-11 7Z' />
+        </Svg>
+      );
+    case 'pause':
+      return (
+        <Svg {...svgProps}>
+          <Path d='M6 5h4v14H6Z' />
+          <Path d='M14 5h4v14h-4Z' />
         </Svg>
       );
     default:

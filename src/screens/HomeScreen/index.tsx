@@ -4,7 +4,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { observer } from 'mobx-react-lite';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../navigation/types';
-import type { Contact, CallOffer, CallEnded, CallTimedOut, CallType } from '../../types';
+import type {
+  Contact,
+  CallOffer,
+  CallEnded,
+  CallTimedOut,
+  CallType,
+  VoiceMessageReceived,
+} from '../../types';
 import type { BottomSheetAction } from '../../components/BottomSheet';
 import { useStore, useServerStore, useCallStore } from '../../stores';
 import { useAppStateReconnect } from '../../hooks/useAppStateReconnect';
@@ -18,6 +25,7 @@ import { ConfirmAlert } from '../../components/ConfirmAlert';
 import { maskUserId } from '../../utils/maskUserId';
 import { Icon } from '../../components/Icon';
 import { IncomingCallBanner } from '../../components/IncomingCallBanner';
+import ReactNativeBlobUtil from 'react-native-blob-util';
 import { styles } from './styles';
 
 interface HomeScreenProps {
@@ -41,6 +49,7 @@ export const HomeScreen = observer(function HomeScreen({
   const [clearChatConfirmVisible, setClearChatConfirmVisible] = useState(false);
   const [clearChatTarget, setClearChatTarget] = useState<Contact | null>(null);
   const onMessageCleanupRef = useRef<(() => void) | null>(null);
+  const onVoiceMessageCleanupRef = useRef<(() => void) | null>(null);
   const insets = useSafeAreaInsets();
   useAppStateReconnect();
   const callStore = useCallStore();
@@ -237,6 +246,7 @@ export const HomeScreen = observer(function HomeScreen({
       socketService.offCallEnded();
       socketService.offCallTimedOut();
       onMessageCleanupRef.current?.();
+      onVoiceMessageCleanupRef.current?.();
     };
   }, [serverStore.activeServerId, socketService.connectionStatus]);
 
@@ -393,6 +403,62 @@ export const HomeScreen = observer(function HomeScreen({
         });
       }
     });
+
+    // ---- Voice message listener ----
+    onVoiceMessageCleanupRef.current = socketService.onVoiceMessage(
+      (data: VoiceMessageReceived) => {
+        // Сохраняем зашифрованный файл на диск и добавляем сообщение в store
+        (async () => {
+          try {
+            const encryptedDir = `${ReactNativeBlobUtil.fs.dirs.CacheDir}/voice_encrypted`;
+            let dirExists = await ReactNativeBlobUtil.fs.exists(encryptedDir);
+            if (!dirExists) {
+              await ReactNativeBlobUtil.fs.mkdir(encryptedDir);
+            }
+            const nomediaPath = `${encryptedDir}/.nomedia`;
+            const nomediaExists = await ReactNativeBlobUtil.fs.exists(nomediaPath);
+            if (!nomediaExists) {
+              await ReactNativeBlobUtil.fs.writeFile(nomediaPath, '', 'utf8');
+            }
+
+            const messageId = data.nonce;
+            const encryptedPath = `${encryptedDir}/${messageId}.enc`;
+            const encryptedContent = data.nonce + data.ciphertext;
+            await ReactNativeBlobUtil.fs.writeFile(encryptedPath, encryptedContent, 'utf8');
+
+            const message = {
+              id: messageId,
+              from: data.from,
+              ciphertext: data.ciphertext,
+              nonce: data.nonce,
+              timestamp: data.timestamp,
+              read: false,
+              mediaType: 'voice' as const,
+              duration: data.duration,
+              filePath: encryptedPath,
+              fileSize: encryptedContent.length,
+            };
+            store.addMessage(data.from, message);
+            store.incrementUnread(data.from);
+            serverStore.incrementServerUnread(serverStore.activeServerId!);
+
+            // Показываем push-уведомление, если чат с этим контактом не открыт
+            if (data.from !== store.activeChatId) {
+              const contact = store.contacts.find(c => c.userId === data.from);
+              const displayName = contact?.nickname ?? maskUserId(data.from);
+              notify(`🎤 Голосовое от: ${displayName}`, () => {
+                navigation.navigate('Chat', {
+                  contactId: data.from,
+                  contactName: displayName,
+                });
+              });
+            }
+          } catch (err) {
+            console.error('Failed to handle incoming voice message in HomeScreen:', err);
+          }
+        })();
+      },
+    );
 
     // ---- Call listeners ----
     socketService.onCallIncoming((data: CallOffer) => {

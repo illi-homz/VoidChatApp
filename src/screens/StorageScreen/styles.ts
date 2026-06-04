@@ -1,0 +1,161 @@
+import { StyleSheet } from 'react-native';
+import { Colors } from '../../theme';
+
+export const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  scrollContent: {
+    padding: 16,
+  },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.textMuted,
+    letterSpacing: 1,
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  sectionCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  statRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  statLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  statValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+    marginLeft: 'auto',
+  },
+  progressBarOuter: {
+    height: 8,
+    backgroundColor: Colors.surfaceLight,
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  progressLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  progressLabel: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  voiceCountText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: Colors.borderLight,
+    marginVertical: 12,
+  },
+  perChatItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  perChatInfo: {
+    flex: 1,
+    marginRight: 8,
+  },
+  perChatName: {
+    fontSize: 15,
+    color: Colors.textPrimary,
+    fontWeight: '500',
+  },
+  perChatCount: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginTop: 2,
+  },
+  perChatSize: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    fontFamily: 'monospace',
+    marginRight: 8,
+  },
+  clearSmallButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,68,68,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,68,68,0.25)',
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: Colors.error,
+    paddingVertical: 12,
+    marginTop: 8,
+    gap: 8,
+  },
+  actionButtonText: {
+    color: Colors.error,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  actionButtonSecondary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    paddingVertical: 12,
+    marginTop: 8,
+    gap: 8,
+  },
+  actionButtonTextSecondary: {
+    color: Colors.textSecondary,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    paddingVertical: 24,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerSection: {
+    marginBottom: 4,
+  },
+});

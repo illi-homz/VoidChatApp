@@ -1,7 +1,7 @@
 module.exports = {
   preset: '@react-native/jest-preset',
   transformIgnorePatterns: [
-    'node_modules/(?!(@react-native|react-native|@react-navigation|react-native-.*|@react-native-.*|uuid)/)',
+    'node_modules/(?!(@react-native|react-native|@react-navigation|react-native-.*|@react-native-.*|uuid|react-native-nitro-sound|react-native-nitro-modules)/)',
   ],
   moduleNameMapper: {
     '^react-dom$': '<rootDir>/__mocks__/react-dom.js',
@@ -11,5 +11,6 @@ module.exports = {
     '^@react-native-async-storage/async-storage$':
       '<rootDir>/node_modules/@react-native-async-storage/async-storage/lib/module/jest/AsyncStorageMock.js',
     '^@op-engineering/op-sqlite$': '<rootDir>/__mocks__/@op-engineering/op-sqlite.js',
+    '^react-native-nitro-sound$': '<rootDir>/__mocks__/react-native-nitro-sound.js',
   },
 };

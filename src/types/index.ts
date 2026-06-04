@@ -1,3 +1,5 @@
+export type MessageMediaType = 'text' | 'voice';
+
 export interface Contact {
   userId: string;
   publicKey: string;
@@ -12,6 +14,10 @@ export interface Message {
   nonce: string;
   timestamp: number;
   read: boolean;
+  mediaType?: MessageMediaType;
+  duration?: number;
+  filePath?: string;
+  fileSize?: number;
 }
 
 export interface Chat {
@@ -117,4 +123,27 @@ export interface AutoFriendAddedPayload {
 export interface InviteClaimedPayload {
   inviterUserId: string;
   publicKey: string | null;
+}
+
+// ---- Voice message types ----
+
+export interface VoiceMessagePayload {
+  to: string;
+  ciphertext: string;
+  nonce: string;
+  duration: number;
+}
+
+export interface VoiceMessageReceived {
+  from: string;
+  ciphertext: string;
+  nonce: string;
+  duration: number;
+  timestamp: number;
+}
+
+export interface VoiceStorageInfo {
+  totalSize: number;
+  voiceCount: number;
+  perChat: Record<string, { size: number; count: number }>;
 }

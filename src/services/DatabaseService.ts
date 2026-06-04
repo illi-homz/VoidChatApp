@@ -9,7 +9,14 @@ import {
   type PruningResult,
   DEFAULT_PRUNING_CONFIG,
 } from './db/pruning';
-import type { Message, Contact, ServerConfig, CallRecord, CallType } from '../types';
+import type {
+  Message,
+  Contact,
+  ServerConfig,
+  CallRecord,
+  CallType,
+  MessageMediaType,
+} from '../types';
 
 // ---------------------------------------------------------------------------
 // Хелперы маппинга (колонки SQLite → TypeScript-типы)
@@ -23,6 +30,10 @@ function mapMessage(row: Record<string, unknown>, contactId: string): Message {
     nonce: row.nonce as string,
     timestamp: row.timestamp as number,
     read: row.read === 1,
+    mediaType: (row.media_type as MessageMediaType) ?? undefined,
+    duration: (row.duration as number | undefined) ?? undefined,
+    filePath: (row.file_path as string | undefined) ?? undefined,
+    fileSize: (row.file_size as number | undefined) ?? undefined,
   };
 }
 
@@ -315,8 +326,9 @@ export class DatabaseService {
     await this.getDb().transaction(async (tx: Transaction) => {
       await tx.execute(
         `INSERT OR REPLACE INTO messages
-         (id, server_id, contact_id, from_me, ciphertext, nonce, timestamp, read)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, server_id, contact_id, from_me, ciphertext, nonce, timestamp, read,
+          media_type, duration, file_path, file_size)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           message.id,
           serverId,
@@ -326,12 +338,20 @@ export class DatabaseService {
           message.nonce,
           message.timestamp,
           message.read ? 1 : 0,
+          message.mediaType ?? null,
+          message.duration ?? null,
+          message.filePath ?? null,
+          message.fileSize ?? null,
         ],
       );
     });
   }
 
-  async updateMessageTimestamp(serverId: string, nonce: string, newTimestamp: number): Promise<void> {
+  async updateMessageTimestamp(
+    serverId: string,
+    nonce: string,
+    newTimestamp: number,
+  ): Promise<void> {
     await this.getDb().execute(
       `UPDATE messages SET timestamp = ? WHERE server_id = ? AND nonce = ?`,
       [newTimestamp, serverId, nonce],
@@ -362,6 +382,145 @@ export class DatabaseService {
     const row = rows[0] as Record<string, unknown> | undefined;
     const count = row?.count;
     return typeof count === 'number' ? count : 0;
+  }
+
+  // ===== VOICE MESSAGES =====
+
+  /**
+   * Получить голосовые сообщения для контакта с пагинацией.
+   */
+  async getVoiceMessages(
+    serverId: string,
+    contactId: string,
+    limit: number = 50,
+    offset: number = 0,
+  ): Promise<Message[]> {
+    const { rows } = await this.getDb().execute(
+      `SELECT * FROM messages
+       WHERE server_id = ? AND contact_id = ? AND media_type = 'voice'
+       ORDER BY timestamp DESC
+       LIMIT ? OFFSET ?`,
+      [serverId, contactId, limit, offset],
+    );
+    return (rows as Record<string, unknown>[]).map(r => mapMessage(r, contactId));
+  }
+
+  /**
+   * Получить суммарный размер всех голосовых файлов на сервере в байтах.
+   */
+  async getVoiceStorageSize(serverId: string): Promise<number> {
+    const { rows } = await this.getDb().execute(
+      `SELECT COALESCE(SUM(file_size), 0) as total
+       FROM messages
+       WHERE server_id = ? AND media_type = 'voice'`,
+      [serverId],
+    );
+    const row = rows[0] as Record<string, unknown> | undefined;
+    const total = row?.total;
+    return typeof total === 'number' ? total : 0;
+  }
+
+  /**
+   * Получить размер хранилища и количество голосовых сообщений по каждому контакту.
+   */
+  async getVoiceStoragePerContact(
+    serverId: string,
+  ): Promise<Record<string, { size: number; count: number }>> {
+    const { rows } = await this.getDb().execute(
+      `SELECT contact_id, COUNT(*) as count, COALESCE(SUM(file_size), 0) as size
+       FROM messages
+       WHERE server_id = ? AND media_type = 'voice'
+       GROUP BY contact_id`,
+      [serverId],
+    );
+    const result: Record<string, { size: number; count: number }> = {};
+    for (const row of rows as Record<string, unknown>[]) {
+      result[row.contact_id as string] = {
+        count: (row.count as number) ?? 0,
+        size: (row.size as number) ?? 0,
+      };
+    }
+    return result;
+  }
+
+  /**
+   * Получить количество голосовых сообщений для контакта.
+   */
+  async getVoiceCount(serverId: string, contactId: string): Promise<number> {
+    const { rows } = await this.getDb().execute(
+      `SELECT COUNT(*) as count FROM messages
+       WHERE server_id = ? AND contact_id = ? AND media_type = 'voice'`,
+      [serverId, contactId],
+    );
+    const row = rows[0] as Record<string, unknown> | undefined;
+    const count = row?.count;
+    return typeof count === 'number' ? count : 0;
+  }
+
+  /**
+   * Получить все голосовые сообщения с file_path для удаления.
+   * Возвращает записи с id и file_path.
+   */
+  async getVoiceFilePathsByAge(
+    serverId: string,
+    cutoffTimestamp: number,
+    limit?: number,
+  ): Promise<Array<{ id: string; filePath: string | null }>> {
+    const { rows } = await this.getDb().execute(
+      `SELECT id, file_path FROM messages
+       WHERE server_id = ? AND media_type = 'voice' AND timestamp < ?
+       ${limit ? 'LIMIT ?' : ''}`,
+      limit ? [serverId, cutoffTimestamp, limit] : [serverId, cutoffTimestamp],
+    );
+    return (rows as Record<string, unknown>[]).map(r => ({
+      id: r.id as string,
+      filePath: (r.file_path as string | null) ?? null,
+    }));
+  }
+
+  /**
+   * Получить голосовые сообщения, отсортированные по времени (самые старые первые).
+   * Используется для прунинга по количеству/размеру.
+   */
+  async getOldestVoiceMessages(
+    serverId: string,
+    contactId: string,
+    limit: number,
+  ): Promise<Array<{ id: string; filePath: string | null; fileSize: number }>> {
+    const { rows } = await this.getDb().execute(
+      `SELECT id, file_path, file_size FROM messages
+       WHERE server_id = ? AND contact_id = ? AND media_type = 'voice'
+       ORDER BY timestamp ASC
+       LIMIT ?`,
+      [serverId, contactId, limit],
+    );
+    return (rows as Record<string, unknown>[]).map(r => ({
+      id: r.id as string,
+      filePath: (r.file_path as string | null) ?? null,
+      fileSize: (r.file_size as number) ?? 0,
+    }));
+  }
+
+  /**
+   * Получить все голосовые сообщения на сервере, отсортированные по времени (самые старые первые).
+   */
+  async getOldestVoiceMessagesAll(
+    serverId: string,
+    limit: number,
+  ): Promise<Array<{ id: string; filePath: string | null; fileSize: number; contactId: string }>> {
+    const { rows } = await this.getDb().execute(
+      `SELECT id, file_path, file_size, contact_id FROM messages
+       WHERE server_id = ? AND media_type = 'voice'
+       ORDER BY timestamp ASC
+       LIMIT ?`,
+      [serverId, limit],
+    );
+    return (rows as Record<string, unknown>[]).map(r => ({
+      id: r.id as string,
+      filePath: (r.file_path as string | null) ?? null,
+      fileSize: (r.file_size as number) ?? 0,
+      contactId: r.contact_id as string,
+    }));
   }
 
   async deleteMessages(serverId: string, contactId: string, messageIds: string[]): Promise<void> {

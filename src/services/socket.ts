@@ -13,6 +13,7 @@ import type {
   CallDeclined,
   CallTimedOut,
   CallType,
+  VoiceMessageReceived,
 } from '../types';
 
 import { webrtcService } from './WebRTCService';
@@ -73,6 +74,10 @@ class SocketService {
       inviteClaimedCallbacks: false,
       autoFriendAddedBuffer: false,
       inviteClaimedBuffer: false,
+      voiceMessageCallbacks: false,
+      voiceMessageSentCallback: false,
+      voiceMessageFailedCallback: false,
+      voiceMessageBuffer: false,
       callIncomingBuffer: false,
       callOfferSentBuffer: false,
       callAcceptedBuffer: false,
@@ -160,6 +165,21 @@ class SocketService {
     inviterUserId: string;
     publicKey: string | null;
   }> = [];
+
+  private voiceMessageCallbacks: Array<(data: VoiceMessageReceived) => void> = [];
+  private voiceMessageSentCallback:
+    | ((data: {
+        to: string;
+        ciphertext: string;
+        nonce: string;
+        duration: number;
+        timestamp: number;
+      }) => void)
+    | null = null;
+  private voiceMessageFailedCallback:
+    | ((data: { to: string; nonce: string; reason: string }) => void)
+    | null = null;
+  private voiceMessageBuffer: VoiceMessageReceived[] = [];
 
   connect(serverUrl: string, userId: string, publicKey: string): Promise<void> {
     if (this.socket) {
@@ -419,6 +439,39 @@ class SocketService {
         },
       );
 
+      this.socket.on('voice_message', (data: VoiceMessageReceived) => {
+        if (this.voiceMessageCallbacks.length > 0) {
+          for (const cb of this.voiceMessageCallbacks) {
+            cb(data);
+          }
+        } else {
+          this.voiceMessageBuffer.push(data);
+          if (this.voiceMessageBuffer.length > MAX_BUFFER_SIZE) {
+            this.voiceMessageBuffer.shift();
+          }
+        }
+      });
+
+      this.socket.on(
+        'voice_message_sent',
+        (data: {
+          to: string;
+          ciphertext: string;
+          nonce: string;
+          duration: number;
+          timestamp: number;
+        }) => {
+          this.voiceMessageSentCallback?.(data);
+        },
+      );
+
+      this.socket.on(
+        'voice_message_failed',
+        (data: { to: string; nonce: string; reason: string }) => {
+          this.voiceMessageFailedCallback?.(data);
+        },
+      );
+
       this.socket.on('error', (data: { message: string }) => {
         console.error('Socket error:', data.message);
         this.errorCallback?.(data);
@@ -451,6 +504,7 @@ class SocketService {
     this.connectionStatus = 'disconnected';
     this.lastError = null;
     this.reconnectAttempt = 0;
+    this.voiceMessageBuffer = [];
   }
 
   async reconnect(serverUrl: string, userId: string, publicKey: string): Promise<void> {
@@ -500,6 +554,10 @@ class SocketService {
     this.autoFriendAddedBuffer = [];
     this.inviteClaimedCallbacks = [];
     this.inviteClaimedBuffer = [];
+    this.voiceMessageCallbacks = [];
+    this.voiceMessageSentCallback = null;
+    this.voiceMessageFailedCallback = null;
+    this.voiceMessageBuffer = [];
   }
 
   sendFriendRequest(targetUserId: string): void {
@@ -823,6 +881,56 @@ class SocketService {
 
   getConnectedAt(): number | null {
     return this.connectedAt;
+  }
+
+  // ===== VOICE MESSAGES =====
+
+  sendVoiceMessage(to: string, ciphertext: string, nonce: string, duration: number): void {
+    this.socket?.emit('voice_message', { to, ciphertext, nonce, duration });
+  }
+
+  onVoiceMessage(callback: (_: VoiceMessageReceived) => void): () => void {
+    this.voiceMessageCallbacks.push(callback);
+    // Flush buffer to the new callback
+    while (this.voiceMessageBuffer.length > 0) {
+      callback(this.voiceMessageBuffer.shift()!);
+    }
+    return () => {
+      this.voiceMessageCallbacks = this.voiceMessageCallbacks.filter(cb => cb !== callback);
+    };
+  }
+
+  offVoiceMessage(): void {
+    this.voiceMessageCallbacks = [];
+    this.voiceMessageBuffer = [];
+  }
+
+  onVoiceMessageSent(
+    callback:
+      | ((_: {
+          to: string;
+          ciphertext: string;
+          nonce: string;
+          duration: number;
+          timestamp: number;
+        }) => void)
+      | null,
+  ): void {
+    this.voiceMessageSentCallback = callback;
+  }
+
+  offVoiceMessageSent(): void {
+    this.voiceMessageSentCallback = null;
+  }
+
+  onVoiceMessageFailed(
+    callback: ((_: { to: string; nonce: string; reason: string }) => void) | null,
+  ): void {
+    this.voiceMessageFailedCallback = callback;
+  }
+
+  offVoiceMessageFailed(): void {
+    this.voiceMessageFailedCallback = null;
   }
 
   sendClaimInvite(inviterUserId: string): void {

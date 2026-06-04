@@ -38,4 +38,5 @@ export type RootStackParamList = {
         callId: string;
         callType: CallType;
       };
+  Storage: undefined;
 };

@@ -129,4 +129,74 @@ export const styles = StyleSheet.create({
     marginHorizontal: -16,
     paddingHorizontal: 16,
   },
+
+  /* ─── Send / Mic button wrapper ─── */
+  actionButtonContainer: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  micButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  micButtonDisabled: {
+    opacity: 0.5,
+  },
+
+  /* ─── Recording indicator (над полем ввода) ─── */
+  recordingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: Colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: Colors.borderError,
+  },
+  recordingInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  recordingDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: Colors.error,
+  },
+  recordingTimer: {
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: 'sans-serif',
+    color: Colors.textPrimary,
+    letterSpacing: 0.5,
+    minWidth: 36,
+  },
+  recordingCancelHint: {
+    fontSize: 12,
+    fontWeight: '400',
+    fontFamily: 'sans-serif',
+    color: Colors.textSecondary,
+    letterSpacing: 0.3,
+  },
+  recordingCancel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  recordingCancelIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,68,68,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

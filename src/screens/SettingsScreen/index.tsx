@@ -486,6 +486,20 @@ export const SettingsScreen = observer(function SettingsScreen({
           </View>
 
           <TouchableOpacity
+            style={styles.menuRow}
+            onPress={() => navigation.navigate('Storage')}
+            activeOpacity={0.7}
+          >
+            <View style={styles.menuIcon}>
+              <Icon name='broom' size={20} color={Colors.primary} />
+            </View>
+            <Text style={styles.menuText}>Управление хранилищем</Text>
+            <View style={styles.menuArrow}>
+              <Icon name='chevron-right' size={18} color={Colors.textMuted} />
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
             style={[styles.updateButton, updateState !== 'idle' && styles.updateButtonDisabled]}
             onPress={handleUpdate}
             disabled={updateState !== 'idle'}

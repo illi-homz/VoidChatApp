@@ -46,6 +46,13 @@ export const MIGRATIONS: Migration[] = [
       'DROP TABLE IF EXISTS schema_version',
     ],
   },
+  {
+    version: 2,
+    up: [
+      "CREATE INDEX IF NOT EXISTS idx_messages_voice ON messages(server_id, media_type) WHERE media_type = 'voice'",
+    ],
+    down: ['DROP INDEX IF EXISTS idx_messages_voice'],
+  },
 ];
 
 // ---------------------------------------------------------------------------

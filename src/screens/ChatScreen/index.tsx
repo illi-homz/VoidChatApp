@@ -18,18 +18,23 @@ import {
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import type { RootStackParamList } from '../../navigation/types';
-import type { Message, ServerMessage } from '../../types';
-import { useStore, useServerStore, useCallStore } from '../../stores';
+import type { Message, ServerMessage, VoiceMessageReceived } from '../../types';
+import { useStore, useServerStore, useCallStore, useVoicePlayerStore } from '../../stores';
 import { socketService } from '../../services/socket';
 import { deriveSharedSecret, encryptMessage, decryptMessage } from '../../services/crypto';
+import { audioService } from '../../services/AudioService';
+import { voiceCacheService } from '../../services/VoiceCacheService';
+import { voicePlayerStore } from '../../stores/VoicePlayerStore';
+import ReactNativeBlobUtil from 'react-native-blob-util';
 import { v4 as uuidv4 } from 'uuid';
 import { Colors } from '../../theme/colors';
 import { Icon } from '../../components/Icon';
 import { CallButton } from '../../components/CallButton';
 import { CallConfirmAlert } from '../../components/CallConfirmAlert';
 import { StatusIcon } from '../../components/StatusIcon';
+import { VoiceMessageBubble } from '../../components/VoiceMessage';
 import { useToast } from '../../components/Toast';
-import Animated, { FadeInDown, FadeOut } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { selectionStore } from '../../stores/SelectionStore';
 import { formatTime } from '../../utils/formatTime';
@@ -56,6 +61,7 @@ export const ChatScreen = observer(function ChatScreen({
   const serverStore = useServerStore();
   const callStore = useCallStore();
   const { toast } = useToast();
+  const voicePlayer = useVoicePlayerStore();
   const [inputText, setInputText] = useState('');
   const [isSecretReady, setIsSecretReady] = useState(false);
   const sharedSecretRef = useRef<string | null>(null);
@@ -71,6 +77,14 @@ export const ChatScreen = observer(function ChatScreen({
   const contactIdRef = useRef(contactId);
   contactIdRef.current = contactId;
   const markerAnim = useRef(new RNAnimated.Value(0)).current;
+
+  // Voice message recording state (UI placeholder — logic to be connected)
+  const [isRecording, setIsRecording] = useState(false);
+  const isRecordingRef = useRef(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordingStartRef = useRef<number>(0);
 
   // Refs + state for local-only UI concerns (not persisted in store)
   const statusOverridesRef = useRef<Map<string, 'pending' | 'failed'>>(new Map());
@@ -121,13 +135,16 @@ export const ChatScreen = observer(function ChatScreen({
     [contactId, store, serverStore, socketService],
   );
 
-  const handleMessageSent = useCallback((data: { nonce: string; timestamp: number }): void => {
-    statusOverridesRef.current.delete(data.nonce);
-    store.updateMessageTimestamp(contactId, data.nonce, data.timestamp).catch(e =>
-      console.warn('Failed to update message timestamp:', e),
-    );
-    setTick(t => t + 1);
-  }, [contactId, store]);
+  const handleMessageSent = useCallback(
+    (data: { nonce: string; timestamp: number }): void => {
+      statusOverridesRef.current.delete(data.nonce);
+      store
+        .updateMessageTimestamp(contactId, data.nonce, data.timestamp)
+        .catch(e => console.warn('Failed to update message timestamp:', e));
+      setTick(t => t + 1);
+    },
+    [contactId, store],
+  );
 
   const handleMessagesRead = useCallback(
     (data: { readBy: string }): void => {
@@ -143,6 +160,42 @@ export const ChatScreen = observer(function ChatScreen({
     (data: { to: string; nonce: string; reason: string }): void => {
       if (data.to !== contactId) return;
       if (!data.nonce) return;
+      statusOverridesRef.current.set(data.nonce, 'failed');
+      setTick(t => t + 1);
+    },
+    [contactId],
+  );
+
+  /* ─── Voice message handlers ─── */
+
+  const handleIncomingVoiceMessage = useCallback(
+    async (data: VoiceMessageReceived): Promise<void> => {
+      if (data.from !== contactId || !sharedSecretRef.current) return;
+
+      try {
+        // Сообщение уже сохранено в HomeScreen (filePath + store).
+        // Здесь только отмечаем прочитанным и уведомляем собеседника.
+        store.markAsRead(contactId).catch(() => {});
+        socketService.sendMessageRead(contactId);
+      } catch (err) {
+        console.error('Failed to handle incoming voice message:', err);
+      }
+    },
+    [contactId, store, socketService],
+  );
+
+  const handleVoiceMessageSent = useCallback(
+    (data: { nonce: string; timestamp: number; duration: number }): void => {
+      statusOverridesRef.current.delete(data.nonce);
+      store.updateMessageTimestamp(contactId, data.nonce, data.timestamp).catch(() => {});
+      setTick(t => t + 1);
+    },
+    [contactId, store],
+  );
+
+  const handleVoiceMessageFailed = useCallback(
+    (data: { to: string; nonce: string; reason: string }): void => {
+      if (data.to !== contactId || !data.nonce) return;
       statusOverridesRef.current.set(data.nonce, 'failed');
       setTick(t => t + 1);
     },
@@ -238,6 +291,63 @@ export const ChatScreen = observer(function ChatScreen({
       const isNew = initialIdsRef.current && !initialIdsRef.current.has(item.id);
       const isSelected = selectedIds.has(item.id);
 
+      // Voice message rendering
+      if (item.mediaType === 'voice' && item.duration != null) {
+        const isCurrentlyPlaying = voicePlayer.currentVoiceId === item.id && voicePlayer.isPlaying;
+        const currentPos = voicePlayer.currentVoiceId === item.id ? voicePlayer.position / 1000 : 0;
+        const playRate = voicePlayer.currentVoiceId === item.id ? voicePlayer.speed : 1;
+
+        const voiceBubble = (
+          <VoiceMessageBubble
+            id={item.id}
+            isMe={isMe}
+            duration={item.duration ?? 0}
+            currentPosition={currentPos}
+            isPlaying={isCurrentlyPlaying}
+            playbackRate={playRate}
+            status={item.status}
+            selectionMode={selectionMode}
+            isSelected={isSelected}
+            markerAnim={markerAnim}
+            onPlayPause={() => {
+              if (isCurrentlyPlaying) {
+                voicePlayerStore.pause();
+              } else if (voicePlayer.currentVoiceId === item.id) {
+                voicePlayerStore.resume();
+              } else {
+                // Расшифровка и воспроизведение
+                (async () => {
+                  if (item.filePath) {
+                    try {
+                      const decryptedPath = await voiceCacheService.getOrDecryptPath(
+                        item.filePath,
+                        sharedSecretRef.current!,
+                      );
+                      voicePlayerStore.play(item.id, decryptedPath);
+                    } catch (err) {
+                      console.error('Failed to play voice message:', err);
+                      toast('Ошибка воспроизведения', 'error');
+                    }
+                  } else {
+                    toast('Файл недоступен', 'error');
+                  }
+                })();
+              }
+            }}
+            onSpeedChange={rate => {
+              voicePlayerStore.speed = rate;
+              audioService.setSpeed(rate).catch(() => {});
+            }}
+            onLongPress={() => handleMessageLongPress(item)}
+            onPress={() => handleMessagePress(item)}
+          />
+        );
+        if (isNew) {
+          return <Animated.View entering={FadeInDown.duration(250)}>{voiceBubble}</Animated.View>;
+        }
+        return voiceBubble;
+      }
+
       const bubble = (
         <TouchableOpacity
           activeOpacity={selectionMode ? 0.7 : 1}
@@ -302,6 +412,8 @@ export const ChatScreen = observer(function ChatScreen({
       formatTime,
       handleMessageLongPress,
       handleMessagePress,
+      voicePlayer,
+      toast,
     ],
   );
 
@@ -358,6 +470,163 @@ export const ChatScreen = observer(function ChatScreen({
   const handleCancelCall = useCallback(() => {
     setShowCallConfirm(false);
   }, []);
+
+  /* ─── Voice message recording handlers (UI placeholders) ─── */
+
+  const handleMicPressIn = useCallback(async () => {
+    if (callStore.status !== 'idle') {
+      toast('Нельзя записывать во время звонка', 'error');
+      return;
+    }
+
+    const hasPerm = await audioService.requestPermission();
+    if (!hasPerm) {
+      toast('Нет разрешения на запись', 'error');
+      return;
+    }
+
+    Vibration.vibrate(10);
+    isRecordingRef.current = true;
+    setIsRecording(true);
+    setIsCancelling(false);
+    setRecordingSeconds(0);
+    recordingStartRef.current = Date.now();
+
+    try {
+      await audioService.startRecording();
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingSeconds(Math.floor((Date.now() - recordingStartRef.current) / 1000));
+      }, 200);
+    } catch (err) {
+      console.error('Failed to start recording:', err);
+      toast('Ошибка записи', 'error');
+      isRecordingRef.current = false;
+      setIsRecording(false);
+    }
+  }, [callStore.status, toast]);
+
+  const handleMicPressOut = useCallback(
+    async (cancelled: boolean) => {
+      isRecordingRef.current = false;
+      setIsRecording(false);
+      setIsCancelling(false);
+
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+
+      if (cancelled) {
+        await audioService.cancelRecording();
+        return;
+      }
+
+      if (!sharedSecretRef.current) return;
+
+      try {
+        const result = await audioService.stopRecording();
+        if (!result || !result.path) return;
+
+        const { path: tempPath, durationMs } = result;
+        const durationSec = Math.round(durationMs / 1000);
+        if (durationSec < 1) {
+          // Слишком короткое сообщение (< 1 секунды) — удаляем и не отправляем
+          await ReactNativeBlobUtil.fs.unlink(tempPath).catch(() => {});
+          toast('Слишком короткое сообщение', 'error');
+          return;
+        }
+
+        // Получаем реальный бинарный размер файла
+        const stat = await ReactNativeBlobUtil.fs.stat(tempPath);
+        const realFileSize = stat.size;
+
+        // Читаем файл, шифруем, отправляем
+        const fileData = await ReactNativeBlobUtil.fs.readFile(tempPath, 'base64');
+        const payload = encryptMessage(fileData, sharedSecretRef.current);
+
+        // Отправляем через сокет
+        socketService.sendVoiceMessage(contactId, payload.ciphertext, payload.nonce, durationSec);
+
+        // Сохраняем зашифрованный файл на диск (вместо temp-файла)
+        const encryptedDir = `${ReactNativeBlobUtil.fs.dirs.CacheDir}/voice_encrypted`;
+        const dirExists = await ReactNativeBlobUtil.fs.exists(encryptedDir);
+        if (!dirExists) {
+          await ReactNativeBlobUtil.fs.mkdir(encryptedDir);
+        }
+        const nomediaPath = `${encryptedDir}/.nomedia`;
+        const nomediaExists = await ReactNativeBlobUtil.fs.exists(nomediaPath);
+        if (!nomediaExists) {
+          await ReactNativeBlobUtil.fs.writeFile(nomediaPath, '', 'utf8');
+        }
+
+        const messageId = uuidv4();
+        const encryptedPath = `${encryptedDir}/${messageId}.enc`;
+        const encryptedContent = payload.nonce + payload.ciphertext;
+        await ReactNativeBlobUtil.fs.writeFile(encryptedPath, encryptedContent, 'utf8');
+
+        // Удаляем временный raw-файл сразу (больше не нужен)
+        await ReactNativeBlobUtil.fs.unlink(tempPath).catch(() => {});
+
+        // Сохраняем сообщение локально с filePath на зашифрованный файл
+        const message: Message = {
+          id: messageId,
+          from: 'me',
+          ciphertext: payload.ciphertext,
+          nonce: payload.nonce,
+          timestamp: Date.now(),
+          read: false,
+          mediaType: 'voice',
+          duration: durationSec,
+          filePath: encryptedPath,
+          fileSize: realFileSize,
+        };
+
+        statusOverridesRef.current.set(payload.nonce, 'pending');
+        setTick(t => t + 1);
+        await store.addMessage(contactId, message);
+      } catch (err) {
+        console.error('Failed to handle voice recording:', err);
+        toast('Ошибка отправки голосового сообщения', 'error');
+      }
+    },
+    [contactId, store, socketService, toast],
+  );
+
+  const handleMicCancel = useCallback(() => {
+    // Свайп влево — отмена записи
+    setIsCancelling(true);
+  }, []);
+
+  const handleMicCancelEnd = useCallback(() => {
+    // Завершение отмены
+    handleMicPressOut(true);
+  }, [handleMicPressOut]);
+
+  /** Swipe detection on mic button: tracks horizontal movement for cancel */
+  const micTouchStartX = useRef(0);
+  const handleMicTouchStart = useCallback(
+    (e: { nativeEvent: { pageX: number } }) => {
+      micTouchStartX.current = e.nativeEvent.pageX;
+      handleMicPressIn();
+    },
+    [handleMicPressIn],
+  );
+  const handleMicTouchMove = useCallback(
+    (e: { nativeEvent: { pageX: number } }) => {
+      const dx = e.nativeEvent.pageX - micTouchStartX.current;
+      if (dx < -60) {
+        handleMicCancel();
+      } else {
+        setIsCancelling(false);
+      }
+    },
+    [handleMicCancel],
+  );
+  const handleMicTouchEnd = useCallback(() => {
+    if (isRecordingRef.current) {
+      handleMicCancelEnd();
+    }
+  }, [handleMicCancelEnd]);
 
   // Build display messages from MobX store + local overrides
   // Decrypt on-the-fly (before first render) to prevent flash of encrypted content
@@ -419,6 +688,11 @@ export const ChatScreen = observer(function ChatScreen({
     socketService.onMessageFailed(handleMessageFailed);
     socketService.onMessagesRead(handleMessagesRead);
 
+    // Voice message subscriptions
+    const unsubVoice = socketService.onVoiceMessage(handleIncomingVoiceMessage);
+    socketService.onVoiceMessageSent(handleVoiceMessageSent);
+    socketService.onVoiceMessageFailed(handleVoiceMessageFailed);
+
     // Сбрасываем счётчик непрочитанных при открытии чата
     store.markAsRead(contactId).catch(e => console.warn('Failed to mark as read:', e));
     serverStore
@@ -435,6 +709,9 @@ export const ChatScreen = observer(function ChatScreen({
       socketService.offMessageSent();
       socketService.offMessageFailed();
       socketService.offMessagesRead();
+      unsubVoice();
+      socketService.offVoiceMessageSent();
+      socketService.offVoiceMessageFailed();
     };
   }, [contactId]);
 
@@ -476,6 +753,22 @@ export const ChatScreen = observer(function ChatScreen({
     };
   }, []);
 
+  // Cleanup recording timer, active recording, and voice player on unmount
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+      // Остановить запись если активна
+      if (isRecordingRef.current) {
+        audioService.cancelRecording().catch(() => {});
+      }
+      // Остановить плеер
+      voicePlayerStore.stop().catch(() => {});
+    };
+  }, []);
+
   const reversedMessages = [...messages].reverse();
 
   const chatContent = (
@@ -492,6 +785,24 @@ export const ChatScreen = observer(function ChatScreen({
         keyboardShouldPersistTaps={'handled'}
         inverted
       />
+      {/* Recording indicator — показывается во время записи голосового сообщения */}
+      {isRecording && (
+        <Animated.View
+          entering={FadeIn.duration(200)}
+          exiting={FadeOut.duration(200)}
+          style={styles.recordingContainer}
+        >
+          <View style={styles.recordingInner}>
+            <View
+              style={[styles.recordingDot, isCancelling && { backgroundColor: Colors.errorLight }]}
+            />
+            <Text style={styles.recordingTimer}>0:{String(recordingSeconds).padStart(2, '0')}</Text>
+            <Text style={styles.recordingCancelHint}>
+              {isCancelling ? 'Отпустите для отмены' : 'Свайп влево для отмены'}
+            </Text>
+          </View>
+        </Animated.View>
+      )}
       <View style={styles.inputContainer}>
         <TextInput
           style={styles.input}
@@ -502,21 +813,54 @@ export const ChatScreen = observer(function ChatScreen({
           multiline
           maxLength={1000}
         />
-        <TouchableOpacity
-          style={[
-            styles.sendButton,
-            (!inputText.trim() || !isSecretReady) && styles.sendButtonDisabled,
-          ]}
-          onPress={sendMessage}
-          disabled={!inputText.trim() || !isSecretReady}
-          activeOpacity={0.7}
-        >
-          <Icon
-            name='send'
-            size={20}
-            color={!inputText.trim() || !isSecretReady ? Colors.textMuted : '#000'}
-          />
-        </TouchableOpacity>
+        <View style={styles.actionButtonContainer}>
+          {inputText.trim().length === 0 ? (
+            <Animated.View
+              key='mic'
+              entering={FadeIn.duration(200)}
+              exiting={FadeOut.duration(200)}
+            >
+              <View
+                onTouchStart={handleMicTouchStart}
+                onTouchMove={handleMicTouchMove}
+                onTouchEnd={handleMicTouchEnd}
+              >
+                <View
+                  style={[
+                    styles.micButton,
+                    !isSecretReady && styles.micButtonDisabled,
+                    isRecording && { opacity: 0.7 },
+                  ]}
+                  pointerEvents='none'
+                >
+                  <Icon name={isRecording ? 'x' : 'mic'} size={20} color='#000' />
+                </View>
+              </View>
+            </Animated.View>
+          ) : (
+            <Animated.View
+              key='send'
+              entering={FadeIn.duration(200)}
+              exiting={FadeOut.duration(200)}
+            >
+              <TouchableOpacity
+                style={[
+                  styles.sendButton,
+                  (!inputText.trim() || !isSecretReady) && styles.sendButtonDisabled,
+                ]}
+                onPress={sendMessage}
+                disabled={!inputText.trim() || !isSecretReady}
+                activeOpacity={0.7}
+              >
+                <Icon
+                  name='send'
+                  size={20}
+                  color={!inputText.trim() || !isSecretReady ? Colors.textMuted : '#000'}
+                />
+              </TouchableOpacity>
+            </Animated.View>
+          )}
+        </View>
       </View>
     </>
   );
