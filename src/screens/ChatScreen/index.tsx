@@ -83,6 +83,7 @@ export const ChatScreen = observer(function ChatScreen({
   const isRecordingRef = useRef(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [isCancelling, setIsCancelling] = useState(false);
+  const isCancellingRef = useRef(false);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordingStartRef = useRef<number>(0);
 
@@ -624,9 +625,16 @@ export const ChatScreen = observer(function ChatScreen({
   );
   const handleMicTouchEnd = useCallback(() => {
     if (isRecordingRef.current) {
-      handleMicCancelEnd();
+      // Проверяем глобальный флаг отмены (устанавливается при свайпе > 60px влево)
+      // Используем ref для получения актуального значения без зависимости от стейта
+      const wasCancelled = isCancellingRef.current;
+      if (wasCancelled) {
+        handleMicCancelEnd();
+      } else {
+        handleMicPressOut(false);
+      }
     }
-  }, [handleMicCancelEnd]);
+  }, [handleMicPressOut, handleMicCancelEnd]);
 
   // Build display messages from MobX store + local overrides
   // Decrypt on-the-fly (before first render) to prevent flash of encrypted content
@@ -736,6 +744,11 @@ export const ChatScreen = observer(function ChatScreen({
       setTick(t => t + 1);
     }
   }, [isSecretReady, contactId, messageCount]);
+
+  // Sync isCancellingRef with isCancelling state (for touch callbacks)
+  useEffect(() => {
+    isCancellingRef.current = isCancelling;
+  }, [isCancelling]);
 
   useEffect(() => {
     if (Platform.OS !== 'android') return;
