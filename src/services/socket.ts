@@ -886,7 +886,12 @@ class SocketService {
   // ===== VOICE MESSAGES =====
 
   sendVoiceMessage(to: string, ciphertext: string, nonce: string, duration: number): void {
-    this.socket?.emit('voice_message', { to, ciphertext, nonce, duration });
+    if (!this.socket?.connected) {
+      console.warn('[VOICE] socket not connected, dropping');
+      return;
+    }
+    console.log('[VOICE] voice_message emitted');
+    this.socket.emit('voice_message', { to, ciphertext, nonce, duration });
   }
 
   onVoiceMessage(callback: (_: VoiceMessageReceived) => void): () => void {

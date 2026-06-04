@@ -1,19 +1,10 @@
 import { StyleSheet } from 'react-native';
 import { Colors } from '../../theme/colors';
 
-const WAVEFORM_BAR_COUNT = 20;
-const WAVEFORM_BAR_WIDTH = 3;
-const WAVEFORM_BAR_GAP = 2;
 const PLAY_BUTTON_SIZE = 36;
 
 export const VOICE_CONSTANTS = {
-  WAVEFORM_BAR_COUNT,
-  WAVEFORM_BAR_WIDTH,
-  WAVEFORM_BAR_GAP,
   PLAY_BUTTON_SIZE,
-  /** Полная ширина waveform = count * barWidth + (count-1) * gap */
-  WAVEFORM_TOTAL_WIDTH:
-    WAVEFORM_BAR_COUNT * WAVEFORM_BAR_WIDTH + (WAVEFORM_BAR_COUNT - 1) * WAVEFORM_BAR_GAP,
   BAR_MIN_HEIGHT: 4,
   BAR_MAX_HEIGHT: 18,
 } as const;
@@ -67,7 +58,8 @@ export const styles = StyleSheet.create({
     flex: 1,
   },
   bubble: {
-    maxWidth: '82%',
+    width: '100%',
+    maxWidth: '75%',
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 16,
@@ -94,7 +86,7 @@ export const styles = StyleSheet.create({
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    justifyContent: 'space-between',
   },
 
   /* ─── Play/Pause button ─── */
@@ -123,12 +115,15 @@ export const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: WAVEFORM_BAR_GAP,
+    justifyContent: 'space-evenly',
     height: VOICE_CONSTANTS.BAR_MAX_HEIGHT,
+    paddingHorizontal: 4,
   },
   waveformBar: {
-    width: WAVEFORM_BAR_WIDTH,
-    borderRadius: 1.5,
+    flex: 1,
+    maxWidth: 4,
+    height: '100%',
+    borderRadius: 2,
   },
   waveformBarPlayedMine: {
     backgroundColor: Colors.primary,
@@ -145,12 +140,12 @@ export const styles = StyleSheet.create({
 
   /* ─── Speed button ─── */
   speedButton: {
-    minWidth: 34,
-    height: 26,
+    width: 36,
+    height: 24,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 6,
+    marginLeft: 6,
   },
   speedButtonMine: {
     backgroundColor: 'rgba(255,216,144,0.12)',
@@ -176,7 +171,7 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingLeft: 46, // align with waveform (play button + gap)
+    paddingLeft: 0, // под кнопкой play
   },
 
   /* ─── Mic icon wrapping ─── */
@@ -201,9 +196,10 @@ export const styles = StyleSheet.create({
 
   /* ─── Status icon placeholder ─── */
   statusArea: {
-    flex: 1,
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    alignItems: 'center',
+    marginLeft: 4,
+    marginRight: 4,
   },
   statusIconWrap: {
     width: 22,

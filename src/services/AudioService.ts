@@ -9,6 +9,7 @@
 
 import Sound from 'react-native-nitro-sound';
 import { PermissionsAndroid, Platform, Vibration } from 'react-native';
+import ReactNativeBlobUtil from 'react-native-blob-util';
 import { audioRouter } from './AudioRouter';
 
 export class AudioService {
@@ -66,8 +67,12 @@ export class AudioService {
     Vibration.vibrate(10);
 
     try {
+      console.log('[AudioService] startRecording');
       await audioRouter.startAudioSession();
-      await Sound.startRecorder();
+
+      const recordPath = `${ReactNativeBlobUtil.fs.dirs.CacheDir}/voice_recording_${Date.now()}.mp4`;
+      await Sound.startRecorder(recordPath);
+      console.log('[AudioService] startRecording OK, path=', recordPath);
       this._isRecording = true;
       this._recordStartTime = Date.now();
 
@@ -75,11 +80,10 @@ export class AudioService {
         this._onRecordPosition(e.currentPosition);
       });
 
-      // Возвращаем путь по умолчанию (кэш-директория)
-      return '';
+      return recordPath;
     } catch (error) {
       this._isRecording = false;
-      console.warn('[AudioService] startRecording failed:', error);
+      console.error('[AudioService] startRecording FAILED:', error);
       throw error;
     }
   }
@@ -90,26 +94,33 @@ export class AudioService {
    * @returns объект с путём и длительностью в ms, или null если записи не было
    */
   async stopRecording(): Promise<{ path: string; durationMs: number } | null> {
+    console.log('[AudioService] stopRecording');
     if (!this._isRecording) {
       return null;
     }
 
     try {
       const result = await Sound.stopRecorder();
+      console.log('[AudioService] stopRecording result=', result);
       Sound.removeRecordBackListener();
 
       const durationMs = Date.now() - this._recordStartTime;
       this._isRecording = false;
       this._recordStartTime = 0;
 
-      // result.path — путь к файлу записи
-      const path = (result as { path?: string })?.path ?? '';
+      // result может быть строкой (путь к файлу) или объектом { path: string }
+      let path = '';
+      if (typeof result === 'string') {
+        path = result;
+      } else if (result && typeof result === 'object') {
+        path = (result as { path?: string }).path ?? '';
+      }
       return { path, durationMs };
     } catch (error) {
       this._isRecording = false;
       this._recordStartTime = 0;
       Sound.removeRecordBackListener();
-      console.warn('[AudioService] stopRecording failed:', error);
+      console.error('[AudioService] stopRecording FAILED:', error);
       return null;
     }
   }
@@ -127,10 +138,14 @@ export class AudioService {
       Sound.removeRecordBackListener();
 
       // Удалить временный файл записи
-      const path = (result as { path?: string })?.path;
+      let path = '';
+      if (typeof result === 'string') {
+        path = result;
+      } else if (result && typeof result === 'object') {
+        path = (result as { path?: string }).path ?? '';
+      }
       if (path) {
         try {
-          const ReactNativeBlobUtil = require('react-native-blob-util').default;
           await ReactNativeBlobUtil.fs.unlink(path);
         } catch {
           // файл может не существовать — игнорируем
@@ -157,7 +172,9 @@ export class AudioService {
 
     try {
       await audioRouter.startAudioSession();
+      await audioRouter.setSpeakerphoneOn(true);
       await Sound.startPlayer(path);
+      await Sound.setVolume(1.0); // макс. громкость
 
       this._isPlaying = true;
 
@@ -176,6 +193,43 @@ export class AudioService {
     } catch (error) {
       this._isPlaying = false;
       console.warn('[AudioService] startPlayback failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Легковесное воспроизведение для голосовых сообщений.
+   * Без audioRouter (MODE_IN_COMMUNICATION/speakerphone) — только Sound.startPlayer.
+   * Это устраняет задержку при старте и лишнее переключение аудио-режима.
+   *
+   * @param path — путь к расшифрованному аудио-файлу на диске
+   */
+  async startVoicePlayback(path: string): Promise<void> {
+    if (this._isPlaying) {
+      await this.stopPlayback();
+    }
+
+    try {
+      await Sound.startPlayer(path);
+      await Sound.setVolume(1.0);
+
+      this._isPlaying = true;
+
+      Sound.addPlayBackListener(e => {
+        const position = e.currentPosition ?? 0;
+        const duration = e.duration ?? 0;
+        this._playbackCallback?.(position, duration);
+      });
+
+      Sound.addPlaybackEndListener(() => {
+        this._isPlaying = false;
+        Sound.removePlayBackListener();
+        Sound.removePlaybackEndListener();
+        this._playbackEndCallback?.();
+      });
+    } catch (error) {
+      this._isPlaying = false;
+      console.warn('[AudioService] startVoicePlayback failed:', error);
       throw error;
     }
   }

@@ -9,6 +9,7 @@
 
 import { makeAutoObservable, runInAction } from 'mobx';
 import { audioService } from '../services/AudioService';
+import { dbService } from '../services/DatabaseService';
 import { appStore } from './AppStore';
 import { callStore } from './CallStore';
 
@@ -30,6 +31,8 @@ export class VoicePlayerStore {
   private _playbackEndUnsub: (() => void) | null = null;
   private _prevChatId: string | null = null;
   private _prevCallStatus: string = 'idle';
+  /** Время последнего обновления position (троттлинг UI) */
+  private _lastPositionUpdate: number = 0;
 
   constructor() {
     makeAutoObservable(this, {
@@ -38,8 +41,10 @@ export class VoicePlayerStore {
       _playbackEndUnsub: false,
       _prevChatId: false,
       _prevCallStatus: false,
+      _lastPositionUpdate: false,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
+    this.loadSpeed();
   }
 
   /**
@@ -68,18 +73,19 @@ export class VoicePlayerStore {
     });
 
     try {
-      await audioService.setSpeed(this.speed);
-      await audioService.startPlayback(filePath);
-
-      // Подписываемся на обновление позиции
+      // Сначала подписка, потом старт — чтобы не потерять первые колбэки с позицией
       this._playbackUnsub = audioService.onPlayback((position, duration) => {
         runInAction(() => {
-          this.position = position;
-          this.duration = duration;
+          // Троттлинг: обновляем UI не чаще чем раз в 150ms
+          const now = Date.now();
+          if (now - this._lastPositionUpdate >= 150) {
+            this.position = position;
+            this.duration = duration;
+            this._lastPositionUpdate = now;
+          }
         });
       });
 
-      // Подписываемся на окончание воспроизведения
       this._playbackEndUnsub = audioService.onPlaybackEnd(() => {
         runInAction(() => {
           this.isPlaying = false;
@@ -88,6 +94,9 @@ export class VoicePlayerStore {
           this.duration = 0;
         });
       });
+
+      await audioService.startVoicePlayback(filePath);
+      await audioService.setSpeed(this.speed); // после старта — иначе speed сбрасывается на 1x
 
       runInAction(() => {
         this.isPlaying = true;
@@ -182,6 +191,36 @@ export class VoicePlayerStore {
     runInAction(() => {
       this.speed = newSpeed;
     });
+    await this.saveSpeed();
+  }
+
+  /**
+   * Загрузить сохранённую скорость воспроизведения из БД.
+   * Вызывается при создании стора (в конструкторе).
+   */
+  async loadSpeed(): Promise<void> {
+    try {
+      const saved = await dbService.getMetadata('voice_playback_speed');
+      if (saved === '1' || saved === '1.5' || saved === '2') {
+        runInAction(() => {
+          this.speed = parseFloat(saved) as 1 | 1.5 | 2;
+        });
+      }
+    } catch {
+      // игнорируем ошибки загрузки — остаётся значение по умолчанию (1)
+    }
+  }
+
+  /**
+   * Сохранить текущую скорость воспроизведения в БД.
+   * Вызывается при каждом переключении скорости.
+   */
+  async saveSpeed(): Promise<void> {
+    try {
+      await dbService.setMetadata('voice_playback_speed', String(this.speed));
+    } catch {
+      // игнорируем ошибки сохранения
+    }
   }
 
   /**

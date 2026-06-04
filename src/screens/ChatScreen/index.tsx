@@ -21,7 +21,12 @@ import type { RootStackParamList } from '../../navigation/types';
 import type { Message, ServerMessage, VoiceMessageReceived } from '../../types';
 import { useStore, useServerStore, useCallStore, useVoicePlayerStore } from '../../stores';
 import { socketService } from '../../services/socket';
-import { deriveSharedSecret, encryptMessage, decryptMessage } from '../../services/crypto';
+import {
+  deriveSharedSecret,
+  encryptMessage,
+  encryptBinary,
+  decryptMessage,
+} from '../../services/crypto';
 import { audioService } from '../../services/AudioService';
 import { voiceCacheService } from '../../services/VoiceCacheService';
 import { voicePlayerStore } from '../../stores/VoicePlayerStore';
@@ -286,137 +291,124 @@ export const ChatScreen = observer(function ChatScreen({
     [selectionMode, toggleSelection],
   );
 
-  const renderMessage = useCallback(
-    ({ item }: { item: MessageExt }): React.JSX.Element => {
-      const isMe = item.from === 'me';
-      const isNew = initialIdsRef.current && !initialIdsRef.current.has(item.id);
-      const isSelected = selectedIds.has(item.id);
+  const renderMessage = ({ item }: { item: MessageExt }): React.JSX.Element => {
+    const isMe = item.from === 'me';
+    const isNew = initialIdsRef.current && !initialIdsRef.current.has(item.id);
+    const isSelected = selectedIds.has(item.id);
 
-      // Voice message rendering
-      if (item.mediaType === 'voice' && item.duration != null) {
-        const isCurrentlyPlaying = voicePlayer.currentVoiceId === item.id && voicePlayer.isPlaying;
-        const currentPos = voicePlayer.currentVoiceId === item.id ? voicePlayer.position / 1000 : 0;
-        const playRate = voicePlayer.currentVoiceId === item.id ? voicePlayer.speed : 1;
+    // Voice message rendering
+    if (item.mediaType === 'voice' && item.duration != null) {
+      const isCurrentlyPlaying = voicePlayer.currentVoiceId === item.id && voicePlayer.isPlaying;
+      const currentPos = voicePlayer.currentVoiceId === item.id ? voicePlayer.position / 1000 : 0;
+      const playRate = voicePlayer.currentVoiceId === item.id ? voicePlayer.speed : 1;
 
-        const voiceBubble = (
-          <VoiceMessageBubble
-            id={item.id}
-            isMe={isMe}
-            duration={item.duration ?? 0}
-            currentPosition={currentPos}
-            isPlaying={isCurrentlyPlaying}
-            playbackRate={playRate}
-            status={item.status}
-            selectionMode={selectionMode}
-            isSelected={isSelected}
-            markerAnim={markerAnim}
-            onPlayPause={() => {
-              if (isCurrentlyPlaying) {
-                voicePlayerStore.pause();
-              } else if (voicePlayer.currentVoiceId === item.id) {
-                voicePlayerStore.resume();
-              } else {
-                // Расшифровка и воспроизведение
-                (async () => {
-                  if (item.filePath) {
-                    try {
-                      const decryptedPath = await voiceCacheService.getOrDecryptPath(
-                        item.filePath,
-                        sharedSecretRef.current!,
-                      );
-                      voicePlayerStore.play(item.id, decryptedPath);
-                    } catch (err) {
-                      console.error('Failed to play voice message:', err);
-                      toast('Ошибка воспроизведения', 'error');
-                    }
-                  } else {
-                    toast('Файл недоступен', 'error');
+      const voiceBubble = (
+        <VoiceMessageBubble
+          id={item.id}
+          isMe={isMe}
+          duration={item.duration ?? 0}
+          currentPosition={currentPos}
+          isPlaying={isCurrentlyPlaying}
+          playbackRate={playRate}
+          status={item.status}
+          selectionMode={selectionMode}
+          isSelected={isSelected}
+          markerAnim={markerAnim}
+          onPlayPause={() => {
+            if (isCurrentlyPlaying) {
+              // STOP — полная остановка со сбросом позиции на 0
+              voicePlayerStore.stop();
+            } else {
+              // Всегда play с начала (т.к. stop сбрасывает позицию)
+              (async () => {
+                if (item.filePath) {
+                  try {
+                    const decryptedPath = await voiceCacheService.getOrDecryptPath(
+                      item.filePath,
+                      sharedSecretRef.current!,
+                    );
+                    voicePlayerStore.play(item.id, decryptedPath);
+                  } catch (err) {
+                    console.error('Failed to play voice message:', err);
+                    toast('Ошибка воспроизведения', 'error');
                   }
-                })();
-              }
-            }}
-            onSpeedChange={rate => {
-              voicePlayerStore.speed = rate;
-              audioService.setSpeed(rate).catch(() => {});
-            }}
-            onLongPress={() => handleMessageLongPress(item)}
-            onPress={() => handleMessagePress(item)}
-          />
-        );
-        if (isNew) {
-          return <Animated.View entering={FadeInDown.duration(250)}>{voiceBubble}</Animated.View>;
-        }
-        return voiceBubble;
-      }
-
-      const bubble = (
-        <TouchableOpacity
-          activeOpacity={selectionMode ? 0.7 : 1}
+                } else {
+                  toast('Файл недоступен', 'error');
+                }
+              })();
+            }
+          }}
+          onSpeedChange={rate => {
+            voicePlayerStore.speed = rate;
+            audioService.setSpeed(rate).catch(() => {});
+          }}
           onLongPress={() => handleMessageLongPress(item)}
           onPress={() => handleMessagePress(item)}
-          delayLongPress={400}
+        />
+      );
+      if (isNew) {
+        return <Animated.View entering={FadeInDown.duration(250)}>{voiceBubble}</Animated.View>;
+      }
+      return voiceBubble;
+    }
+
+    const bubble = (
+      <TouchableOpacity
+        activeOpacity={selectionMode ? 0.7 : 1}
+        onLongPress={() => handleMessageLongPress(item)}
+        onPress={() => handleMessagePress(item)}
+        delayLongPress={400}
+        style={[
+          styles.messageRow,
+          isMe ? styles.messageRowMine : styles.messageRowTheirs,
+          isSelected && styles.messageRowSelected,
+        ]}
+      >
+        <RNAnimated.View
           style={[
-            styles.messageRow,
-            isMe ? styles.messageRowMine : styles.messageRowTheirs,
-            isSelected && styles.messageRowSelected,
+            styles.selectionMarker,
+            {
+              width: markerAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 44],
+              }),
+            },
           ]}
         >
           <RNAnimated.View
             style={[
-              styles.selectionMarker,
+              styles.selectionMarkerCircleWrap,
               {
-                width: markerAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0, 44],
+                opacity: markerAnim.interpolate({
+                  inputRange: [0, 0.5, 1],
+                  outputRange: [0, 0, 1],
                 }),
               },
             ]}
           >
-            <RNAnimated.View
-              style={[
-                styles.selectionMarkerCircleWrap,
-                {
-                  opacity: markerAnim.interpolate({
-                    inputRange: [0, 0.5, 1],
-                    outputRange: [0, 0, 1],
-                  }),
-                },
-              ]}
-            >
-              <View style={[styles.selectionCircle, isSelected && styles.selectionCircleSelected]}>
-                {isSelected && <Icon name='check' size={12} color={Colors.background} />}
-              </View>
-            </RNAnimated.View>
-          </RNAnimated.View>
-
-          <Animated.View style={styles.messageWrap} exiting={FadeOut}>
-            <View style={[styles.messageBubble, isMe ? styles.myMessage : styles.theirMessage]}>
-              <Text style={styles.messageText}>{item.ciphertext}</Text>
-              <View style={styles.messageFooter}>
-                <Text style={styles.messageTime}>{formatTime(item.timestamp)}</Text>
-                {isMe && item.status && <StatusIcon status={item.status} />}
-              </View>
+            <View style={[styles.selectionCircle, isSelected && styles.selectionCircleSelected]}>
+              {isSelected && <Icon name='check' size={12} color={Colors.background} />}
             </View>
-          </Animated.View>
-        </TouchableOpacity>
-      );
+          </RNAnimated.View>
+        </RNAnimated.View>
 
-      if (isNew) {
-        return <Animated.View entering={FadeInDown.duration(250)}>{bubble}</Animated.View>;
-      }
-      return bubble;
-    },
-    [
-      selectionMode,
-      selectedIds,
-      markerAnim,
-      formatTime,
-      handleMessageLongPress,
-      handleMessagePress,
-      voicePlayer,
-      toast,
-    ],
-  );
+        <Animated.View style={styles.messageWrap} exiting={FadeOut}>
+          <View style={[styles.messageBubble, isMe ? styles.myMessage : styles.theirMessage]}>
+            <Text style={styles.messageText}>{item.ciphertext}</Text>
+            <View style={styles.messageFooter}>
+              <Text style={styles.messageTime}>{formatTime(item.timestamp)}</Text>
+              {isMe && item.status && <StatusIcon status={item.status} />}
+            </View>
+          </View>
+        </Animated.View>
+      </TouchableOpacity>
+    );
+
+    if (isNew) {
+      return <Animated.View entering={FadeInDown.duration(250)}>{bubble}</Animated.View>;
+    }
+    return bubble;
+  };
 
   const sendMessage = useCallback((): void => {
     if (!inputText.trim() || !sharedSecretRef.current) return;
@@ -475,6 +467,7 @@ export const ChatScreen = observer(function ChatScreen({
   /* ─── Voice message recording handlers (UI placeholders) ─── */
 
   const handleMicPressIn = useCallback(async () => {
+    console.log('[VOICE] pressIn start');
     if (callStore.status !== 'idle') {
       toast('Нельзя записывать во время звонка', 'error');
       return;
@@ -495,6 +488,7 @@ export const ChatScreen = observer(function ChatScreen({
 
     try {
       await audioService.startRecording();
+      console.log('[VOICE] recording started');
       recordingTimerRef.current = setInterval(() => {
         setRecordingSeconds(Math.floor((Date.now() - recordingStartRef.current) / 1000));
       }, 200);
@@ -508,6 +502,7 @@ export const ChatScreen = observer(function ChatScreen({
 
   const handleMicPressOut = useCallback(
     async (cancelled: boolean) => {
+      console.log('[VOICE] pressOut, cancelled=', cancelled);
       isRecordingRef.current = false;
       setIsRecording(false);
       setIsCancelling(false);
@@ -526,7 +521,11 @@ export const ChatScreen = observer(function ChatScreen({
 
       try {
         const result = await audioService.stopRecording();
-        if (!result || !result.path) return;
+        console.log('[VOICE] stopRecording result=', result);
+        if (!result || !result.path) {
+          console.warn('[VOICE] no path from stopRecording, dropping message');
+          return;
+        }
 
         const { path: tempPath, durationMs } = result;
         const durationSec = Math.round(durationMs / 1000);
@@ -543,10 +542,13 @@ export const ChatScreen = observer(function ChatScreen({
 
         // Читаем файл, шифруем, отправляем
         const fileData = await ReactNativeBlobUtil.fs.readFile(tempPath, 'base64');
-        const payload = encryptMessage(fileData, sharedSecretRef.current);
+        console.log('[VOICE] fileData length=', fileData?.length);
+        const payload = encryptBinary(fileData, sharedSecretRef.current);
+        console.log('[VOICE] encrypted, ciphertext length=', payload.ciphertext.length);
 
         // Отправляем через сокет
         socketService.sendVoiceMessage(contactId, payload.ciphertext, payload.nonce, durationSec);
+        console.log('[VOICE] sent via socket');
 
         // Сохраняем зашифрованный файл на диск (вместо temp-файла)
         const encryptedDir = `${ReactNativeBlobUtil.fs.dirs.CacheDir}/voice_encrypted`;
@@ -586,7 +588,7 @@ export const ChatScreen = observer(function ChatScreen({
         setTick(t => t + 1);
         await store.addMessage(contactId, message);
       } catch (err) {
-        console.error('Failed to handle voice recording:', err);
+        console.error('[VOICE] ERROR in handleMicPressOut:', err);
         toast('Ошибка отправки голосового сообщения', 'error');
       }
     },
@@ -607,6 +609,7 @@ export const ChatScreen = observer(function ChatScreen({
   const micTouchStartX = useRef(0);
   const handleMicTouchStart = useCallback(
     (e: { nativeEvent: { pageX: number } }) => {
+      console.log('[VOICE] touchStart');
       micTouchStartX.current = e.nativeEvent.pageX;
       handleMicPressIn();
     },
@@ -624,6 +627,12 @@ export const ChatScreen = observer(function ChatScreen({
     [handleMicCancel],
   );
   const handleMicTouchEnd = useCallback(() => {
+    console.log(
+      '[VOICE] touchEnd, isRecording=',
+      isRecordingRef.current,
+      'isCancelling=',
+      isCancellingRef.current,
+    );
     if (isRecordingRef.current) {
       // Проверяем глобальный флаг отмены (устанавливается при свайпе > 60px влево)
       // Используем ref для получения актуального значения без зависимости от стейта
@@ -792,7 +801,7 @@ export const ChatScreen = observer(function ChatScreen({
         showsVerticalScrollIndicator={false}
         renderItem={renderMessage}
         keyExtractor={item => item.id}
-        extraData={selectedIds}
+        extraData={`${selectedIds.size}-${voicePlayer.currentVoiceId}-${voicePlayer.isPlaying}-${voicePlayer.position}`}
         style={{ flex: 1 }}
         contentContainerStyle={styles.messagesList}
         keyboardShouldPersistTaps={'handled'}

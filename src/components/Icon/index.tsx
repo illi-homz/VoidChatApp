@@ -39,7 +39,8 @@ export type IconName =
   | 'server'
   | 'download'
   | 'play'
-  | 'pause';
+  | 'pause'
+  | 'stop';
 
 interface IconProps {
   name: IconName;
@@ -372,6 +373,12 @@ const IconBase: React.FC<IconProps> = ({ name, size = 24, color = '#000', style 
         <Svg {...svgProps}>
           <Path d='M6 5h4v14H6Z' />
           <Path d='M14 5h4v14h-4Z' />
+        </Svg>
+      );
+    case 'stop':
+      return (
+        <Svg {...svgProps}>
+          <Rect x='6' y='6' width='12' height='12' rx='1' />
         </Svg>
       );
     default:

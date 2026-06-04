@@ -88,12 +88,13 @@ export class VoiceCacheService {
 
     const decrypted = nacl.secretbox.open(cipherBytes, nonceBytes, secretKey);
     if (!decrypted) {
-      throw new Error('Decryption failed — invalid key or corrupted file');
+      throw new Error('Voice decryption failed');
     }
 
-    // Сохраняем расшифрованный файл
-    const decryptedBase64 = encodeBase64(decrypted);
-    await ReactNativeBlobUtil.fs.writeFile(decryptedPath, decryptedBase64, 'base64');
+    // Сохраняем расшифрованный файл:
+    // encodeBase64 → base64-строка → writeFile с encoding 'base64' декодирует в raw bytes на диске
+    const decryptedB64 = encodeBase64(decrypted);
+    await ReactNativeBlobUtil.fs.writeFile(decryptedPath, decryptedB64, 'base64');
 
     this._cache.set(encryptedFilePath, decryptedPath);
 

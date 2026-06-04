@@ -76,10 +76,12 @@ export const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   sendButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: Colors.primary,
-    borderRadius: 20,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sendButtonDisabled: {
     opacity: 0.5,

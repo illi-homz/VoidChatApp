@@ -4,7 +4,12 @@ import Animated, { FadeOut } from 'react-native-reanimated';
 import { Colors } from '../../theme/colors';
 import { Icon } from '../Icon';
 import { StatusIcon } from '../StatusIcon';
-import { styles, VOICE_CONSTANTS } from './styles';
+import { styles } from './styles';
+
+/* ─── Waveform constants ─── */
+
+const BAR_MIN_HEIGHT = 4;
+const BAR_MAX_HEIGHT = 18;
 
 /* ─── Types ─── */
 
@@ -66,14 +71,13 @@ function djb2(str: string): number {
  * Генерирует массив из `count` высот полосок (px) на основе детерминированного хеша.
  * Образует естественную «голосовую волну»: выше в центре, ниже по краям + шум.
  */
-function generateBarHeights(seed: string): number[] {
-  const { WAVEFORM_BAR_COUNT, BAR_MIN_HEIGHT, BAR_MAX_HEIGHT } = VOICE_CONSTANTS;
+function generateBarHeights(seed: string, count: number): number[] {
   const heights: number[] = [];
   let h = djb2(seed);
-  const center = (WAVEFORM_BAR_COUNT - 1) / 2;
+  const center = (count - 1) / 2;
   const range = BAR_MAX_HEIGHT - BAR_MIN_HEIGHT;
 
-  for (let i = 0; i < WAVEFORM_BAR_COUNT; i++) {
+  for (let i = 0; i < count; i++) {
     const distFromCenter = Math.abs(i - center) / center;
     const envelope = 1 - distFromCenter * 0.7;
     h = (h * 1103515245 + 12345) >>> 0;
@@ -96,6 +100,27 @@ function formatVoiceTime(seconds: number): string {
   return `${mins}:${String(secs).padStart(2, '0')}`;
 }
 
+/* ─── Props equality comparator (для React.memo) ─── */
+
+/**
+ * Кастомный компаратор для React.memo — перерисовывает VoiceMessageBubble
+ * только если реально изменились значимые пропсы.
+ * currentPosition сравнивается с tolerance 150ms для троттлинга ререндеров.
+ */
+function arePropsEqual(prev: VoiceMessageBubbleProps, next: VoiceMessageBubbleProps): boolean {
+  return (
+    prev.id === next.id &&
+    prev.isMe === next.isMe &&
+    prev.duration === next.duration &&
+    prev.isPlaying === next.isPlaying &&
+    prev.playbackRate === next.playbackRate &&
+    prev.status === next.status &&
+    prev.selectionMode === next.selectionMode &&
+    prev.isSelected === next.isSelected &&
+    Math.abs((prev.currentPosition ?? 0) - (next.currentPosition ?? 0)) < 0.15
+  );
+}
+
 /* ─── Component ─── */
 
 /**
@@ -111,7 +136,7 @@ function formatVoiceTime(seconds: number): string {
  * - Selection-режим: чекбокс при long-press
  * - Анимация маркера выделения (из ChatScreen markerAnim)
  */
-export function VoiceMessageBubble({
+export const VoiceMessageBubble = React.memo(function VoiceMessageBubble({
   id,
   isMe,
   duration,
@@ -127,17 +152,49 @@ export function VoiceMessageBubble({
   onLongPress,
   onPress,
 }: VoiceMessageBubbleProps): React.JSX.Element {
-  const barHeights = useMemo(() => generateBarHeights(id), [id]);
+  const barCount = useMemo(() => {
+    if (duration <= 5) return 8;
+    if (duration <= 15) return 12;
+    if (duration <= 30) return 20;
+    if (duration <= 60) return 30;
+    return 40;
+  }, [duration]);
 
-  const playedBarCount =
-    duration > 0
-      ? Math.min(
-          Math.floor((currentPosition / duration) * VOICE_CONSTANTS.WAVEFORM_BAR_COUNT),
-          VOICE_CONSTANTS.WAVEFORM_BAR_COUNT,
-        )
-      : 0;
+  const barHeights = useMemo(() => generateBarHeights(id, barCount), [id, barCount]);
+
+  const playedBarCount = useMemo(() => {
+    if (duration <= 0) return 0;
+    return Math.min(Math.floor((currentPosition / duration) * barCount), barCount);
+  }, [currentPosition, duration, barCount]);
+
+  const displayCurrent = isPlaying ? Math.max(0, duration - currentPosition) : 0;
 
   const speedLabel = playbackRate === 1 ? '1x' : playbackRate === 1.5 ? '1.5x' : '2x';
+
+  /* Мемоизация массива waveform-баров — не пересоздаём на каждый рендер */
+  const bars = useMemo(
+    () =>
+      barHeights.map((height, i) => {
+        const isPlayedInner = i < playedBarCount;
+        return (
+          <View
+            key={i}
+            style={[
+              styles.waveformBar,
+              { height },
+              isMe
+                ? isPlayedInner
+                  ? styles.waveformBarPlayedMine
+                  : styles.waveformBarUnplayedMine
+                : isPlayedInner
+                  ? styles.waveformBarPlayedTheirs
+                  : styles.waveformBarUnplayedTheirs,
+            ]}
+          />
+        );
+      }),
+    [barHeights, playedBarCount, isMe],
+  );
 
   const handleSpeedPress = useCallback(() => {
     const rates: PlaybackRate[] = [1, 1.5, 2];
@@ -199,7 +256,7 @@ export function VoiceMessageBubble({
               ]}
             >
               <Icon
-                name={isPlaying ? 'pause' : 'play'}
+                name={isPlaying ? 'stop' : 'play'}
                 size={16}
                 color={
                   isMe && isPlaying ? Colors.background : isMe ? Colors.primary : Colors.textPrimary
@@ -207,28 +264,8 @@ export function VoiceMessageBubble({
               />
             </TouchableOpacity>
 
-            {/* Waveform: 20 вертикальных полосок */}
-            <View style={styles.waveformContainer}>
-              {barHeights.map((height, i) => {
-                const isPlayed = i < playedBarCount;
-                return (
-                  <View
-                    key={i}
-                    style={[
-                      styles.waveformBar,
-                      { height },
-                      isMe
-                        ? isPlayed
-                          ? styles.waveformBarPlayedMine
-                          : styles.waveformBarUnplayedMine
-                        : isPlayed
-                          ? styles.waveformBarPlayedTheirs
-                          : styles.waveformBarUnplayedTheirs,
-                    ]}
-                  />
-                );
-              })}
-            </View>
+            {/* Waveform: 20 вертикальных полосок (мемоизировано) */}
+            <View style={styles.waveformContainer}>{bars}</View>
 
             {/* Speed control */}
             <TouchableOpacity
@@ -249,6 +286,9 @@ export function VoiceMessageBubble({
 
           {/* ─── Row 2: Mic icon + Time + Status ─── */}
           <View style={styles.bottomRow}>
+            {/* Flex-спейсер: для моих сообщений время+статус прижаты вправо; у theirs — отсутствует */}
+            {isMe && <View style={{ flex: 1 }} />}
+
             <View style={styles.micIconWrap}>
               <Icon name='mic' size={10} color={isMe ? Colors.primaryDark : Colors.textSecondary} />
             </View>
@@ -257,7 +297,7 @@ export function VoiceMessageBubble({
               style={[styles.timeText, isMe ? styles.timeTextMine : styles.timeTextTheirs]}
               numberOfLines={1}
             >
-              {formatVoiceTime(currentPosition)} / {formatVoiceTime(duration)}
+              {formatVoiceTime(displayCurrent)} / {formatVoiceTime(duration)}
             </Text>
 
             {/* Status (только для своих сообщений) */}
@@ -269,4 +309,4 @@ export function VoiceMessageBubble({
       </Animated.View>
     </TouchableOpacity>
   );
-}
+}, arePropsEqual);

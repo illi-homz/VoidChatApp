@@ -36,7 +36,29 @@ export function encryptMessage(message: string, sharedSecret: string): Encrypted
   };
 }
 
+/**
+ * Зашифровать бинарные данные (base64-encoded payload).
+ * Для голосовых сообщений: fileData — это base64-строка аудиофайла.
+ * В отличие от encryptMessage (которая декодирует через decodeUTF8),
+ * эта функция декодирует base64 напрямую в raw bytes, избегая
+ * лишнего 33% оверхеда двойного base64 и превышения лимита сервера.
+ */
+export function encryptBinary(base64Data: string, sharedSecret: string): EncryptedPayload {
+  console.log('[CRYPTO] encryptBinary, input length=', base64Data.length);
+  const nonce = nacl.randomBytes(nacl.secretbox.nonceLength);
+  const sharedSecretBytes = decodeBase64(sharedSecret);
+  const messageBytes = decodeBase64(base64Data); // ← raw bytes напрямую!
+  const ciphertext = nacl.secretbox(messageBytes, nonce, sharedSecretBytes);
+  if (!ciphertext) throw new Error('Encryption failed');
+  console.log('[CRYPTO] encryptBinary OK, output length=', ciphertext.length);
+  return {
+    ciphertext: encodeBase64(ciphertext),
+    nonce: encodeBase64(nonce),
+  };
+}
+
 export function decryptMessage(ciphertext: string, nonce: string, sharedSecret: string): string {
+  console.log('[CRYPTO] decryptMessage');
   const nonceBytes = decodeBase64(nonce);
   const ciphertextBytes = decodeBase64(ciphertext);
   const sharedSecretBytes = decodeBase64(sharedSecret);
