@@ -41,7 +41,7 @@ interface PcEventHandlers extends RTCPeerConnection {
   onnegotiationneeded: (() => void) | null;
 }
 
-/** Состояния соединения, о которых сервис уведомляет через _onConnectionState. */
+/** Состояния соединения, о которых сервис уведомляет через колбэки. */
 type ConnectionStateEvent =
   | 'new'
   | 'connecting'
@@ -52,32 +52,76 @@ type ConnectionStateEvent =
   | 'ice_restart';
 
 /**
+ * Обёртка для одного участника Mesh P2P.
+ * Содержит RTCPeerConnection и per-peer состояние.
+ */
+interface PeerConnectionWrapper {
+  pc: PcEventHandlers;
+  userId: string;
+  remoteStream: MediaStream | null;
+  /** Буфер ICE-кандидатов, полученных до установки remoteDescription. */
+  pendingCandidates: RTCIceCandidate[];
+  /** Был ли установлен remoteDescription. */
+  remoteDescriptionSet: boolean;
+  /** Таймер отсоединения. */
+  disconnectedTimer: ReturnType<typeof setTimeout> | null;
+  /** Была ли уже выполнена попытка ICE restart для этого пира. */
+  iceRestartAttempted: boolean;
+  /** Идёт ли пересмотр SDP. */
+  negotiationInProgress: boolean;
+  /** Флаг для подавления повторной renegotiation. */
+  pendingRenegotiation: boolean;
+  /** Идёт ли начальная настройка звонка. */
+  callInSetup: boolean;
+  /** RTCRtpSender видео-трека на этом PC. */
+  videoSender: RTCRtpSender | null;
+}
+
+/**
  * WebRTCService — синглтон для управления голосовыми вызовами через WebRTC.
  *
+ * ## Архитектура (Mesh P2P)
+ *
+ * Каждый участник конференции имеет свой RTCPeerConnection, хранящийся
+ * в `_connections` под его userId. Единая `_localStream` (микрофон/камера)
+ * транслируется во все PC через `addTrack()` при создании.
+ *
  * ## Жизненный цикл
- * 1. Вызвать `createOffer()` (исходящий) или `createAnswer(offerSdp)` (входящий)
- * 2. После успешного setLocalDescription вызывающий отправляет SDP через SocketService
- * 3. ICE-кандидаты приходят через `_onIceCandidate`, отправляются удалённой стороне
- * 4. Удалённые ICE-кандидаты добавляются через `addIceCandidate()`
- * 5. Удалённый SDP (answer/offer) устанавливается через `setRemoteDescription()`
- * 6. Завершение звонка — `stopCall()`
+ * 1. Вызвать `startCall(withVideo)` для захвата медиа
+ * 2. Для каждого участника: `createPeer(userId, 'offer')` или `createPeer(userId, 'answer', sdp)`
+ * 3. ICE-кандидаты приходят через `_onPeerIceCandidate` с userId — отправляются удалённой стороне
+ * 4. Удалённые кандидаты добавляются через `addPeerIceCandidate(userId, candidate)`
+ * 5. Удалённый SDP устанавливается через `setPeerRemoteDescription(userId, sdp)`
+ * 6. Завершение конференции — `removeAllPeers()`
+ *
+ * ## Обратная совместимость (1-1 звонки)
+ * Методы `createOffer()`, `createAnswer()`, `setRemoteDescription()`, `addIceCandidate()`
+ * работают как обёртки, используя внутренний userId '_default'.
+ * CallScreen и CallStore НЕ ТРЕБУЮТ изменений.
  */
 class WebRTCService {
   // ---- Состояние ----
 
-  private _pc: RTCPeerConnection | null = null;
+  /** Все peer-соединения (Mesh P2P). */
+  private _connections: Map<string, PeerConnectionWrapper> = new Map();
+  /** Единый локальный медиа-поток (микрофон + опционально камера). */
   private _localStream: MediaStream | null = null;
-  private _remoteStream: MediaStream | null = null;
   private _currentFacingMode: 'user' | 'environment' = 'user';
-  /** Ссылка на RTCRtpSender видео — нужна для replaceTrack после выключения камеры. */
-  private _videoSender: RTCRtpSender | null = null;
 
-  // ---- Коллбэки (устанавливаются извне) ----
+  // ---- Коллбэки (Multi-peer — с userId) ----
+
+  private _onPeerIceCandidate: ((userId: string, candidate: string) => void) | null = null;
+  private _onPeerRemoteStream: ((userId: string, stream: MediaStream) => void) | null = null;
+  private _onPeerConnectionState: ((userId: string, state: ConnectionStateEvent) => void) | null =
+    null;
+  private _onPeerRenegotiationNeeded: ((userId: string, sdp: string) => void) | null = null;
+  private _onError: ((error: string) => void) | null = null;
+
+  // ---- Коллбэки (Legacy compat — без userId, для 1-1 звонков) ----
 
   private _onIceCandidate: ((candidate: string) => void) | null = null;
   private _onRemoteStream: ((stream: MediaStream) => void) | null = null;
   private _onConnectionState: ((state: ConnectionStateEvent) => void) | null = null;
-  private _onError: ((error: string) => void) | null = null;
   private _onRenegotiationNeeded: ((sdp: string) => void) | null = null;
 
   // ---- ICE-серверы ----
@@ -95,27 +139,38 @@ class WebRTCService {
 
   // ---- Вспомогательное состояние ----
 
-  private _disconnectedTimer: ReturnType<typeof setTimeout> | null = null;
-  private _iceRestartAttempted = false;
-  private _pendingCandidates: RTCIceCandidate[] = [];
-  private _negotiationInProgress: boolean = false;
-  private _callInSetup: boolean = false;
-  private _earlyCandidates: string[] = [];
+  /**
+   * Глобальный буфер ICE-кандидатов, полученных ДО создания PeerConnection.
+   * Каждый элемент: `{ userId, candidate }`.
+   * При создании нового PC проверяем, нет ли в буфере кандидатов для этого userId.
+   */
+  private _earlyCandidates: Array<{ userId: string; candidate: string }> = [];
 
   // ================================================================
   //  Геттеры
   // ================================================================
 
+  /** Единый локальный медиа-поток (микрофон / камера). */
   get localStream(): MediaStream | null {
     return this._localStream;
   }
 
+  /**
+   * Remote-поток от первого пира (legacy compat).
+   * Для multi-peer используйте `getPeerRemoteStream(userId)`.
+   */
   get remoteStream(): MediaStream | null {
-    return this._remoteStream;
+    const first = this._getFirstPeer();
+    return first?.remoteStream ?? null;
   }
 
+  /**
+   * Первый RTCPeerConnection (legacy compat).
+   * Для multi-peer доступ к каждому PC через `_connections`.
+   */
   get peerConnection(): RTCPeerConnection | null {
-    return this._pc;
+    const first = this._getFirstPeer();
+    return first?.pc ?? null;
   }
 
   // ================================================================
@@ -124,12 +179,7 @@ class WebRTCService {
 
   /**
    * Добавляет TURN-серверы для production.
-   * Вызвать до `initiateCall` / `handleIncomingCall`.
-   *
-   * @example
-   * addIceServers([
-   *   { urls: 'turn:my-server.com:3478', username: 'user', credential: 'pass' },
-   * ]);
+   * Вызвать до `createPeer`.
    */
   addIceServers(servers: IceServer[]): void {
     this._iceServers.push(...servers);
@@ -141,12 +191,9 @@ class WebRTCService {
    *
    * Вызывается автоматически после успешного подключения к серверу.
    * TURN не критичен для звонков — при ошибке продолжаем с STUN.
-   *
-   * @param serverUrl — URL сервера (ws:// или wss://)
    */
   async fetchTurnConfig(serverUrl: string): Promise<void> {
     try {
-      // Убираем ws(s):// и получаем базовый URL для HTTP
       const baseUrl = serverUrl.replace(/^ws(s?):\/\//, 'http$1://');
       const response = await fetch(`${baseUrl}/turn-config`);
       if (!response.ok) {
@@ -165,13 +212,12 @@ class WebRTCService {
         console.log('[WebRTC] TURN config loaded successfully');
       }
     } catch {
-      // TURN не критичен для звонков — продолжаем без него
       console.warn('[WebRTC] Failed to fetch TURN config');
     }
   }
 
   // ================================================================
-  //  Захват микрофона
+  //  Захват микрофона и камеры
   // ================================================================
 
   /**
@@ -185,19 +231,16 @@ class WebRTCService {
     if (this._localStream) {
       return this._localStream;
     }
-    // Явно запрашиваем разрешение через API react-native-webrtc (оно само
-    // вызывает PermissionsAndroid.request). Это гарантирует, что системный
-    // диалог появится до вызова getUserMedia.
     try {
       await permissions.request({ name: 'microphone' });
     } catch {
-      // permissions API может быть недоступен — getUserMedia запросит сам
+      // permissions API может быть недоступен
     }
     if (withVideo) {
       try {
         await permissions.request({ name: 'camera' });
       } catch {
-        // permissions API может быть недоступен — getUserMedia запросит сам
+        // permissions API может быть недоступен
       }
     }
     const videoConstraints = withVideo
@@ -208,7 +251,10 @@ class WebRTCService {
           facingMode: 'user' as const,
         }
       : false;
-    const stream = await mediaDevices.getUserMedia({ audio: true, video: videoConstraints });
+    const stream = await mediaDevices.getUserMedia({
+      audio: true,
+      video: videoConstraints,
+    });
     this._localStream = stream;
     if (withVideo) {
       this._currentFacingMode = 'user';
@@ -217,8 +263,7 @@ class WebRTCService {
   }
 
   /**
-   * Включить/выключить микрофон (аудиотрек).
-   * true = микрофон активен, false = микрофон отключён (тишина)
+   * Включить/выключить микрофон (аудиотрек) для всех пиров.
    */
   setMicrophoneEnabled(enabled: boolean): void {
     this._localStream?.getAudioTracks().forEach(track => {
@@ -227,32 +272,17 @@ class WebRTCService {
   }
 
   /**
-   * Включить/выключить камеру (видеотрек) без renegotiation.
-   * true = камера активна, false = отправка видео прекращается.
-   *
-   * Помимо track.enabled, также использует RTCRtpSender.replaceTrack(null)
-   * для полной остановки передачи — на некоторых Android-устройствах
-   * track.enabled = false не останавливает отправку.
-   */
-  /**
    * Включить/выключить камеру.
-   *
-   * При выключении — полностью останавливает видео-трек и удаляет его
-   * из локального потока, чтобы освободить камеру (на некоторых Android-
-   * устройствах track.enabled = false не отдаёт камеру системе).
-   *
-   * При включении — создаёт новый видео-трек через getUserMedia,
-   * добавляет в локальный поток и в PeerConnection через replaceTrack.
+   * Применяется ко всем пирам единовременно.
    */
   async setCameraEnabled(enabled: boolean): Promise<void> {
     if (enabled) {
       // ── Включение камеры ───────────────────────────────────
-      // Если видео-трек уже есть и жив — просто включаем
       const existingTrack = this._localStream?.getVideoTracks()[0];
       if (existingTrack && existingTrack.readyState === 'live') {
         existingTrack.enabled = true;
-        if (this._pc) {
-          const sender = this._pc.getSenders().find(s => s.track?.kind === 'video');
+        for (const wrapper of this._connections.values()) {
+          const sender = wrapper.pc.getSenders().find(s => s.track?.kind === 'video');
           if (sender) {
             await sender.replaceTrack(existingTrack).catch(() => {});
           }
@@ -260,7 +290,6 @@ class WebRTCService {
         return;
       }
 
-      // Создаём новый видео-трек
       try {
         await permissions.request({ name: 'camera' });
       } catch {
@@ -285,15 +314,11 @@ class WebRTCService {
 
       this._localStream?.addTrack(newVideoTrack);
 
-      if (this._pc) {
-        if (this._videoSender) {
-          await this._videoSender.replaceTrack(newVideoTrack).catch(() => {});
-          // На Android replaceTrack триггерит negotiationneeded самостоятельно.
-          // Дополнительный вызов _renegotiateVideo() не нужен — он только
-          // создаёт циклическую renegotiation (баг Android WebRTC).
+      for (const wrapper of this._connections.values()) {
+        if (wrapper.videoSender) {
+          await wrapper.videoSender.replaceTrack(newVideoTrack).catch(() => {});
         } else {
-          this._videoSender = this._pc.addTrack(newVideoTrack, this._localStream!);
-          await this._renegotiateVideo().catch(() => {});
+          wrapper.videoSender = wrapper.pc.addTrack(newVideoTrack, this._localStream!);
         }
       }
     } else {
@@ -304,8 +329,8 @@ class WebRTCService {
         this._localStream?.removeTrack(track);
       });
 
-      if (this._pc) {
-        const sender = this._pc.getSenders().find(s => s.track?.kind === 'video');
+      for (const wrapper of this._connections.values()) {
+        const sender = wrapper.pc.getSenders().find(s => s.track?.kind === 'video');
         if (sender) {
           await sender.replaceTrack(null).catch(() => {});
         }
@@ -314,60 +339,7 @@ class WebRTCService {
   }
 
   /**
-   * Принудительная renegotiation видео-трека.
-   * Нужна после sender.replaceTrack() — спецификация WebRTC не требует
-   * renegotiation для replaceTrack, но на практике без неё remote сторона
-   * не получает видео (особенно на Android/Samsung).
-   */
-  /** Предотвращает циклическую renegotiation. */
-  private _pendingRenegotiation = false;
-
-  private async _renegotiateVideo(): Promise<void> {
-    if (!this._pc) {
-      console.log('[WebRTC] ⏭ _renegotiateVideo: no PC');
-      return;
-    }
-    if (this._negotiationInProgress) {
-      console.log('[WebRTC] ⏭ _renegotiateVideo: negotiation already in progress');
-      return;
-    }
-    if (this._callInSetup) {
-      console.log('[WebRTC] ⏭ _renegotiateVideo: call in setup');
-      return;
-    }
-    if (this._pendingRenegotiation) {
-      console.log('[WebRTC] ⏭ _renegotiateVideo: pending renegotiation already active, skipping');
-      return;
-    }
-    console.log('[WebRTC] 🔄 _renegotiateVideo: starting, sigState=' + this._pc.signalingState);
-    this._negotiationInProgress = true;
-    this._pendingRenegotiation = true;
-    try {
-      const sdpInfo = (await this._pc.createOffer()) as SdpInfo;
-      console.log('[WebRTC] 🔄 createOffer OK, sdp length=' + sdpInfo.sdp.length);
-      const modifiedSdp = this._modifySdpForAudio(sdpInfo.sdp);
-      const desc = { type: 'offer', sdp: modifiedSdp };
-      await this._pc.setLocalDescription(desc);
-      console.log('[WebRTC] 🔄 setLocalDescription OK, sigState=' + this._pc.signalingState);
-      const jsonSdp = JSON.stringify(desc);
-      if (this._onRenegotiationNeeded) {
-        console.log('[WebRTC] 🔄 sending renegotiation offer via onRenegotiationNeeded');
-        this._onRenegotiationNeeded(jsonSdp);
-      } else {
-        console.log('[WebRTC] ⚠️ _onRenegotiationNeeded is null — offer not sent!');
-      }
-    } catch (e) {
-      console.warn('[WebRTC] ❌ renegotiateVideo failed:', e);
-      this._pendingRenegotiation = false;
-    } finally {
-      this._negotiationInProgress = false;
-    }
-  }
-
-  /**
    * Переключить камеру между front (facingMode: 'user') и back (facingMode: 'environment').
-   * Определяет текущую камеру через enumerateDevices, останавливает старый трек,
-   * создаёт новый через getUserMedia и заменяет через replaceTrack.
    */
   async switchCamera(): Promise<void> {
     if (!this._localStream) return;
@@ -375,7 +347,6 @@ class WebRTCService {
     if (videoTracks.length === 0) return;
 
     const currentTrack = videoTracks[0];
-    // Переключаем на противоположную камеру
     const newFacingMode: 'user' | 'environment' =
       this._currentFacingMode === 'user' ? 'environment' : 'user';
 
@@ -386,11 +357,9 @@ class WebRTCService {
         // permissions API может быть недоступен
       }
 
-      // Останавливаем старый трек и удаляем из локального потока
       currentTrack.stop();
       this._localStream.removeTrack(currentTrack);
 
-      // Создаём новый видео-трек с противоположной камерой
       const newStream = await mediaDevices.getUserMedia({
         audio: false,
         video: {
@@ -407,20 +376,17 @@ class WebRTCService {
         return;
       }
 
-      // Добавляем новый трек в локальный поток
       this._localStream.addTrack(newVideoTrack);
 
-      // Заменяем трек в PeerConnection (без renegotiation)
-      if (this._pc) {
-        const sender = this._pc.getSenders().find(s => s.track?.kind === 'video');
+      for (const wrapper of this._connections.values()) {
+        const sender = wrapper.pc.getSenders().find(s => s.track?.kind === 'video');
         if (sender) {
           await sender.replaceTrack(newVideoTrack);
         } else {
-          this._pc.addTrack(newVideoTrack, this._localStream);
+          wrapper.pc.addTrack(newVideoTrack, this._localStream);
         }
       }
 
-      // Запоминаем новое состояние
       this._currentFacingMode = newFacingMode;
       console.log('[WebRTC] Camera switched to', newFacingMode);
     } catch (e) {
@@ -430,8 +396,6 @@ class WebRTCService {
 
   /**
    * Запрашивает разрешение на использование камеры.
-   * Использует react-native-webrtc permissions API (аналогично микрофону).
-   *
    * @returns true если разрешение получено, false если отказано
    */
   async requestCameraPermission(): Promise<boolean> {
@@ -439,7 +403,6 @@ class WebRTCService {
       const result = await permissions.request({ name: 'camera' });
       return result === 'granted';
     } catch {
-      // permissions API может быть недоступен — getUserMedia запросит сам
       try {
         const testStream = await mediaDevices.getUserMedia({
           audio: false,
@@ -467,233 +430,98 @@ class WebRTCService {
   }
 
   // ================================================================
-  //  Создание PeerConnection (приватный)
+  //  Multi-peer API
   // ================================================================
 
   /**
-   * Создаёт RTCPeerConnection с ICE-серверами, добавляет локальный
-   * аудио/видео-трек и устанавливает обработчики событий.
+   * Создаёт новое RTCPeerConnection для конкретного участника.
    *
-   * @param withVideo — если true, также захватывает видео
+   * 1. Удаляет существующее соединение для этого userId (если есть)
+   * 2. Создаёт RTCPeerConnection с ICE-серверами
+   * 3. Добавляет аудио/видео-треки из `_localStream`
+   * 4. Устанавливает per-peer обработчики событий
+   * 5. Выполняет SDP обмен (createOffer или createAnswer)
+   * 6. Сохраняет в `_connections`
+   *
+   * @param userId — идентификатор участника
+   * @param direction — 'offer' (исходящий) или 'answer' (входящий)
+   * @param remoteSdp — SDP offer от удалённой стороны (обязателен для direction='answer')
+   * @returns JSON-строка локального SDP (offer или answer)
+   *
+   * @throws если `_localStream` не захвачен — предварительно вызовите
+   *         `startLocalStream()` или `startCall()`.
    */
-  private async createPeerConnection(withVideo: boolean = false): Promise<PcEventHandlers> {
-    await this.startLocalStream(withVideo);
-    this._callInSetup = true;
+  async createPeer(
+    userId: string,
+    direction: 'offer' | 'answer',
+    remoteSdp?: string,
+  ): Promise<string> {
+    // Удаляем существующее соединение для этого участника
+    this.removePeer(userId);
 
-    // Для отладки TURN: раскомментируй iceTransportPolicy ниже чтобы
-    // форсировать relay-only (звонки только через TURN-сервер).
-    // Если relay-only работает — значит TURN ок, проблема в ICE-согласовании.
-    // Если нет — TURN сервер недоступен.
-    const pc = new RTCPeerConnection({
-      iceServers: this._iceServers,
-      bundlePolicy: 'max-bundle',
-      rtcpMuxPolicy: 'require',
-      iceTransportPolicy: 'all',
-      // iceTransportPolicy: 'relay', // ← раскомментируй для теста TURN
-    }) as PcEventHandlers;
-    console.log(
-      '[WebRTC] PeerConnection created with',
-      this._iceServers.length,
-      'ICE servers:',
-      this._iceServers.map(s => (Array.isArray(s.urls) ? s.urls.join(', ') : s.urls)).join(' | '),
-    );
+    // _localStream должен быть захвачен ДО вызова createPeer
+    if (!this._localStream) {
+      throw new Error('Local stream not captured. Call startLocalStream() or startCall() first.');
+    }
 
-    // Сохраняем pre-PC кандидаты ДО сброса буфера
-    const pendingEarly = this._earlyCandidates;
+    const wrapper = this._createPeerConnectionWrapper(userId);
+    this._connections.set(userId, wrapper);
+    const pc = wrapper.pc;
 
-    // Сбрасываем флаги перед новой сессией
-    this._disconnectedTimer = null;
-    this._iceRestartAttempted = false;
-    this._negotiationInProgress = false;
-    this._pendingCandidates = [];
-    this._earlyCandidates = [];
+    try {
+      if (direction === 'offer') {
+        const sdpInfo = (await pc.createOffer({
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: true,
+        })) as SdpInfo;
 
-    // --- onicecandidate ---
-    pc.onicecandidate = (event: { candidate: RTCIceCandidate | null }) => {
-      if (event.candidate) {
-        const json = event.candidate.toJSON();
-        // Тип кандидата (host/srflx/relay) лежит внутри candidate-строки: "candidate:... typ host"
-        const candidateStr = (json as any).candidate || '';
-        const typeMatch = candidateStr.match(/ typ (\S+)/);
-        const candidateType = typeMatch ? typeMatch[1] : 'unknown';
-        if (__DEV__) {
-          const addrMatch = candidateStr.match(/ (\d+\.\d+\.\d+\.\d+) /);
-          const address = addrMatch ? addrMatch[1] : '(n/a)';
-          console.log(`[WebRTC] 🧊 ICE candidate: ${candidateType}, addr=${address}`);
-        }
-        if (this._onIceCandidate) {
-          this._onIceCandidate(JSON.stringify(json));
-        }
-      } else {
-        console.log('[WebRTC] ✅ ICE candidate gathering complete');
-      }
-    };
-
-    // --- onicecandidateerror ---
-    pc.onicecandidateerror = (event: any) => {
-      const errCode = event.errorCode || event?.errorCode;
-      const errText = event.errorText || event?.errorText;
-      const errUrl = event.url || event?.url;
-      console.warn(
-        `[WebRTC] ❌ ICE candidate error (code=${errCode}, text=${errText}, url=${errUrl})`,
-      );
-    };
-
-    // --- ontrack (удалённый аудиопоток) ---
-    pc.ontrack = (event: { streams: MediaStream[]; track: MediaStreamTrack | null }) => {
-      if (event.streams && event.streams[0]) {
-        this._remoteStream = event.streams[0];
-        const trackCount = event.streams[0].getTracks?.()?.length ?? 1;
-        console.log('[WebRTC] Remote stream received, tracks:', trackCount);
-        this._onRemoteStream?.(this._remoteStream);
-      }
-    };
-
-    // --- onconnectionstatechange ---
-    pc.onconnectionstatechange = () => {
-      const state = pc.connectionState;
-      console.log('[WebRTC] Connection state changed:', state);
-      this._onConnectionState?.(state);
-
-      if (state === 'connected') {
-        this._clearDisconnectedTimer();
-      } else if (state === 'disconnected') {
-        this._startDisconnectedTimer();
-      } else if (state === 'failed') {
-        this._handleIceRestart();
-      }
-    };
-
-    // --- onnegotiationneeded ---
-    pc.onnegotiationneeded = async () => {
-      // Защита от циклической renegotiation: Android WebRTC иногда
-      // стреляет negotiationneeded после setRemoteDescription в 'stable'.
-      if (this._callInSetup || this._negotiationInProgress || this._pendingRenegotiation) return;
-      this._negotiationInProgress = true;
-      try {
-        const sdpInfo = (await pc.createOffer()) as SdpInfo;
         const modifiedSdp = this._modifySdpForAudio(sdpInfo.sdp);
         const desc = { type: 'offer', sdp: modifiedSdp };
         await pc.setLocalDescription(desc);
-        const jsonSdp = JSON.stringify(desc);
-        this._onRenegotiationNeeded?.(jsonSdp);
-      } catch (e) {
-        console.warn('[WebRTC] negotiationneeded failed:', e);
-      } finally {
-        this._negotiationInProgress = false;
-      }
-    };
-
-    // Добавляем локальные треки
-    if (this._localStream) {
-      this._localStream.getTracks().forEach(track => {
-        const sender = pc.addTrack(track, this._localStream!);
-        if (track.kind === 'video') {
-          this._videoSender = sender;
+        wrapper.callInSetup = false;
+        return JSON.stringify(desc);
+      } else {
+        // direction === 'answer'
+        if (!remoteSdp) {
+          throw new Error('remoteSdp is required for direction=answer');
         }
-      });
-    }
+        const offer = JSON.parse(remoteSdp) as SdpInfo;
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        wrapper.remoteDescriptionSet = true;
+        await this._flushPendingCandidates(wrapper);
 
-    this._pc = pc;
-
-    // Сбрасываем pre-PC буфер: кандидаты пришли до того как PC был готов
-    if (pendingEarly.length > 0) {
-      console.log('[WebRTC] 🔄 Flushing ' + pendingEarly.length + ' early ICE candidates');
-      for (const c of pendingEarly) {
-        await this.addIceCandidate(c);
+        const answer = (await pc.createAnswer()) as SdpInfo;
+        const modifiedSdp = this._modifySdpForAudio(answer.sdp);
+        const desc = { type: 'answer', sdp: modifiedSdp };
+        await pc.setLocalDescription(desc);
+        wrapper.callInSetup = false;
+        return JSON.stringify(desc);
       }
-    }
-
-    return pc;
-  }
-
-  // ================================================================
-  //  Создание offer / answer
-  // ================================================================
-
-  /**
-   * Исходящий звонок: создаёт SDP offer.
-   *
-   * 1. Захватывает микрофон (и опционально камеру)
-   * 2. Создаёт PeerConnection
-   * 3. Вызывает createOffer
-   * 4. Модифицирует SDP (Opus FEC + битрейт)
-   * 5. Устанавливает модифицированный SDP как local description
-   * 6. Возвращает SDP как JSON-строку
-   *
-   * @param withVideo — если true, offer включает видео (offerToReceiveVideo: true)
-   */
-  async createOffer(withVideo: boolean = false): Promise<string> {
-    try {
-      const pc = await this.createPeerConnection(withVideo);
-      const sdpInfo = (await pc.createOffer({
-        offerToReceiveAudio: true,
-        offerToReceiveVideo: withVideo,
-      })) as SdpInfo;
-
-      const modifiedSdp = this._modifySdpForAudio(sdpInfo.sdp);
-      const desc = { type: 'offer', sdp: modifiedSdp };
-      await pc.setLocalDescription(desc);
-      this._callInSetup = false;
-      return JSON.stringify(desc);
     } catch (e) {
-      this._callInSetup = false;
-      const msg = e instanceof Error ? e.message : 'Failed to create offer';
+      wrapper.callInSetup = false;
+      const msg = e instanceof Error ? e.message : 'Failed to create peer connection';
       this._onError?.(msg);
       throw e;
     }
   }
 
   /**
-   * Входящий звонок: создаёт SDP answer на основе offer от удалённой стороны.
-   *
-   * 1. Захватывает микрофон (и опционально камеру)
-   * 2. Создаёт PeerConnection
-   * 3. Устанавливает remote description из offerSdp
-   * 4. Вызывает createAnswer
-   * 5. Модифицирует SDP (Opus FEC + битрейт)
-   * 6. Устанавливает модифицированный SDP как local description
-   * 7. Возвращает SDP как JSON-строку
-   *
-   * @param withVideo — если true, также захватывает видео и включает его в answer
+   * Устанавливает remote SDP для конкретного пира.
+   * Вызывается для caller после получения answer от callee.
+   * Сбрасывает буферизированные ICE-кандидаты.
    */
-  async createAnswer(offerSdp: string, withVideo: boolean = false): Promise<string> {
-    try {
-      const pc = await this.createPeerConnection(withVideo);
-      const offer = JSON.parse(offerSdp) as SdpInfo;
-      await pc.setRemoteDescription(new RTCSessionDescription(offer));
-      await this._flushPendingCandidates();
-
-      const answer = (await pc.createAnswer()) as SdpInfo;
-      const modifiedSdp = this._modifySdpForAudio(answer.sdp);
-      const desc = { type: 'answer', sdp: modifiedSdp };
-      await pc.setLocalDescription(desc);
-      this._callInSetup = false;
-      return JSON.stringify(desc);
-    } catch (e) {
-      this._callInSetup = false;
-      const msg = e instanceof Error ? e.message : 'Failed to create answer';
-      this._onError?.(msg);
-      throw e;
+  async setPeerRemoteDescription(userId: string, sdp: string): Promise<void> {
+    const wrapper = this._connections.get(userId);
+    if (!wrapper) {
+      console.warn('[WebRTC] setPeerRemoteDescription: no connection for user', userId);
+      return;
     }
-  }
-
-  // ================================================================
-  //  Управление соединением
-  // ================================================================
-
-  /**
-   * Устанавливает remote description (SDP от удалённой стороны).
-   * Для caller — после получения answer.
-   * Для callee — offer уже установлен в createAnswer.
-   */
-  async setRemoteDescription(sdp: string): Promise<void> {
     try {
       const desc = JSON.parse(sdp) as SdpInfo;
-      await this._pc?.setRemoteDescription(new RTCSessionDescription(desc));
-      await this._flushPendingCandidates();
-      // Renegotiation-цикл завершён — разрешаем следующую ручную renegotiation
-      this._pendingRenegotiation = false;
+      await wrapper.pc.setRemoteDescription(new RTCSessionDescription(desc));
+      wrapper.remoteDescriptionSet = true;
+      await this._flushPendingCandidates(wrapper);
+      wrapper.pendingRenegotiation = false;
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to set remote description';
       this._onError?.(msg);
@@ -702,55 +530,105 @@ class WebRTCService {
   }
 
   /**
-   * Добавляет ICE candidate от удалённой стороны.
+   * Добавляет ICE candidate для конкретного пира.
+   * Если remote description ещё не установлен — буферизирует.
+   * Если PeerConnection для userId ещё не создан — буферизирует глобально.
    */
-  async addIceCandidate(candidate: string): Promise<void> {
-    if (!this._pc) {
-      console.log(
-        '[WebRTC] 🗄️ addIceCandidate: buffering for later (PC not ready yet), total buffered=' +
-          (this._earlyCandidates.length + 1),
-      );
-      this._earlyCandidates.push(candidate);
+  async addPeerIceCandidate(userId: string, candidate: string): Promise<void> {
+    const wrapper = this._connections.get(userId);
+    if (!wrapper) {
+      console.log('[WebRTC] 🗄️ addPeerIceCandidate: buffering for later (no PC for', userId + ')');
+      this._earlyCandidates.push({ userId, candidate });
       return;
     }
     try {
       const iceCandidate = new RTCIceCandidate(JSON.parse(candidate));
-      if (!this._pc.remoteDescription) {
-        const pcState = this._pc.connectionState;
-        const iceState = this._pc.iceConnectionState;
+      if (!wrapper.remoteDescriptionSet) {
         console.log(
-          '[WebRTC] 📥 ICE candidate buffered (no remoteDescription), connState=' +
-            pcState +
-            ', iceState=' +
-            iceState +
+          '[WebRTC] 📥 ICE candidate buffered (no remoteDescription) for user=' +
+            userId +
             ', pending=' +
-            (this._pendingCandidates.length + 1),
+            (wrapper.pendingCandidates.length + 1),
         );
-        this._pendingCandidates.push(iceCandidate);
+        wrapper.pendingCandidates.push(iceCandidate);
         return;
       }
-      console.log('[WebRTC] 📥 ICE candidate added, connState=' + this._pc.connectionState);
-      await this._pc.addIceCandidate(iceCandidate);
+      console.log('[WebRTC] 📥 ICE candidate added for user=' + userId);
+      await wrapper.pc.addIceCandidate(iceCandidate);
     } catch (e) {
       console.warn('[WebRTC] Failed to add ICE candidate:', e);
     }
   }
 
   /**
-   * ICE restart: создаёт новый offer с флагом iceRestart.
-   * Вызывается при `failed` или по инициативе вызывающего (CallStore).
-   *
-   * @returns JSON-строка нового offer SDP или null при ошибке.
+   * Закрывает и удаляет PeerConnection для конкретного участника.
+   * НЕ останавливает `_localStream` — она общая для всех пиров.
    */
-  async iceRestart(): Promise<string | null> {
-    if (!this._pc) return null;
+  removePeer(userId: string): void {
+    const wrapper = this._connections.get(userId);
+    if (!wrapper) return;
+
+    this._clearDisconnectedTimer(wrapper);
+    wrapper.pc.close();
+    this._connections.delete(userId);
+
+    console.log('[WebRTC] Peer connection removed for user=' + userId);
+  }
+
+  /**
+   * Закрывает ВСЕ PeerConnection и останавливает локальный поток.
+   * Полная очистка состояния сервиса.
+   */
+  removeAllPeers(): void {
+    for (const wrapper of this._connections.values()) {
+      this._clearDisconnectedTimer(wrapper);
+      wrapper.pc.close();
+    }
+    this._connections.clear();
+
+    // Останавливаем локальные треки
+    this._localStream?.getAudioTracks().forEach(t => t.stop());
+    this._localStream?.getVideoTracks().forEach(t => t.stop());
+    this._localStream = null;
+
+    this._earlyCandidates = [];
+
+    // Сбрасываем compat-колбэки (multi-peer колбэки не сбрасываем —
+    // они управляются внешним кодом)
+    this._onIceCandidate = null;
+    this._onRemoteStream = null;
+    this._onConnectionState = null;
+    this._onRenegotiationNeeded = null;
+
+    console.log('[WebRTC] All peer connections removed');
+  }
+
+  /**
+   * ICE restart для конкретного пира.
+   * Вызывается при `failed` или по инициативе вызывающего.
+   *
+   * @param userId — участник для перезапуска ICE
+   * @returns JSON-строка нового offer SDP или null при ошибке
+   */
+  async iceRestartPeer(userId: string): Promise<string | null> {
+    const wrapper = this._connections.get(userId);
+    if (!wrapper) return null;
+
     try {
-      const sdpInfo = (await this._pc.createOffer({ iceRestart: true })) as SdpInfo;
+      const sdpInfo = (await wrapper.pc.createOffer({
+        iceRestart: true,
+      })) as SdpInfo;
       const modifiedSdp = this._modifySdpForAudio(sdpInfo.sdp);
       const desc = { type: 'offer', sdp: modifiedSdp };
-      await this._pc.setLocalDescription(desc);
+      await wrapper.pc.setLocalDescription(desc);
       const jsonSdp = JSON.stringify(desc);
-      this._onRenegotiationNeeded?.(jsonSdp);
+
+      // Приоритет: multi-peer callback → compat callback
+      if (this._onPeerRenegotiationNeeded) {
+        this._onPeerRenegotiationNeeded(userId, jsonSdp);
+      } else if (userId === this.COMPAT_USER_ID && this._onRenegotiationNeeded) {
+        this._onRenegotiationNeeded(jsonSdp);
+      }
       return jsonSdp;
     } catch {
       return null;
@@ -758,71 +636,109 @@ class WebRTCService {
   }
 
   /**
-   * Завершает звонок и очищает всё состояние.
-   * - Останавливает и освобождает локальные аудио- и видео-треки
-   * - Закрывает PeerConnection
-   * - Сбрасывает коллбэки
+   * Обработать renegotiation offer от удалённой стороны для конкретного пира.
+   * Вызывается при ICE restart или видео-реинициализации.
+   *
+   * @returns JSON-строка answer SDP
    */
-  stopCall(): void {
-    this._clearDisconnectedTimer();
-
-    // Останавливаем аудио-треки
-    this._localStream?.getAudioTracks().forEach(t => t.stop());
-    // Останавливаем видео-треки
-    this._localStream?.getVideoTracks().forEach(t => t.stop());
-    this._localStream = null;
-    this._remoteStream = null;
-    this._iceRestartAttempted = false;
-    this._negotiationInProgress = false;
-    this._pendingRenegotiation = false;
-    this._callInSetup = false;
-    this._pendingCandidates = [];
-    this._earlyCandidates = [];
-    this._videoSender = null;
-
-    if (this._pc) {
-      this._pc.close();
-      this._pc = null;
+  async handlePeerRenegotiationOffer(userId: string, offerSdp: string): Promise<string> {
+    const wrapper = this._connections.get(userId);
+    if (!wrapper) {
+      throw new Error('No peer connection for user ' + userId);
     }
 
-    this._onIceCandidate = null;
-    this._onRemoteStream = null;
-    this._onConnectionState = null;
-    this._onError = null;
-    this._onRenegotiationNeeded = null;
-  }
+    console.log(
+      '[WebRTC] 🔄 handlePeerRenegotiationOffer user=' +
+        userId +
+        ', sigState=' +
+        wrapper.pc.signalingState,
+    );
 
-  /**
-   * Обработать renegotiation offer от удалённой стороны.
-   * Вызывается, когда удалённая сторона инициирует ICE restart.
-   *
-   * 1. Устанавливает remote description из offer
-   * 2. Создаёт answer
-   * 3. Устанавливает local description
-   * 4. Возвращает answer SDP как JSON-строку
-   */
-  async handleRenegotiationOffer(offerSdp: string): Promise<string> {
-    console.log(
-      '[WebRTC] 🔄 handleRenegotiationOffer, sigState=' + (this._pc?.signalingState ?? 'no-pc'),
-    );
     const offer = JSON.parse(offerSdp) as SdpInfo;
-    await this._pc?.setRemoteDescription(new RTCSessionDescription(offer));
-    console.log(
-      '[WebRTC] 🔄 setRemoteDescription(offer) OK, sigState=' +
-        (this._pc?.signalingState ?? 'no-pc'),
-    );
-    await this._flushPendingCandidates();
-    const answer = (await this._pc?.createAnswer()) as SdpInfo;
-    console.log('[WebRTC] 🔄 createAnswer OK');
+    await wrapper.pc.setRemoteDescription(new RTCSessionDescription(offer));
+    wrapper.remoteDescriptionSet = true;
+    await this._flushPendingCandidates(wrapper);
+
+    const answer = (await wrapper.pc.createAnswer()) as SdpInfo;
     const modifiedSdp = this._modifySdpForAudio(answer.sdp);
     const desc = { type: 'answer', sdp: modifiedSdp };
-    await this._pc?.setLocalDescription(desc);
-    console.log('[WebRTC] 🔄 setLocalDescription(answer) OK');
+    await wrapper.pc.setLocalDescription(desc);
     return JSON.stringify(desc);
   }
 
+  /**
+   * Регулировка громкости для конкретного пира (no-op заглушка для v1).
+   * В будущем будет использовать RTCRtpReceiver или HTMLAudioElement.
+   */
+  setPeerVolume(_userId: string, _volume: number): void {
+    // no-op for v1
+  }
+
+  /**
+   * Возвращает remote-поток для конкретного пира.
+   * Удобно для multi-party конференций.
+   */
+  getPeerRemoteStream(userId: string): MediaStream | null {
+    const wrapper = this._connections.get(userId);
+    return wrapper?.remoteStream ?? null;
+  }
+
   // ================================================================
-  //  Сеттеры коллбэков
+  //  Legacy 1-1 compat methods
+  // ================================================================
+
+  /** Внутренний userId для обратной совместимости с 1-1 звонками. */
+  private readonly COMPAT_USER_ID = '_default';
+
+  /**
+   * Исходящий звонок (legacy compat).
+   * Создаёт SDP offer для единственного пира.
+   *
+   * @param withVideo — если true, включает видео (захват камеры + offerToReceiveVideo)
+   */
+  async createOffer(withVideo: boolean = false): Promise<string> {
+    await this.startLocalStream(withVideo);
+    return this.createPeer(this.COMPAT_USER_ID, 'offer');
+  }
+
+  /**
+   * Входящий звонок (legacy compat).
+   * Создаёт SDP answer на основе offer от удалённой стороны.
+   *
+   * @param withVideo — если true, также захватывает видео
+   */
+  async createAnswer(offerSdp: string, withVideo: boolean = false): Promise<string> {
+    await this.startLocalStream(withVideo);
+    return this.createPeer(this.COMPAT_USER_ID, 'answer', offerSdp);
+  }
+
+  /** Устанавливает remote description для единственного пира (legacy compat). */
+  async setRemoteDescription(sdp: string): Promise<void> {
+    return this.setPeerRemoteDescription(this.COMPAT_USER_ID, sdp);
+  }
+
+  /** Добавляет ICE candidate для единственного пира (legacy compat). */
+  async addIceCandidate(candidate: string): Promise<void> {
+    return this.addPeerIceCandidate(this.COMPAT_USER_ID, candidate);
+  }
+
+  /** Завершает звонок (legacy compat). */
+  stopCall(): void {
+    this.removeAllPeers();
+  }
+
+  /** ICE restart для единственного пира (legacy compat). */
+  async iceRestart(): Promise<string | null> {
+    return this.iceRestartPeer(this.COMPAT_USER_ID);
+  }
+
+  /** Обработка renegotiation offer для единственного пира (legacy compat). */
+  async handleRenegotiationOffer(offerSdp: string): Promise<string> {
+    return this.handlePeerRenegotiationOffer(this.COMPAT_USER_ID, offerSdp);
+  }
+
+  // ================================================================
+  //  Сеттеры коллбэков (Legacy compat — без userId)
   // ================================================================
 
   set onIceCandidate(cb: ((candidate: string) => void) | null) {
@@ -846,8 +762,211 @@ class WebRTCService {
   }
 
   // ================================================================
+  //  Сеттеры коллбэков (Multi-peer — с userId)
+  // ================================================================
+
+  set onPeerIceCandidate(cb: ((userId: string, candidate: string) => void) | null) {
+    this._onPeerIceCandidate = cb;
+  }
+
+  set onPeerRemoteStream(cb: ((userId: string, stream: MediaStream) => void) | null) {
+    this._onPeerRemoteStream = cb;
+  }
+
+  set onPeerConnectionState(cb: ((userId: string, state: ConnectionStateEvent) => void) | null) {
+    this._onPeerConnectionState = cb;
+  }
+
+  set onPeerRenegotiationNeeded(cb: ((userId: string, sdp: string) => void) | null) {
+    this._onPeerRenegotiationNeeded = cb;
+  }
+
+  // ================================================================
   //  Приватные вспомогательные методы
   // ================================================================
+
+  /**
+   * Возвращает первый PeerConnectionWrapper (для legacy compat).
+   * Порядок не гарантирован, но при 1-1 звонке пир всегда один.
+   */
+  private _getFirstPeer(): PeerConnectionWrapper | null {
+    for (const wrapper of this._connections.values()) {
+      return wrapper;
+    }
+    return null;
+  }
+
+  /**
+   * Создаёт PeerConnectionWrapper для userId.
+   * ICE-серверы, локальные треки и все per-peer обработчики событий.
+   *
+   * @param userId — для кого создаётся соединение
+   */
+  private _createPeerConnectionWrapper(userId: string): PeerConnectionWrapper {
+    const pc = new RTCPeerConnection({
+      iceServers: this._iceServers,
+      bundlePolicy: 'max-bundle',
+      rtcpMuxPolicy: 'require',
+      iceTransportPolicy: 'all',
+    }) as PcEventHandlers;
+
+    console.log(
+      '[WebRTC] PeerConnection created for user=' +
+        userId +
+        ' with ' +
+        this._iceServers.length +
+        ' ICE servers:',
+      this._iceServers.map(s => (Array.isArray(s.urls) ? s.urls.join(', ') : s.urls)).join(' | '),
+    );
+
+    const wrapper: PeerConnectionWrapper = {
+      pc,
+      userId,
+      remoteStream: null,
+      pendingCandidates: [],
+      remoteDescriptionSet: false,
+      disconnectedTimer: null,
+      iceRestartAttempted: false,
+      negotiationInProgress: false,
+      pendingRenegotiation: false,
+      callInSetup: true,
+      videoSender: null,
+    };
+
+    // --- onicecandidate ---
+    pc.onicecandidate = (event: { candidate: RTCIceCandidate | null }) => {
+      if (event.candidate) {
+        const json = event.candidate.toJSON();
+        const candidateStr = (json as any).candidate || '';
+        const typeMatch = candidateStr.match(/ typ (\S+)/);
+        const candidateType = typeMatch ? typeMatch[1] : 'unknown';
+
+        if (__DEV__) {
+          const addrMatch = candidateStr.match(/ (\d+\.\d+\.\d+\.\d+) /);
+          const address = addrMatch ? addrMatch[1] : '(n/a)';
+          console.log(
+            `[WebRTC] 🧊 ICE candidate: ${candidateType}, addr=${address}, user=${userId}`,
+          );
+        }
+
+        const jsonStr = JSON.stringify(json);
+
+        // Multi-peer callback (всегда)
+        this._onPeerIceCandidate?.(userId, jsonStr);
+
+        // Legacy compat callback (только для _default пира)
+        if (userId === this.COMPAT_USER_ID) {
+          this._onIceCandidate?.(jsonStr);
+        }
+      } else {
+        console.log('[WebRTC] ✅ ICE candidate gathering complete for user=' + userId);
+      }
+    };
+
+    // --- onicecandidateerror ---
+    pc.onicecandidateerror = (event: any) => {
+      const errCode = event.errorCode || event?.errorCode;
+      const errText = event.errorText || event?.errorText;
+      const errUrl = event.url || event?.url;
+      console.warn(
+        `[WebRTC] ❌ ICE candidate error user=${userId} (code=${errCode}, text=${errText}, url=${errUrl})`,
+      );
+    };
+
+    // --- ontrack (удалённый аудио/видео-поток) ---
+    pc.ontrack = (event: { streams: MediaStream[]; track: MediaStreamTrack | null }) => {
+      if (event.streams && event.streams[0]) {
+        wrapper.remoteStream = event.streams[0];
+        const trackCount = event.streams[0].getTracks?.()?.length ?? 1;
+        console.log(
+          '[WebRTC] Remote stream received for user=' + userId + ', tracks=' + trackCount,
+        );
+
+        // Multi-peer callback
+        this._onPeerRemoteStream?.(userId, wrapper.remoteStream);
+
+        // Legacy compat callback
+        if (userId === this.COMPAT_USER_ID) {
+          this._onRemoteStream?.(wrapper.remoteStream);
+        }
+      }
+    };
+
+    // --- onconnectionstatechange ---
+    pc.onconnectionstatechange = () => {
+      const state = pc.connectionState;
+      console.log('[WebRTC] Connection state changed for user=' + userId + ': ' + state);
+
+      // Multi-peer callback
+      this._onPeerConnectionState?.(userId, state);
+
+      // Legacy compat callback
+      if (userId === this.COMPAT_USER_ID) {
+        this._onConnectionState?.(state);
+      }
+
+      if (state === 'connected') {
+        this._clearDisconnectedTimer(wrapper);
+      } else if (state === 'disconnected') {
+        this._startDisconnectedTimer(wrapper);
+      } else if (state === 'failed') {
+        this._handleIceRestart(wrapper);
+      }
+    };
+
+    // --- onnegotiationneeded ---
+    pc.onnegotiationneeded = async () => {
+      if (wrapper.callInSetup || wrapper.negotiationInProgress || wrapper.pendingRenegotiation) {
+        return;
+      }
+      wrapper.negotiationInProgress = true;
+      try {
+        const sdpInfo = (await pc.createOffer()) as SdpInfo;
+        const modifiedSdp = this._modifySdpForAudio(sdpInfo.sdp);
+        const desc = { type: 'offer', sdp: modifiedSdp };
+        await pc.setLocalDescription(desc);
+        const jsonSdp = JSON.stringify(desc);
+
+        // Multi-peer callback
+        this._onPeerRenegotiationNeeded?.(userId, jsonSdp);
+
+        // Legacy compat callback
+        if (userId === this.COMPAT_USER_ID) {
+          this._onRenegotiationNeeded?.(jsonSdp);
+        }
+      } catch (e) {
+        console.warn('[WebRTC] negotiationneeded failed for user=' + userId + ':', e);
+      } finally {
+        wrapper.negotiationInProgress = false;
+      }
+    };
+
+    // Добавляем локальные треки в этот PC
+    if (this._localStream) {
+      this._localStream.getTracks().forEach(track => {
+        const sender = pc.addTrack(track, this._localStream!);
+        if (track.kind === 'video') {
+          wrapper.videoSender = sender;
+        }
+      });
+    }
+
+    // Сбрасываем глобальный буфер: переносим кандидаты для этого userId
+    const relevant = this._earlyCandidates.filter(e => e.userId === userId);
+    if (relevant.length > 0) {
+      console.log(
+        '[WebRTC] 🔄 Flushing ' + relevant.length + ' early ICE candidates for user=' + userId,
+      );
+      this._earlyCandidates = this._earlyCandidates.filter(e => e.userId !== userId);
+      for (const { candidate } of relevant) {
+        // Вызываем асинхронно, но не ждём — кандидаты попадут
+        // в per-peer pendingCandidates, если remoteDescription ещё не установлен
+        this.addPeerIceCandidate(userId, candidate).catch(() => {});
+      }
+    }
+
+    return wrapper;
+  }
 
   /**
    * Модифицирует SDP для голосовых звонков:
@@ -886,32 +1005,35 @@ class WebRTCService {
     });
   }
 
-  /** Запускает 5-секундный таймер при `disconnected`. */
-  private _startDisconnectedTimer(): void {
-    if (this._disconnectedTimer) return;
-    this._disconnectedTimer = setTimeout(() => {
-      this._disconnectedTimer = null;
-      if (this._pc?.connectionState === 'disconnected' || this._pc?.connectionState === 'failed') {
+  /** Запускает 12-секундный таймер при `disconnected` для конкретного пира. */
+  private _startDisconnectedTimer(wrapper: PeerConnectionWrapper): void {
+    if (wrapper.disconnectedTimer) return;
+    wrapper.disconnectedTimer = setTimeout(() => {
+      wrapper.disconnectedTimer = null;
+      if (
+        wrapper.pc.connectionState === 'disconnected' ||
+        wrapper.pc.connectionState === 'failed'
+      ) {
         this._onError?.('connection_disconnected');
-        this.stopCall();
+        this.removePeer(wrapper.userId);
       }
     }, 12000);
   }
 
-  /** Отменяет таймер disconnected. */
-  private _clearDisconnectedTimer(): void {
-    if (this._disconnectedTimer) {
-      clearTimeout(this._disconnectedTimer);
-      this._disconnectedTimer = null;
+  /** Отменяет таймер disconnected для конкретного пира. */
+  private _clearDisconnectedTimer(wrapper: PeerConnectionWrapper): void {
+    if (wrapper.disconnectedTimer) {
+      clearTimeout(wrapper.disconnectedTimer);
+      wrapper.disconnectedTimer = null;
     }
   }
 
   /** Добавляет все накопленные ICE-кандидаты после установки remote description. */
-  private async _flushPendingCandidates(): Promise<void> {
-    while (this._pendingCandidates.length > 0) {
-      const candidate = this._pendingCandidates.shift()!;
+  private async _flushPendingCandidates(wrapper: PeerConnectionWrapper): Promise<void> {
+    while (wrapper.pendingCandidates.length > 0) {
+      const candidate = wrapper.pendingCandidates.shift()!;
       try {
-        await this._pc?.addIceCandidate(candidate);
+        await wrapper.pc.addIceCandidate(candidate);
       } catch (e) {
         console.warn('[WebRTC] Failed to add pending ICE candidate:', e);
       }
@@ -919,20 +1041,23 @@ class WebRTCService {
   }
 
   /**
-   * Обрабатывает состояние `failed`:
+   * Обрабатывает состояние `failed` для конкретного пира:
    * - При первом сбое — пытается сделать ICE restart
    * - При повторном сбое — вызывает `_onError('connection_failed')`
    */
-  private async _handleIceRestart(): Promise<void> {
-    if (this._iceRestartAttempted) {
+  private async _handleIceRestart(wrapper: PeerConnectionWrapper): Promise<void> {
+    if (wrapper.iceRestartAttempted) {
       this._onError?.('connection_failed');
       return;
     }
-    this._iceRestartAttempted = true;
+    wrapper.iceRestartAttempted = true;
     try {
-      const offer = await this.iceRestart();
+      const offer = await this.iceRestartPeer(wrapper.userId);
       if (offer) {
-        this._onConnectionState?.('ice_restart');
+        this._onPeerConnectionState?.(wrapper.userId, 'ice_restart');
+        if (wrapper.userId === this.COMPAT_USER_ID) {
+          this._onConnectionState?.('ice_restart');
+        }
       } else {
         this._onError?.('connection_failed');
       }

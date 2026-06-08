@@ -86,6 +86,7 @@ export interface CallAnswer {
 export interface CallIceCandidate {
   callId: string;
   candidate: string;
+  targetUserId?: string;
 }
 
 export interface CallEnded {
@@ -113,6 +114,10 @@ export interface CallRecord {
   timestamp: number;
   status: 'missed' | 'completed' | 'declined';
   callType: CallType;
+  /** true для групповой конференции (multi-party) */
+  isGroup?: boolean;
+  /** Список участников конференции (для group calls) */
+  participants?: string[];
 }
 
 export interface AutoFriendAddedPayload {
@@ -146,4 +151,58 @@ export interface VoiceStorageInfo {
   totalSize: number;
   voiceCount: number;
   perChat: Record<string, { size: number; count: number }>;
+}
+
+// ---- Conference (multi-party audio) types ----
+
+export interface ConferenceParticipant {
+  userId: string;
+  displayName: string;
+  status: 'invited' | 'active' | 'left';
+  joinedAt: number;
+  isRemoteMuted: boolean;
+  isLocallyMuted: boolean;
+  audioLevel: number;
+}
+
+export type ConferenceStatus = 'idle' | 'calling' | 'ringing' | 'connected' | 'ended' | 'failed';
+
+export interface ConferenceInviteData {
+  callId: string;
+  fromUserId: string;
+  mediaType: 'audio';
+  participants: string[];
+  roomName: string;
+}
+
+export interface ParticipantEvent {
+  callId: string;
+  userId: string;
+}
+
+export interface ConferenceJoinOffer {
+  callId: string;
+  fromUserId: string;
+  sdp: string;
+}
+
+export interface ConferenceJoinAnswer {
+  callId: string;
+  fromUserId: string;
+  sdp: string;
+}
+
+export interface ConferenceAccepted {
+  callId: string;
+  participants: string[];
+  roomName: string;
+}
+
+/** Входящее приглашение в конференцию (отличается от 1-1 CallOffer наличием participants и roomName) */
+export interface ConferenceIncomingCall {
+  callId: string;
+  fromUserId: string;
+  mediaType: 'audio';
+  participants: string[];
+  roomName: string;
 }

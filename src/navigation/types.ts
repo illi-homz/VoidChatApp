@@ -39,4 +39,10 @@ export type RootStackParamList = {
         callType: CallType;
       };
   Storage: undefined;
+  Conference: {
+    callId: string;
+    roomName: string;
+    participants: Array<{ userId: string; displayName: string }>;
+    direction: 'incoming' | 'outgoing';
+  };
 };

@@ -12,6 +12,7 @@ import { AddFriendScreen } from '../screens/AddFriendScreen';
 import { AddServerScreen } from '../screens/AddServerScreen';
 import { StorageScreen } from '../screens/StorageScreen';
 import { CallScreen } from '../screens/CallScreen';
+import { ConferenceScreen } from '../screens/ConferenceScreen';
 import { Colors } from '../theme/colors';
 import { SelectionOverlay } from '../components/SelectionOverlay';
 
@@ -83,6 +84,11 @@ export function AppNavigator({ onReady }: AppNavigatorProps): React.JSX.Element 
             name='Storage'
             component={StorageScreen}
             options={{ title: 'Управление хранилищем' }}
+          />
+          <Stack.Screen
+            name='Conference'
+            component={ConferenceScreen}
+            options={{ headerShown: false, presentation: 'fullScreenModal' }}
           />
         </Stack.Navigator>
       </NavigationContainer>

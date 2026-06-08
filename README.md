@@ -75,6 +75,7 @@ src/
 │   ├── HomeScreen       # Список контактов, обработка запросов дружбы
 │   ├── ChatScreen       # E2E-чат с индикацией доставки сообщений
 │   ├── CallScreen       # Экран голосового звонка (fullScreenModal)
+│   ├── ConferenceScreen  # Экран голосовой конференции (FullScreenModal, до 10 участников)
 │   ├── AddFriendScreen  # Отправка запроса дружбы (ждёт подтверждения сервера), кнопка вставки из буфера, умное сканирование QR (проверяет — есть ли сервер)
 │   └── AddServerScreen  # Добавление нового сервера (название + URL, генерация keypair)
 ├── services/
@@ -93,6 +94,7 @@ src/
 │   ├── AppStore.ts      # MobX store (user, contacts, messages, unread, callRecords)
 │   ├── ServerStore.ts   # MobX store (список серверов, активный сервер)
 │   ├── CallStore.ts     # MobX store (состояние звонка, длительность, ошибки)
+│   ├── ConferenceStore.ts # MobX store (конференции: участники, приглашения, mute)
 │   └── index.tsx        # StoreProvider + useStore() + useServerStore()
 ├── theme/
 │   └── colors.ts        # Централизованные цвета (10 токенов)
@@ -200,6 +202,12 @@ class ServerStore {
 | `call_decline` | `{ callId }` | **CallScreen** / **IncomingCallBanner** | Отклонение звонка |
 | `call_hangup` | `{ callId }` | **CallScreen** | Завершение звонка |
 | `ice_candidate` | `{ callId, candidate }` | **WebRTCService** | ICE кандидат |
+| `call_invite_participant` | `{ callId, targetUserId }` | **ConferenceScreen** | Пригласить участника в конференцию |
+| `call_accept_invite` | `{ callId }` | **ConferenceScreen** | Принять приглашение в конференцию |
+| `call_decline_invite` | `{ callId }` | **ConferenceScreen** | Отклонить приглашение |
+| `call_join_offer` | `{ callId, targetUserId, sdp }` | **WebRTCService** | SDP offer для новой пары (Mesh) |
+| `call_join_answer` | `{ callId, targetUserId, sdp }` | **WebRTCService** | SDP answer для новой пары (Mesh) |
+| `call_leave` | `{ callId }` | **ConferenceScreen** | Покинуть конференцию |
 
 ### Сервер → Клиент
 
@@ -225,6 +233,13 @@ class ServerStore {
 | `call_ended` | `{ callId, duration, endedBy }` | **CallScreen** / **CallStore** | Звонок завершён удалённо |
 | `call_timedout` | `{ callId, reason }` | **CallScreen** | Таймаут звонка (60 сек без ответа) |
 | `ice_candidate` | `{ callId, candidate }` | **WebRTCService** | ICE кандидат от удалённой стороны |
+| `participant_invited` | `{ callId, userId }` | **ConferenceScreen** | Новый участник приглашён |
+| `participant_joined` | `{ callId, userId, roomName?, participants? }` | **ConferenceScreen** | Участник присоединился |
+| `participant_left` | `{ callId, userId, duration? }` | **ConferenceScreen** | Участник покинул |
+| `participant_invite_expired` | `{ callId, userId }` | **ConferenceScreen** | Приглашение истекло |
+| `call_join_offer` | `{ callId, fromUserId, sdp }` | **WebRTCService** | SDP offer от нового участника |
+| `call_join_answer` | `{ callId, fromUserId, sdp }` | **WebRTCService** | SDP answer от нового участника |
+| `conference_upgraded` | `{ callId, roomName }` | **ConferenceScreen** | 1-1 звонок повышен до конференции |
 
 ## E2E шифрование
 

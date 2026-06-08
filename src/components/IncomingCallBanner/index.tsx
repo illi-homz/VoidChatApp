@@ -12,12 +12,24 @@ interface IncomingCallBannerProps {
   callType: CallType;
   onAccept: () => void;
   onDecline: () => void;
+  /** Если true — это приглашение в конференцию */
+  isConference?: boolean;
+  /** Сколько уже участников */
+  participantCount?: number;
+  /** Имена участников (для показа) */
+  participantNames?: string[];
+}
+
+function formatParticipantNames(names: string[]): string {
+  if (names.length <= 3) return names.join(', ');
+  return `${names.slice(0, 3).join(', ')} и ещё ${names.length - 3}`;
 }
 
 /**
  * IncomingCallBanner — модальное окно входящего звонка.
  * Появляется поверх любого экрана с анимацией золотого свечения.
  * Содержит аватар контакта, имя, кнопки "Ответить" и "Отклонить".
+ * Поддерживает конференции (multi-party) через проп isConference.
  */
 export const IncomingCallBanner = React.memo(function IncomingCallBanner({
   visible,
@@ -26,6 +38,9 @@ export const IncomingCallBanner = React.memo(function IncomingCallBanner({
   callType,
   onAccept,
   onDecline,
+  isConference = false,
+  participantCount: _participantCount,
+  participantNames,
 }: IncomingCallBannerProps): React.JSX.Element {
   const [showModal, setShowModal] = useState(false);
   const opacity = useRef(new Animated.Value(0)).current;
@@ -117,19 +132,38 @@ export const IncomingCallBanner = React.memo(function IncomingCallBanner({
           </View>
 
           {/* Текст */}
-          <View style={styles.callTypeRow}>
-            <Icon
-              name={callType === 'video' ? 'camera' : 'phone'}
-              size={16}
-              color={Colors.primary}
-            />
-            <Text style={styles.incomingLabel}>
-              {callType === 'video' ? 'ВИДЕОЗВОНОК' : 'АУДИОЗВОНОК'}
-            </Text>
-          </View>
-          <Text style={styles.contactName} numberOfLines={1}>
-            {contactName}
-          </Text>
+          {isConference ? (
+            <>
+              <View style={styles.callTypeRow}>
+                <Icon name='users' size={16} color={Colors.primary} />
+                <Text style={styles.incomingLabel}>КОНФЕРЕНЦИЯ</Text>
+              </View>
+              <Text style={styles.conferenceTitle} numberOfLines={1}>
+                {contactName} приглашает в конференцию
+              </Text>
+              {participantNames && participantNames.length > 0 && (
+                <Text style={styles.participantsList} numberOfLines={2}>
+                  Участники: {formatParticipantNames(participantNames)}
+                </Text>
+              )}
+            </>
+          ) : (
+            <>
+              <View style={styles.callTypeRow}>
+                <Icon
+                  name={callType === 'video' ? 'camera' : 'phone'}
+                  size={16}
+                  color={Colors.primary}
+                />
+                <Text style={styles.incomingLabel}>
+                  {callType === 'video' ? 'ВИДЕОЗВОНОК' : 'АУДИОЗВОНОК'}
+                </Text>
+              </View>
+              <Text style={styles.contactName} numberOfLines={1}>
+                {contactName}
+              </Text>
+            </>
+          )}
 
           {/* Кнопки */}
           <View style={styles.buttonsRow}>
@@ -148,10 +182,14 @@ export const IncomingCallBanner = React.memo(function IncomingCallBanner({
               onPress={onAccept}
               activeOpacity={0.7}
               accessibilityRole='button'
-              accessibilityLabel={`Ответить на ${callType === 'video' ? 'видео' : 'аудио'}звонок`}
+              accessibilityLabel={
+                isConference
+                  ? 'Принять приглашение в конференцию'
+                  : `Ответить на ${callType === 'video' ? 'видео' : 'аудио'}звонок`
+              }
             >
               <Icon
-                name={callType === 'video' ? 'camera' : 'phone'}
+                name={isConference ? 'phone' : callType === 'video' ? 'camera' : 'phone'}
                 size={24}
                 color={Colors.background}
               />

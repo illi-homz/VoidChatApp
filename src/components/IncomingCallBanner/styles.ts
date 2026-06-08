@@ -79,6 +79,20 @@ export const styles = StyleSheet.create({
     marginBottom: 28,
     textAlign: 'center',
   },
+  conferenceTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  participantsList: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 8,
+    paddingHorizontal: 16,
+  },
   buttonsRow: {
     flexDirection: 'row',
     justifyContent: 'center',

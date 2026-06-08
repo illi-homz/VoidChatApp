@@ -11,9 +11,11 @@ import type {
   CallTimedOut,
   CallType,
   VoiceMessageReceived,
+  ConferenceIncomingCall,
 } from '../../types';
 import type { BottomSheetAction } from '../../components/BottomSheet';
 import { useStore, useServerStore, useCallStore } from '../../stores';
+import { conferenceStore } from '../../stores/ConferenceStore';
 import { useAppStateReconnect } from '../../hooks/useAppStateReconnect';
 import { socketService } from '../../services/socket';
 import { ContactItem } from '../../components/ContactItem';
@@ -61,6 +63,17 @@ export const HomeScreen = observer(function HomeScreen({
     callType: CallType;
   } | null>(null);
   const incomingCallDataRef = useRef<typeof incomingCallData>(null);
+
+  // ── Состояния для входящей конференции ──
+  const [showIncomingConference, setShowIncomingConference] = useState(false);
+  const [incomingConferenceData, setIncomingConferenceData] = useState<{
+    callId: string;
+    inviterName: string;
+    participants: string[];
+    participantNames: string[];
+    participantCount: number;
+    roomName: string;
+  } | null>(null);
 
   useEffect(() => {
     incomingCallDataRef.current = incomingCallData;
@@ -173,6 +186,33 @@ export const HomeScreen = observer(function HomeScreen({
     setIncomingCallData(null);
   }, [callStore]);
 
+  const handleAcceptConference = useCallback(() => {
+    if (!incomingConferenceData) return;
+    const data = incomingConferenceData;
+    setShowIncomingConference(false);
+
+    // Принять приглашение
+    socketService.sendCallAcceptInvite(data.callId);
+
+    // Навигировать на ConferenceScreen
+    navigation.navigate('Conference', {
+      callId: data.callId,
+      roomName: data.roomName,
+      participants: data.participants.map((userId, i) => ({
+        userId,
+        displayName: data.participantNames[i] ?? '',
+      })),
+      direction: 'incoming',
+    });
+  }, [incomingConferenceData, navigation, socketService]);
+
+  const handleDeclineConference = useCallback(() => {
+    if (!incomingConferenceData) return;
+    socketService.sendCallDeclineInvite(incomingConferenceData.callId);
+    setShowIncomingConference(false);
+    setIncomingConferenceData(null);
+  }, [incomingConferenceData, socketService]);
+
   const renderContact = useCallback(
     ({ item }: { item: Contact }) => (
       <ContactItem
@@ -245,6 +285,7 @@ export const HomeScreen = observer(function HomeScreen({
       socketService.offCallIncoming();
       socketService.offCallEnded();
       socketService.offCallTimedOut();
+      socketService.offConferenceIncomingCall();
       onMessageCleanupRef.current?.();
       onVoiceMessageCleanupRef.current?.();
     };
@@ -517,6 +558,32 @@ export const HomeScreen = observer(function HomeScreen({
       }
     });
 
+    // ---- Conference incoming listener ----
+    socketService.onConferenceIncomingCall((data: ConferenceIncomingCall) => {
+      // Если уже занят другим звонком или конференцией — игнорируем
+      if (callStore.status !== 'idle' || conferenceStore.status !== 'idle') {
+        return;
+      }
+
+      // Найти displayName для участников через store.contacts
+      const participantNames = data.participants.map(pid => {
+        const contact = store.contacts.find(c => c.userId === pid);
+        return contact?.nickname ?? maskUserId(pid);
+      });
+
+      const inviterName = participantNames[0] ?? data.fromUserId;
+
+      setIncomingConferenceData({
+        callId: data.callId,
+        inviterName,
+        participants: data.participants,
+        participantNames,
+        participantCount: data.participants.length,
+        roomName: data.roomName,
+      });
+      setShowIncomingConference(true);
+    });
+
     // callAccepted, callDeclined, callEnded, callTimedOut обрабатываются в CallScreen
     // через независимые подписки (array-based callbacks в socket.ts)
   }
@@ -597,6 +664,19 @@ export const HomeScreen = observer(function HomeScreen({
           callType={incomingCallData.callType}
           onAccept={handleAcceptCall}
           onDecline={handleDeclineCall}
+        />
+      )}
+      {showIncomingConference && incomingConferenceData && (
+        <IncomingCallBanner
+          visible={true}
+          contactName={incomingConferenceData.inviterName}
+          contactId={incomingConferenceData.callId}
+          callType='audio'
+          isConference={true}
+          participantCount={incomingConferenceData.participantCount}
+          participantNames={incomingConferenceData.participantNames}
+          onAccept={handleAcceptConference}
+          onDecline={handleDeclineConference}
         />
       )}
     </View>

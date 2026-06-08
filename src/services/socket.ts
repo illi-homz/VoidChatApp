@@ -14,6 +14,11 @@ import type {
   CallTimedOut,
   CallType,
   VoiceMessageReceived,
+  ConferenceJoinOffer,
+  ConferenceJoinAnswer,
+  ConferenceAccepted,
+  ConferenceIncomingCall,
+  ParticipantEvent,
 } from '../types';
 
 import { webrtcService } from './WebRTCService';
@@ -78,6 +83,24 @@ class SocketService {
       voiceMessageSentCallback: false,
       voiceMessageFailedCallback: false,
       voiceMessageBuffer: false,
+      participantInvitedCallbacks: false,
+      participantJoinedCallbacks: false,
+      participantLeftCallbacks: false,
+      participantInviteExpiredCallbacks: false,
+      conferenceJoinOfferCallbacks: false,
+      conferenceJoinAnswerCallbacks: false,
+      conferenceAcceptedCallbacks: false,
+      participantInvitedBuffer: false,
+      participantJoinedBuffer: false,
+      participantLeftBuffer: false,
+      participantInviteExpiredBuffer: false,
+      conferenceJoinOfferBuffer: false,
+      conferenceJoinAnswerBuffer: false,
+      conferenceAcceptedBuffer: false,
+      conferenceIncomingCallCallbacks: false,
+      conferenceIncomingCallBuffer: false,
+      conferenceUpgradedCallbacks: false,
+      conferenceUpgradedBuffer: false,
       callIncomingBuffer: false,
       callOfferSentBuffer: false,
       callAcceptedBuffer: false,
@@ -180,6 +203,30 @@ class SocketService {
     | ((data: { to: string; nonce: string; reason: string }) => void)
     | null = null;
   private voiceMessageBuffer: VoiceMessageReceived[] = [];
+
+  // ── Conference callbacks ──
+  private participantInvitedCallbacks: Array<(data: ParticipantEvent) => void> = [];
+  private participantJoinedCallbacks: Array<(data: ParticipantEvent) => void> = [];
+  private participantLeftCallbacks: Array<(data: ParticipantEvent) => void> = [];
+  private participantInviteExpiredCallbacks: Array<(data: ParticipantEvent) => void> = [];
+  private conferenceJoinOfferCallbacks: Array<(data: ConferenceJoinOffer) => void> = [];
+  private conferenceJoinAnswerCallbacks: Array<(data: ConferenceJoinAnswer) => void> = [];
+  private conferenceAcceptedCallbacks: Array<(data: ConferenceAccepted) => void> = [];
+
+  private conferenceIncomingCallCallbacks: Array<(data: ConferenceIncomingCall) => void> = [];
+  private conferenceIncomingCallBuffer: ConferenceIncomingCall[] = [];
+
+  // ── Conference buffers ──
+  private participantInvitedBuffer: ParticipantEvent[] = [];
+  private participantJoinedBuffer: ParticipantEvent[] = [];
+  private participantLeftBuffer: ParticipantEvent[] = [];
+  private participantInviteExpiredBuffer: ParticipantEvent[] = [];
+  private conferenceJoinOfferBuffer: ConferenceJoinOffer[] = [];
+  private conferenceJoinAnswerBuffer: ConferenceJoinAnswer[] = [];
+  private conferenceAcceptedBuffer: ConferenceAccepted[] = [];
+  private conferenceUpgradedCallbacks: ((data: { callId: string; roomName: string }) => void)[] =
+    [];
+  private conferenceUpgradedBuffer: Array<{ callId: string; roomName: string }> = [];
 
   connect(serverUrl: string, userId: string, publicKey: string): Promise<void> {
     if (this.socket) {
@@ -364,11 +411,23 @@ class SocketService {
         this.presenceCallback?.(data);
       });
 
-      this.socket.on('call_incoming', (data: CallOffer) => {
-        if (this.callIncomingCallbacks.length > 0) {
-          for (const cb of this.callIncomingCallbacks) cb(data);
+      this.socket.on('call_incoming', (data: any) => {
+        // Различаем конференцию по наличию participants
+        if (data.participants && Array.isArray(data.participants)) {
+          // Это конференция — передаём в конференц-колбэки
+          const confData = data as ConferenceIncomingCall;
+          if (this.conferenceIncomingCallCallbacks.length > 0) {
+            for (const cb of this.conferenceIncomingCallCallbacks) cb(confData);
+          } else {
+            this.conferenceIncomingCallBuffer.push(confData);
+          }
         } else {
-          this.callIncomingBuffer.push(data);
+          // Это 1-1 звонок — существующая логика
+          if (this.callIncomingCallbacks.length > 0) {
+            for (const cb of this.callIncomingCallbacks) cb(data);
+          } else {
+            this.callIncomingBuffer.push(data);
+          }
         }
       });
 
@@ -472,6 +531,82 @@ class SocketService {
         },
       );
 
+      this.socket.on('participant_invited', (data: ParticipantEvent) => {
+        if (this.participantInvitedCallbacks.length > 0) {
+          for (const cb of this.participantInvitedCallbacks) cb(data);
+        } else {
+          this.participantInvitedBuffer.push(data);
+        }
+      });
+
+      this.socket.on('participant_joined', (data: ParticipantEvent) => {
+        if (this.participantJoinedCallbacks.length > 0) {
+          for (const cb of this.participantJoinedCallbacks) cb(data);
+        } else {
+          this.participantJoinedBuffer.push(data);
+        }
+      });
+
+      this.socket.on('participant_left', (data: ParticipantEvent) => {
+        if (this.participantLeftCallbacks.length > 0) {
+          for (const cb of this.participantLeftCallbacks) cb(data);
+        } else {
+          this.participantLeftBuffer.push(data);
+        }
+      });
+
+      this.socket.on('participant_invite_expired', (data: ParticipantEvent) => {
+        if (this.participantInviteExpiredCallbacks.length > 0) {
+          for (const cb of this.participantInviteExpiredCallbacks) cb(data);
+        } else {
+          this.participantInviteExpiredBuffer.push(data);
+        }
+      });
+
+      this.socket.on('call_join_offer', (data: ConferenceJoinOffer) => {
+        if (this.conferenceJoinOfferCallbacks.length > 0) {
+          for (const cb of this.conferenceJoinOfferCallbacks) cb(data);
+        } else {
+          this.conferenceJoinOfferBuffer.push(data);
+        }
+      });
+
+      this.socket.on('call_join_answer', (data: ConferenceJoinAnswer) => {
+        if (this.conferenceJoinAnswerCallbacks.length > 0) {
+          for (const cb of this.conferenceJoinAnswerCallbacks) cb(data);
+        } else {
+          this.conferenceJoinAnswerBuffer.push(data);
+        }
+      });
+
+      this.socket.on('call_accepted', (data: ConferenceAccepted) => {
+        // Старый call_accepted (CallAnswer с { callId, sdp }) тоже приходит на это событие.
+        // Различаем по наличию поля `roomName`.
+        if (data.roomName) {
+          // Это конференция
+          if (this.conferenceAcceptedCallbacks.length > 0) {
+            for (const cb of this.conferenceAcceptedCallbacks) cb(data);
+          } else {
+            this.conferenceAcceptedBuffer.push(data);
+          }
+        } else {
+          // Это 1-1 звонок — существующая логика
+          if (this.callAcceptedCallbacks.length > 0) {
+            for (const cb of this.callAcceptedCallbacks) cb(data as unknown as CallAnswer);
+          } else {
+            this.callAcceptedBuffer.push(data as unknown as CallAnswer);
+          }
+        }
+      });
+
+      this.socket.on('conference_upgraded', (data: { callId: string; roomName: string }) => {
+        if (this.conferenceUpgradedCallbacks.length > 0) {
+          for (const cb of this.conferenceUpgradedCallbacks) cb(data);
+        } else {
+          this.conferenceUpgradedBuffer.push(data);
+        }
+      });
+
       this.socket.on('error', (data: { message: string }) => {
         console.error('Socket error:', data.message);
         this.errorCallback?.(data);
@@ -558,6 +693,24 @@ class SocketService {
     this.voiceMessageSentCallback = null;
     this.voiceMessageFailedCallback = null;
     this.voiceMessageBuffer = [];
+    this.participantInvitedCallbacks = [];
+    this.participantInvitedBuffer = [];
+    this.participantJoinedCallbacks = [];
+    this.participantJoinedBuffer = [];
+    this.participantLeftCallbacks = [];
+    this.participantLeftBuffer = [];
+    this.participantInviteExpiredCallbacks = [];
+    this.participantInviteExpiredBuffer = [];
+    this.conferenceJoinOfferCallbacks = [];
+    this.conferenceJoinOfferBuffer = [];
+    this.conferenceJoinAnswerCallbacks = [];
+    this.conferenceJoinAnswerBuffer = [];
+    this.conferenceAcceptedCallbacks = [];
+    this.conferenceAcceptedBuffer = [];
+    this.conferenceIncomingCallCallbacks = [];
+    this.conferenceIncomingCallBuffer = [];
+    this.conferenceUpgradedCallbacks = [];
+    this.conferenceUpgradedBuffer = [];
   }
 
   sendFriendRequest(targetUserId: string): void {
@@ -938,8 +1091,192 @@ class SocketService {
     this.voiceMessageFailedCallback = null;
   }
 
+  // ── Conference listeners ──
+
+  onParticipantInvited(callback: (_: ParticipantEvent) => void): () => void {
+    this.participantInvitedCallbacks.push(callback);
+    while (this.participantInvitedBuffer.length > 0) {
+      callback(this.participantInvitedBuffer.shift()!);
+    }
+    return () => {
+      this.participantInvitedCallbacks = this.participantInvitedCallbacks.filter(
+        cb => cb !== callback,
+      );
+    };
+  }
+
+  offParticipantInvited(): void {
+    this.participantInvitedCallbacks = [];
+    this.participantInvitedBuffer = [];
+  }
+
+  onParticipantJoined(callback: (_: ParticipantEvent) => void): () => void {
+    this.participantJoinedCallbacks.push(callback);
+    while (this.participantJoinedBuffer.length > 0) {
+      callback(this.participantJoinedBuffer.shift()!);
+    }
+    return () => {
+      this.participantJoinedCallbacks = this.participantJoinedCallbacks.filter(
+        cb => cb !== callback,
+      );
+    };
+  }
+
+  offParticipantJoined(): void {
+    this.participantJoinedCallbacks = [];
+    this.participantJoinedBuffer = [];
+  }
+
+  onParticipantLeft(callback: (_: ParticipantEvent) => void): () => void {
+    this.participantLeftCallbacks.push(callback);
+    while (this.participantLeftBuffer.length > 0) {
+      callback(this.participantLeftBuffer.shift()!);
+    }
+    return () => {
+      this.participantLeftCallbacks = this.participantLeftCallbacks.filter(cb => cb !== callback);
+    };
+  }
+
+  offParticipantLeft(): void {
+    this.participantLeftCallbacks = [];
+    this.participantLeftBuffer = [];
+  }
+
+  onParticipantInviteExpired(callback: (_: ParticipantEvent) => void): () => void {
+    this.participantInviteExpiredCallbacks.push(callback);
+    while (this.participantInviteExpiredBuffer.length > 0) {
+      callback(this.participantInviteExpiredBuffer.shift()!);
+    }
+    return () => {
+      this.participantInviteExpiredCallbacks = this.participantInviteExpiredCallbacks.filter(
+        cb => cb !== callback,
+      );
+    };
+  }
+
+  offParticipantInviteExpired(): void {
+    this.participantInviteExpiredCallbacks = [];
+    this.participantInviteExpiredBuffer = [];
+  }
+
+  onConferenceJoinOffer(callback: (_: ConferenceJoinOffer) => void): () => void {
+    this.conferenceJoinOfferCallbacks.push(callback);
+    while (this.conferenceJoinOfferBuffer.length > 0) {
+      callback(this.conferenceJoinOfferBuffer.shift()!);
+    }
+    return () => {
+      this.conferenceJoinOfferCallbacks = this.conferenceJoinOfferCallbacks.filter(
+        cb => cb !== callback,
+      );
+    };
+  }
+
+  offConferenceJoinOffer(): void {
+    this.conferenceJoinOfferCallbacks = [];
+    this.conferenceJoinOfferBuffer = [];
+  }
+
+  onConferenceJoinAnswer(callback: (_: ConferenceJoinAnswer) => void): () => void {
+    this.conferenceJoinAnswerCallbacks.push(callback);
+    while (this.conferenceJoinAnswerBuffer.length > 0) {
+      callback(this.conferenceJoinAnswerBuffer.shift()!);
+    }
+    return () => {
+      this.conferenceJoinAnswerCallbacks = this.conferenceJoinAnswerCallbacks.filter(
+        cb => cb !== callback,
+      );
+    };
+  }
+
+  offConferenceJoinAnswer(): void {
+    this.conferenceJoinAnswerCallbacks = [];
+    this.conferenceJoinAnswerBuffer = [];
+  }
+
+  onConferenceAccepted(callback: (_: ConferenceAccepted) => void): () => void {
+    this.conferenceAcceptedCallbacks.push(callback);
+    while (this.conferenceAcceptedBuffer.length > 0) {
+      callback(this.conferenceAcceptedBuffer.shift()!);
+    }
+    return () => {
+      this.conferenceAcceptedCallbacks = this.conferenceAcceptedCallbacks.filter(
+        cb => cb !== callback,
+      );
+    };
+  }
+
+  offConferenceAccepted(): void {
+    this.conferenceAcceptedCallbacks = [];
+    this.conferenceAcceptedBuffer = [];
+  }
+
+  onConferenceUpgraded(callback: (_: { callId: string; roomName: string }) => void): () => void {
+    this.conferenceUpgradedCallbacks.push(callback);
+    while (this.conferenceUpgradedBuffer.length > 0) {
+      callback(this.conferenceUpgradedBuffer.shift()!);
+    }
+    return () => {
+      this.conferenceUpgradedCallbacks = this.conferenceUpgradedCallbacks.filter(
+        cb => cb !== callback,
+      );
+    };
+  }
+
+  offConferenceUpgraded(): void {
+    this.conferenceUpgradedCallbacks = [];
+    this.conferenceUpgradedBuffer = [];
+  }
+
+  onConferenceIncomingCall(callback: (_: ConferenceIncomingCall) => void): () => void {
+    this.conferenceIncomingCallCallbacks.push(callback);
+    // Flush buffer to the new callback
+    while (this.conferenceIncomingCallBuffer.length > 0) {
+      callback(this.conferenceIncomingCallBuffer.shift()!);
+    }
+    return () => {
+      this.conferenceIncomingCallCallbacks = this.conferenceIncomingCallCallbacks.filter(
+        cb => cb !== callback,
+      );
+    };
+  }
+
+  offConferenceIncomingCall(): void {
+    this.conferenceIncomingCallCallbacks = [];
+    this.conferenceIncomingCallBuffer = [];
+  }
+
   sendClaimInvite(inviterUserId: string): void {
     this.socket?.emit('claim_invite', { inviterUserId });
+  }
+
+  // ── Conference send methods ──
+
+  sendCallInviteParticipant(callId: string, targetUserId: string): void {
+    this.socket?.emit('call_invite_participant', { callId, targetUserId });
+  }
+
+  sendCallAcceptInvite(callId: string): void {
+    this.socket?.emit('call_accept_invite', { callId });
+  }
+
+  sendCallDeclineInvite(callId: string): void {
+    this.socket?.emit('call_decline_invite', { callId });
+  }
+
+  sendCallJoinOffer(callId: string, targetUserId: string, sdp: string): void {
+    this.socket?.emit('call_join_offer', { callId, targetUserId, sdp });
+  }
+
+  sendCallJoinAnswer(callId: string, targetUserId: string, sdp: string): void {
+    this.socket?.emit('call_join_answer', { callId, targetUserId, sdp });
+  }
+
+  sendCallLeave(callId: string): void {
+    this.socket?.emit('call_leave', { callId });
+  }
+
+  sendConferenceIceCandidate(callId: string, targetUserId: string, candidate: string): void {
+    this.socket?.emit('ice_candidate', { callId, targetUserId, candidate });
   }
 
   onAutoFriendAdded(
