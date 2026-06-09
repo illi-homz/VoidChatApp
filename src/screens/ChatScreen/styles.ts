@@ -1,5 +1,6 @@
 import { StyleSheet } from 'react-native';
 import { Colors } from '../../theme/colors';
+import { Fonts } from '../../theme/fonts';
 
 export const styles = StyleSheet.create({
   container: {
@@ -176,7 +177,7 @@ export const styles = StyleSheet.create({
   recordingTimer: {
     fontSize: 14,
     fontWeight: '600',
-    fontFamily: 'sans-serif',
+    fontFamily: Fonts.roboto600,
     color: Colors.textPrimary,
     letterSpacing: 0.5,
     minWidth: 36,
@@ -184,7 +185,7 @@ export const styles = StyleSheet.create({
   recordingCancelHint: {
     fontSize: 12,
     fontWeight: '400',
-    fontFamily: 'sans-serif',
+    fontFamily: Fonts.roboto400,
     color: Colors.textSecondary,
     letterSpacing: 0.3,
   },

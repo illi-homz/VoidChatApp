@@ -1,5 +1,6 @@
 import { StyleSheet } from 'react-native';
 import { Colors } from '../../theme/colors';
+import { Fonts } from '../../theme/fonts';
 
 const PLAY_BUTTON_SIZE = 36;
 
@@ -156,7 +157,7 @@ export const styles = StyleSheet.create({
   speedButtonText: {
     fontSize: 11,
     fontWeight: '700',
-    fontFamily: 'sans-serif',
+    fontFamily: Fonts.roboto700,
     letterSpacing: 0.2,
   },
   speedButtonTextMine: {
@@ -184,7 +185,7 @@ export const styles = StyleSheet.create({
   timeText: {
     fontSize: 12,
     fontWeight: '500',
-    fontFamily: 'sans-serif',
+    fontFamily: Fonts.roboto500,
     letterSpacing: 0.3,
   },
   timeTextMine: {

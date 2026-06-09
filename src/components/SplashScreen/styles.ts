@@ -1,5 +1,6 @@
 import { StyleSheet } from 'react-native';
 import { Colors } from '../../theme/colors';
+import { Fonts } from '../../theme/fonts';
 
 export const styles = StyleSheet.create({
   container: {
@@ -40,7 +41,7 @@ export const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: '900',
     letterSpacing: 10,
-    fontFamily: 'monospace',
+    fontFamily: Fonts.roboto900,
   },
 
   subtitleText: {
@@ -48,7 +49,7 @@ export const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '300',
     letterSpacing: 8,
-    fontFamily: 'monospace',
+    fontFamily: Fonts.roboto300,
     marginTop: 10,
   },
 });

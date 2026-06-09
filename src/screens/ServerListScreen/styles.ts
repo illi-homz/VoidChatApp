@@ -1,5 +1,6 @@
 import { StyleSheet } from 'react-native';
 import { Colors } from '../../theme/colors';
+import { Fonts } from '../../theme/fonts';
 
 export const styles = StyleSheet.create({
   container: {
@@ -52,7 +53,7 @@ export const styles = StyleSheet.create({
   serverUrl: {
     fontSize: 13,
     color: Colors.textMuted,
-    fontFamily: 'monospace',
+    fontFamily: Fonts.roboto400,
   },
   serverNameRow: {
     flexDirection: 'row',
@@ -128,7 +129,7 @@ export const styles = StyleSheet.create({
     paddingVertical: 14,
     color: Colors.textPrimary,
     fontSize: 16,
-    fontFamily: 'monospace',
+    fontFamily: Fonts.roboto400,
   },
   editButtons: {
     flexDirection: 'row',

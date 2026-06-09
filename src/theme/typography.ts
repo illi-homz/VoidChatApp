@@ -1,42 +1,43 @@
 import { TextStyle } from 'react-native';
+import { Fonts } from './fonts';
 
 export const Typography = {
   pirateDisplay: {
     fontSize: 36,
     fontWeight: '900',
-    fontFamily: 'sans-serif',
+    fontFamily: Fonts.roboto900,
     letterSpacing: 3,
   } as TextStyle,
 
   pirateTitle: {
     fontSize: 24,
     fontWeight: '800',
-    fontFamily: 'sans-serif',
+    fontFamily: Fonts.roboto800,
   } as TextStyle,
 
   pirateSubtitle: {
     fontSize: 18,
     fontWeight: '700',
-    fontFamily: 'sans-serif',
+    fontFamily: Fonts.roboto700,
     letterSpacing: 1,
   } as TextStyle,
 
   pirateBody: {
     fontSize: 16,
     fontWeight: '500',
-    fontFamily: 'sans-serif-medium',
+    fontFamily: Fonts.roboto500,
     letterSpacing: 0.5,
   } as TextStyle,
 
   pirateSmall: {
     fontSize: 13,
     fontWeight: '400',
-    fontFamily: 'sans-serif',
+    fontFamily: Fonts.roboto400,
     letterSpacing: 0.3,
   } as TextStyle,
 
   pirateMono: {
-    fontFamily: 'monospace',
+    fontFamily: Fonts.roboto400,
     fontSize: 13,
     letterSpacing: 0.5,
   } as TextStyle,
@@ -46,13 +47,13 @@ export const Typography = {
     letterSpacing: 1.5,
     fontStyle: 'italic',
     fontWeight: '300',
-    fontFamily: 'sans-serif',
+    fontFamily: Fonts.roboto300,
   } as TextStyle,
 
   button: {
     fontSize: 16,
     fontWeight: '700',
-    fontFamily: 'sans-serif',
+    fontFamily: Fonts.roboto700,
     letterSpacing: 1,
   } as TextStyle,
 } as const;

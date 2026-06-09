@@ -34,7 +34,7 @@
 		<true/>
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string></string>
+	<string/>
 	<key>UILaunchStoryboardName</key>
 	<string>BootSplash</string>
 	<key>UIRequiredDeviceCapabilities</key>
@@ -61,6 +61,12 @@
 		<string>Roboto-Regular.ttf</string>
 		<string>Roboto-Bold.ttf</string>
 		<string>Roboto-Black.ttf</string>
+		<string>Roboto-Light.ttf</string>
+		<string>Roboto-ExtraLight.ttf</string>
+		<string>Roboto-ExtraBold.ttf</string>
+		<string>Roboto-SemiBold.ttf</string>
+		<string>Roboto-Italic.ttf</string>
+		<string>Roboto-Thin.ttf</string>
 	</array>
 </dict>
 </plist>

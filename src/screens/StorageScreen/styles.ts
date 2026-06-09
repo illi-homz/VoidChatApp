@@ -1,5 +1,6 @@
 import { StyleSheet } from 'react-native';
 import { Colors } from '../../theme';
+import { Fonts } from '../../theme/fonts';
 
 export const styles = StyleSheet.create({
   container: {
@@ -97,7 +98,7 @@ export const styles = StyleSheet.create({
   perChatSize: {
     fontSize: 13,
     color: Colors.textSecondary,
-    fontFamily: 'monospace',
+    fontFamily: Fonts.roboto400,
     marginRight: 8,
   },
   clearSmallButton: {
