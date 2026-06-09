@@ -1,5 +1,6 @@
 package com.voidchatapp
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.WindowManager
 import com.facebook.react.ReactActivity
@@ -7,6 +8,7 @@ import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
 import com.facebook.react.defaults.DefaultReactActivityDelegate
 import com.zoontek.rnbootsplash.RNBootSplash
+import io.wazo.callkeep.RNCallKeepModule
 
 class MainActivity : ReactActivity() {
 
@@ -27,4 +29,22 @@ class MainActivity : ReactActivity() {
 
   override fun createReactActivityDelegate(): ReactActivityDelegate =
       DefaultReactActivityDelegate(this, mainComponentName, fabricEnabled)
+
+  override fun onRequestPermissionsResult(
+    requestCode: Int,
+    permissions: Array<String>,
+    grantResults: IntArray
+  ) {
+    super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    when (requestCode) {
+      RNCallKeepModule.REQUEST_READ_PHONE_STATE -> {
+        RNCallKeepModule.onRequestPermissionsResult(requestCode, permissions, grantResults)
+      }
+    }
+  }
+
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    setIntent(intent)
+  }
 }

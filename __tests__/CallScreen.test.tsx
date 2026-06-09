@@ -4,6 +4,22 @@
 
 // ---- Моки нативных модулей ----
 
+jest.mock('react-native-callkeep', () => {
+  const addEventListener = jest.fn().mockReturnValue({ remove: jest.fn() });
+  return {
+    setup: jest.fn().mockResolvedValue(undefined),
+    setAvailable: jest.fn(),
+    startCall: jest.fn(),
+    setCurrentCallActive: jest.fn(),
+    displayIncomingCall: jest.fn(),
+    endCall: jest.fn(),
+    updateDisplay: jest.fn(),
+    addEventListener,
+    removeEventListener: jest.fn(),
+    reportEndCallWithUUID: jest.fn(),
+  };
+});
+
 jest.mock(
   'react-native-incall-manager',
   () => ({

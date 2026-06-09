@@ -1,9 +1,12 @@
 import React from 'react';
 import { View } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { RootStackParamList } from './types';
+
 import { StartupScreen } from '../screens/StartupScreen';
+
+export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 import { HomeScreen } from '../screens/HomeScreen';
 import { ChatScreen } from '../screens/ChatScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
@@ -34,7 +37,7 @@ const linking = {
 export function AppNavigator({ onReady }: AppNavigatorProps): React.JSX.Element {
   return (
     <View style={{ flex: 1 }}>
-      <NavigationContainer onReady={onReady} linking={linking}>
+      <NavigationContainer ref={navigationRef} onReady={onReady} linking={linking}>
         <Stack.Navigator
           initialRouteName='Startup'
           screenOptions={{

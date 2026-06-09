@@ -101,6 +101,7 @@ class WebRTCService {
   private _negotiationInProgress: boolean = false;
   private _callInSetup: boolean = false;
   private _earlyCandidates: string[] = [];
+  private _backgroundMode: boolean = false;
 
   // ================================================================
   //  Геттеры
@@ -449,6 +450,22 @@ class WebRTCService {
         return true;
       } catch {
         return false;
+      }
+    }
+  }
+
+  /**
+   * Включает/выключает фоновый режим.
+   * В фоновом режиме disconnected таймер увеличен, а при disconnected
+   * сразу делается ICE restart вместо завершения звонка.
+   */
+  setBackgroundMode(enabled: boolean): void {
+    this._backgroundMode = enabled;
+    console.log('[WebRTC] Background mode:', enabled);
+    if (!enabled) {
+      // При возврате из фона, если соединение упало — пробуем ICE restart
+      if (this._pc?.connectionState === 'disconnected' || this._pc?.connectionState === 'failed') {
+        this._handleIceRestart();
       }
     }
   }
@@ -886,16 +903,23 @@ class WebRTCService {
     });
   }
 
-  /** Запускает 5-секундный таймер при `disconnected`. */
+  /** Запускает таймер при `disconnected` (12s в foreground, 30s в background). */
   private _startDisconnectedTimer(): void {
     if (this._disconnectedTimer) return;
+    const timeout = this._backgroundMode ? 30000 : 12000;
     this._disconnectedTimer = setTimeout(() => {
       this._disconnectedTimer = null;
       if (this._pc?.connectionState === 'disconnected' || this._pc?.connectionState === 'failed') {
-        this._onError?.('connection_disconnected');
-        this.stopCall();
+        // В фоновом режиме не убиваем звонок, а пытаемся ICE restart
+        if (this._backgroundMode) {
+          console.log('[WebRTC] Background mode: trying ICE restart instead of killing call');
+          this._handleIceRestart();
+        } else {
+          this._onError?.('connection_disconnected');
+          this.stopCall();
+        }
       }
-    }, 12000);
+    }, timeout);
   }
 
   /** Отменяет таймер disconnected. */

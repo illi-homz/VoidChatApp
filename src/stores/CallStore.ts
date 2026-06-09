@@ -1,5 +1,6 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 import { webrtcService } from '../services/WebRTCService';
+import { callKeepService } from '../services/CallKeepService';
 import type { CallStatus, CallRecord, CallType } from '../types';
 
 import { audioRouter } from '../services/AudioRouter';
@@ -24,6 +25,9 @@ export class CallStore {
   // ---- Приватное ----
   private _durationInterval: ReturnType<typeof setInterval> | null = null;
   private _callStartTime: number = 0;
+
+  /** SDP offer от вызывающей стороны (для входящих звонков). */
+  _incomingSdp: string | null = null;
 
   constructor() {
     makeAutoObservable(this);
@@ -60,6 +64,8 @@ export class CallStore {
     this.callId = params.callId;
     this.contactId = params.contactId;
     this.contactName = params.contactName;
+
+    callKeepService.startCall(this.contactId, this.contactName, this.callType);
   }
 
   /**
@@ -71,6 +77,7 @@ export class CallStore {
     fromUserId: string;
     contactName: string;
     callType?: CallType;
+    sdp?: string;
   }): void {
     if (this.status !== 'idle') {
       return; // Уже обрабатываем звонок — игнорируем
@@ -93,6 +100,9 @@ export class CallStore {
     this.callId = params.callId;
     this.contactId = params.fromUserId;
     this.contactName = params.contactName;
+    this._incomingSdp = params.sdp ?? null;
+
+    callKeepService.displayIncomingCall(this.contactId, this.contactName, this.callType);
   }
 
   /**
@@ -110,6 +120,9 @@ export class CallStore {
     if (this.callType === 'video') {
       this.hasLocalVideo = true;
     }
+
+    callKeepService.updateDisplay(this.contactName || '', this.contactId || '');
+    callKeepService.setCallActive();
   }
 
   /**
@@ -165,10 +178,12 @@ export class CallStore {
         }
       : null;
 
+    callKeepService.endCall();
     this.status = 'ended';
     this.isCameraOn = false;
     this.hasLocalVideo = false;
     this.hasRemoteVideo = false;
+    this._incomingSdp = null;
     return record;
   }
 
@@ -178,6 +193,7 @@ export class CallStore {
   setFailed(error: string): void {
     this.status = 'failed';
     this.error = error;
+    callKeepService.endCall();
     audioRouter.stopAudioSession();
   }
 
@@ -202,6 +218,7 @@ export class CallStore {
    */
   reset(): void {
     this._stopDurationTimer();
+    callKeepService.endCall();
     this.status = 'idle';
     this.callId = null;
     this.contactId = null;
@@ -216,6 +233,7 @@ export class CallStore {
     this.error = null;
     this.callType = 'audio';
     this.direction = 'outgoing';
+    this._incomingSdp = null;
     this._callStartTime = 0;
     audioRouter.stopAudioSession();
   }

@@ -1,5 +1,14 @@
 import React, { useEffect, useRef, useMemo, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Animated, StatusBar } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Animated,
+  StatusBar,
+  AppState,
+  AppStateStatus,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { observer } from 'mobx-react-lite';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -70,6 +79,7 @@ const CallScreenComponent: React.FC = observer(() => {
   const MIN_BOTTOM_INSET = 60;
 
   const endedRef = useRef(false);
+  const isBackgroundedRef = useRef(false);
   const goBackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const callTypeRef = useRef(callType);
   callTypeRef.current = callType;
@@ -261,13 +271,38 @@ const CallScreenComponent: React.FC = observer(() => {
         webrtcService.stopCall();
         toast('Соединение потеряно', 'error');
         scheduleGoBack();
-      } else if (state === 'disconnected') {
+      } else if (state === 'disconnected' && !isBackgroundedRef.current) {
         toast('Соединение нестабильно...', 'warning');
       }
     };
     webrtcService.onRemoteStream = stream => {
       callStore.setRemoteStream(stream.getVideoTracks().length > 0);
     };
+
+    // Подписка на AppState для фонового режима
+    const appStateSubscription = AppState.addEventListener(
+      'change',
+      (nextState: AppStateStatus) => {
+        if (nextState === 'background' || nextState === 'inactive') {
+          isBackgroundedRef.current = true;
+          console.log('[CallScreen] App went to background, keeping call alive');
+          // Уведомляем WebRTC что мы в фоне — не убивать звонок при disconnected
+          webrtcService.setBackgroundMode(true);
+        } else if (nextState === 'active') {
+          isBackgroundedRef.current = false;
+          console.log('[CallScreen] App returned to foreground');
+          webrtcService.setBackgroundMode(false);
+          // Если звонок всё ещё активен, просто продолжаем
+          if (
+            callStore.status === 'connected' ||
+            callStore.status === 'calling' ||
+            callStore.status === 'ringing'
+          ) {
+            console.log('[CallScreen] Call still active on return, keeping UI');
+          }
+        }
+      },
+    );
 
     // Теперь запускаем звонок
     if (direction === 'outgoing') {
@@ -281,6 +316,25 @@ const CallScreenComponent: React.FC = observer(() => {
 
     return () => {
       console.log('[CallScreen] EFFECT cleanup');
+
+      // Если приложение в фоне и звонок активен — не убиваем WebRTC
+      if (
+        isBackgroundedRef.current &&
+        (callStore.status === 'connected' ||
+          callStore.status === 'calling' ||
+          callStore.status === 'ringing')
+      ) {
+        console.log('[CallScreen] ⏭ skipping cleanup — call is active in background');
+        // Всё равно отписываемся от сокет-событий (но не убиваем WebRTC)
+        appStateSubscription.remove();
+        // НЕ обнуляем onError и onConnectionState — они нужны для детекции ошибок в фоне.
+        // (при ошибке onError вызовет callStore.setFailed + scheduleGoBack)
+        webrtcService.onRenegotiationNeeded = null;
+        webrtcService.onIceCandidate = null;
+        webrtcService.onRemoteStream = null;
+        return;
+      }
+
       webrtcService.stopCall();
       callStore.reset();
       webrtcService.onError = null;
@@ -292,6 +346,7 @@ const CallScreenComponent: React.FC = observer(() => {
         clearTimeout(goBackTimerRef.current);
         goBackTimerRef.current = null;
       }
+      appStateSubscription.remove();
     };
   }, []); // deps: []
 

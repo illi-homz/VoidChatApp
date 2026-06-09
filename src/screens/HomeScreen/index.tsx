@@ -26,6 +26,10 @@ import { maskUserId } from '../../utils/maskUserId';
 import { Icon } from '../../components/Icon';
 import { IncomingCallBanner } from '../../components/IncomingCallBanner';
 import ReactNativeBlobUtil from 'react-native-blob-util';
+import RNCallKeep from 'react-native-callkeep';
+import { callKeepService } from '../../services/CallKeepService';
+import { webrtcService } from '../../services/WebRTCService';
+import { navigationRef } from '../../navigation/AppNavigator';
 import { styles } from './styles';
 
 interface HomeScreenProps {
@@ -249,6 +253,52 @@ export const HomeScreen = observer(function HomeScreen({
       onVoiceMessageCleanupRef.current?.();
     };
   }, [serverStore.activeServerId, socketService.connectionStatus]);
+
+  // Инициализация CallKeep для фоновых звонков
+  useEffect(() => {
+    callKeepService.setup();
+
+    const unsubscribeCallKeep = callKeepService.registerEventHandlers({
+      onAnswerCall: _callUUID => {
+        if (callStore.status === 'idle') return; // звонок уже завершён
+        if (!navigationRef.isReady()) return;
+
+        navigationRef.navigate('Call', {
+          contactId: callStore.contactId ?? '',
+          contactName: callStore.contactName || '',
+          direction: 'incoming',
+          callType: callStore.callType,
+          sdp: callStore._incomingSdp ?? '', // используем сохранённый SDP
+          callId: callStore.callId ?? '',
+        });
+      },
+      onEndCall: _callUUID => {
+        if (callStore.status !== 'idle') {
+          const callId = callStore.callId;
+          callStore.endCall();
+          if (callId) {
+            socketService.sendCallHangup(callId);
+          }
+          webrtcService.stopCall();
+        }
+      },
+      onShowIncomingCallUi: data => {
+        // CallKeep запрашивает показ UI входящего звонка
+        // (на заблокированном экране или в тёмной теме)
+        console.log('[CallKeep] showIncomingCallUi:', data);
+        if (callStore.status === 'ringing') {
+          // CallKeep уже показал системное уведомление — ничего не делаем
+        } else if (callStore.status === 'idle') {
+          // Уведомление пришло, но звонок уже завершён — игнорируем
+          RNCallKeep.reportEndCallWithUUID(data.callUUID, 3); // UNANSWERED
+        }
+      },
+    });
+
+    return () => {
+      unsubscribeCallKeep();
+    };
+  }, []);
 
   function setupSocketListeners(): void {
     // Слушатели устанавливаются всегда, даже если сокет не подключён.
@@ -491,6 +541,7 @@ export const HomeScreen = observer(function HomeScreen({
         fromUserId: data.fromUserId,
         contactName: name,
         callType,
+        sdp: data.sdp,
       });
 
       setIncomingCallData({

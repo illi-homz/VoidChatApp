@@ -10,6 +10,7 @@ import com.voidchatapp.audiorouter.AudioRouterPackage
 import com.voidchatapp.clipboard.ClipboardPackage
 import com.voidchatapp.installapk.InstallApkPackage
 import com.voidchatapp.screencapture.ScreenCapturePackage
+import io.wazo.callkeep.RNCallKeepPackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -22,6 +23,7 @@ class MainApplication : Application(), ReactApplication {
           add(ScreenCapturePackage())
           add(AudioRouterPackage())
           add(InstallApkPackage())
+          add(RNCallKeepPackage())
         },
     )
   }
