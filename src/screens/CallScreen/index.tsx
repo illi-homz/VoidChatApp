@@ -23,6 +23,7 @@ import type { RootStackParamList } from '../../navigation/types';
 import { appStore } from '../../stores/AppStore';
 import { RTCView } from 'react-native-webrtc';
 import { VideoPiP } from '../../components/VideoPiP';
+import { soundNotificationService } from '../../services/SoundNotificationService';
 import { styles } from './styles';
 
 /** Кнопка с анимацией сжатия при нажатии (scale 0.9) */
@@ -149,6 +150,7 @@ const CallScreenComponent: React.FC = observer(() => {
         const withVideo = callTypeRef.current === 'video';
         const localSdp = await webrtcService.createOffer(withVideo);
         socketService.sendCallOffer(userId, localSdp, generatedCallId, callTypeRef.current);
+        soundNotificationService.playLoop('call_out', { useEarpiece: true });
       } catch (e) {
         const message = e instanceof Error ? e.message : 'Не удалось начать звонок';
         callStore.setFailed(message);
@@ -177,6 +179,7 @@ const CallScreenComponent: React.FC = observer(() => {
   const handleEndCall = useCallback((): void => {
     if (endedRef.current) return;
     endedRef.current = true;
+    soundNotificationService.stopLoop();
     const record = callStore.endCall();
     if (record) {
       appStore.addCallRecord(record);
@@ -216,6 +219,7 @@ const CallScreenComponent: React.FC = observer(() => {
   const handleDisconnected = useCallback((): void => {
     if (!endedRef.current) {
       endedRef.current = true;
+      soundNotificationService.stopLoop();
       callStore.setFailed('Соединение с сервером потеряно');
       appStore.addCallRecord({
         contactId: callStore.contactId ?? '',
@@ -258,6 +262,7 @@ const CallScreenComponent: React.FC = observer(() => {
     webrtcService.onError = error => {
       if (!endedRef.current) {
         endedRef.current = true;
+        soundNotificationService.stopLoop();
         callStore.setFailed(error);
         webrtcService.stopCall();
         toast(error || 'Ошибка соединения', 'error');
@@ -267,6 +272,7 @@ const CallScreenComponent: React.FC = observer(() => {
     webrtcService.onConnectionState = state => {
       if (state === 'failed' && !endedRef.current) {
         endedRef.current = true;
+        soundNotificationService.stopLoop();
         callStore.setFailed('Соединение прервано');
         webrtcService.stopCall();
         toast('Соединение потеряно', 'error');
@@ -386,6 +392,7 @@ const CallScreenComponent: React.FC = observer(() => {
     // Звонок принят (caller получает answer SDP)
     const unsubAccepted = socketService.onCallAccepted(data => {
       if (data.callId === callStore.callId && callStore.status === 'calling') {
+        soundNotificationService.stopLoop();
         console.log('[CallScreen] ✅ initial answer received, setting remote description');
         webrtcService
           .setRemoteDescription(data.sdp)
@@ -406,6 +413,7 @@ const CallScreenComponent: React.FC = observer(() => {
     const unsubDeclined = socketService.onCallDeclined(data => {
       if (data.callId === callStore.callId && !endedRef.current) {
         endedRef.current = true;
+        soundNotificationService.stopLoop();
         callStore.setFailed('Абонент отклонил вызов');
         toast('Вызов отклонён', 'error');
         scheduleGoBack();
@@ -416,6 +424,7 @@ const CallScreenComponent: React.FC = observer(() => {
     const unsubEnded = socketService.onCallEnded(data => {
       if (data.callId === callStore.callId && !endedRef.current) {
         endedRef.current = true;
+        soundNotificationService.stopLoop();
         const record = callStore.endCall();
         if (record) appStore.addCallRecord(record);
         webrtcService.stopCall();
@@ -430,6 +439,7 @@ const CallScreenComponent: React.FC = observer(() => {
     const unsubTimedOut = socketService.onCallTimedOut(data => {
       if (data.callId === callStore.callId && !endedRef.current) {
         endedRef.current = true;
+        soundNotificationService.stopLoop();
         callStore.setFailed('Абонент не ответил');
         appStore.addCallRecord({
           contactId: callStore.contactId ?? '',
@@ -475,6 +485,7 @@ const CallScreenComponent: React.FC = observer(() => {
 
     return () => {
       socketService.onDisconnected(() => {});
+      soundNotificationService.stopLoop();
       unsubCallIncoming();
       unsubOfferSent();
       unsubAccepted();

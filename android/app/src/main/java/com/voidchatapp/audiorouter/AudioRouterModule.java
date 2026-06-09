@@ -9,9 +9,14 @@ import android.util.Log;
 
 import androidx.annotation.NonNull;
 
+import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
 
 public class AudioRouterModule extends ReactContextBaseJavaModule {
     public static final String NAME = "AudioRouter";
@@ -128,6 +133,39 @@ public class AudioRouterModule extends ReactContextBaseJavaModule {
             Log.d(TAG, "setMicrophoneMute: " + mute);
         } catch (Exception e) {
             Log.e(TAG, "setMicrophoneMute error", e);
+        }
+    }
+
+    @ReactMethod
+    public void rawToCache(String rawResourceName, String cacheFileName, Promise promise) {
+        try {
+            Context context = getReactApplicationContext();
+            int resId = context.getResources().getIdentifier(rawResourceName, "raw", context.getPackageName());
+            if (resId == 0) {
+                promise.reject("RESOURCE_NOT_FOUND", "Raw resource not found: " + rawResourceName);
+                return;
+            }
+
+            InputStream inputStream = context.getResources().openRawResource(resId);
+            File cacheDir = new File(context.getCacheDir(), "sounds");
+            if (!cacheDir.exists()) {
+                cacheDir.mkdirs();
+            }
+            File outputFile = new File(cacheDir, cacheFileName);
+
+            FileOutputStream outputStream = new FileOutputStream(outputFile);
+            byte[] buffer = new byte[8192];
+            int bytesRead;
+            while ((bytesRead = inputStream.read(buffer)) != -1) {
+                outputStream.write(buffer, 0, bytesRead);
+            }
+            outputStream.close();
+            inputStream.close();
+
+            promise.resolve(outputFile.getAbsolutePath());
+        } catch (Exception e) {
+            Log.e(TAG, "rawToCache error", e);
+            promise.reject("COPY_ERROR", e.getMessage());
         }
     }
 }

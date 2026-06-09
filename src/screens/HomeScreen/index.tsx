@@ -31,6 +31,7 @@ import { callKeepService } from '../../services/CallKeepService';
 import { webrtcService } from '../../services/WebRTCService';
 import { navigationRef } from '../../navigation/AppNavigator';
 import { styles } from './styles';
+import { soundNotificationService } from '../../services/SoundNotificationService';
 
 interface HomeScreenProps {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Home'>;
@@ -157,6 +158,7 @@ export const HomeScreen = observer(function HomeScreen({
   const handleAcceptCall = useCallback(async () => {
     const data = incomingCallDataRef.current;
     if (!data) return;
+    soundNotificationService.stopLoop();
     setIncomingCallData(null);
     navigation.navigate('Call', {
       contactId: data.fromUserId,
@@ -174,6 +176,7 @@ export const HomeScreen = observer(function HomeScreen({
       socketService.sendCallDecline(data.callId);
       callStore.reset();
     }
+    soundNotificationService.stopLoop();
     setIncomingCallData(null);
   }, [callStore]);
 
@@ -234,6 +237,8 @@ export const HomeScreen = observer(function HomeScreen({
   }, [navigation, serverStore.activeServer?.name]);
 
   useEffect(() => {
+    // Пре-кэшируем звуковые файлы, чтобы call_in играл мгновенно
+    soundNotificationService.init();
     setupSocketListeners();
 
     return () => {
@@ -251,6 +256,7 @@ export const HomeScreen = observer(function HomeScreen({
       socketService.offCallTimedOut();
       onMessageCleanupRef.current?.();
       onVoiceMessageCleanupRef.current?.();
+      soundNotificationService.stopLoop();
     };
   }, [serverStore.activeServerId, socketService.connectionStatus]);
 
@@ -451,6 +457,7 @@ export const HomeScreen = observer(function HomeScreen({
             contactName: displayName,
           });
         });
+        soundNotificationService.play('msg');
       }
     });
 
@@ -502,6 +509,7 @@ export const HomeScreen = observer(function HomeScreen({
                   contactName: displayName,
                 });
               });
+              soundNotificationService.play('msg');
             }
           } catch (err) {
             console.error('Failed to handle incoming voice message in HomeScreen:', err);
@@ -551,11 +559,13 @@ export const HomeScreen = observer(function HomeScreen({
         contactName: name,
         callType,
       });
+      soundNotificationService.playLoop('call_in');
     });
 
     // Скрыть баннер если звонок завершён до ответа (пока баннер ещё висит)
     socketService.onCallEnded((data: CallEnded) => {
       if (incomingCallDataRef.current && data.callId === incomingCallDataRef.current.callId) {
+        soundNotificationService.stopLoop();
         setIncomingCallData(null);
         callStore.reset();
       }
@@ -563,6 +573,7 @@ export const HomeScreen = observer(function HomeScreen({
 
     socketService.onCallTimedOut((data: CallTimedOut) => {
       if (incomingCallDataRef.current && data.callId === incomingCallDataRef.current.callId) {
+        soundNotificationService.stopLoop();
         setIncomingCallData(null);
         callStore.reset();
       }

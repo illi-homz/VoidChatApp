@@ -156,6 +156,16 @@ jest.mock('../src/components/VideoPiP', () => ({
   VideoPiP: 'VideoPiP',
 }));
 
+// react-native-blob-util mock — требуется для AudioService, который импортируется
+// через SoundNotificationService (импортируется в CallScreen/index.tsx)
+jest.mock('react-native-blob-util', () => ({
+  fs: { dirs: { CacheDir: '/cache' } },
+  config: jest.fn(() => ({
+    fetch: jest.fn(() => Promise.resolve({ path: () => '/tmp/test.apk' })),
+  })),
+  android: { actionViewIntent: jest.fn() },
+}));
+
 import React from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import TestRenderer from 'react-test-renderer';

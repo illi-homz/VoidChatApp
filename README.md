@@ -88,6 +88,7 @@ src/
 │   │   ├── pruning.ts            # Auto-pruning старых сообщений (3 стратегии)
 │   │   └── paths.ts              # Константы путей для будущих медиа
 │   ├── socket.ts            # Socket.IO клиент + heartbeat (30с) + все события
+│   ├── SoundNotificationService.ts  # Воспроизведение bundled MP3-звуков (msg, call_in, call_out)
 │   └── WebRTCService.ts     # P2P WebRTC (Opus 32kbps + RED/FEC), STUN/TURN
 ├── stores/
 │   ├── AppStore.ts      # MobX store (user, contacts, messages, unread, callRecords)
@@ -100,6 +101,24 @@ src/
     ├── index.ts          # Contact, Message, User, FriendRequest, ServerMessage, ServerConfig, CallRecord
     └── navigation.ts     # Типы для navigation prop
 ```
+
+## Звуковые уведомления
+
+Три встроенных звука (MP3) находятся в `android/app/src/main/res/raw/` и автоматически вшиваются в APK:
+
+| Файл | Назначение | Воспроизведение |
+|------|-----------|----------------|
+| `msg.mp3` | Уведомление о новом сообщении (если чат не активен) | Одноразово через `SoundNotificationService.play('msg')` |
+| `call_in.mp3` | Рингтон входящего звонка | Циклически через `SoundNotificationService.playLoop('call_in')`, остановка при accept/decline/timeout |
+| `call_out.mp3` | Звук дозвона у звонящего | Циклически через earpiece `SoundNotificationService.playLoop('call_out', { useEarpiece: true })`, остановка при ответе/отбое/таймауте |
+
+**SoundNotificationService** (`src/services/SoundNotificationService.ts`):
+- Singleton, использует `react-native-nitro-sound` для воспроизведения
+- Доступ к файлам через `android.resource://com.voidchatapp/raw/имя_файла`
+- Guard'ы: не играет уведомления во время голосовых сообщений (`audioService.isPlaying`) и активных звонков
+- Loop-механика: после окончания трека автоматически перезапускает через `addPlaybackEndListener`
+- Earpiece-режим: для call_out переключает в разговорный динамик (`audioRouter.setSpeakerphoneOn(false)`)
+- Resume: после остановки loop восстанавливает speakerphone
 
 ## Технологический стек
 

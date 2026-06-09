@@ -5,6 +5,7 @@ export interface AudioRouterInterface {
   startAudioSession: () => Promise<void>;
   stopAudioSession: () => Promise<void>;
   setMicrophoneMute: (mute: boolean) => Promise<void>;
+  rawToCache: (rawResourceName: string, cacheFileName: string) => Promise<string>;
 }
 
 const { AudioRouter } = NativeModules;
@@ -15,6 +16,9 @@ function createFallback(): AudioRouterInterface {
     startAudioSession: async () => {},
     stopAudioSession: async () => {},
     setMicrophoneMute: async (_mute: boolean) => {},
+    rawToCache: async (_rawResourceName: string, _cacheFileName: string) => {
+      throw new Error('AudioRouter native module not available');
+    },
   };
 }
 
@@ -47,6 +51,9 @@ export const audioRouter: AudioRouterInterface = AudioRouter
         } catch (e) {
           console.warn('[AudioRouter] setMicrophoneMute failed:', e);
         }
+      },
+      rawToCache: async (rawResourceName: string, cacheFileName: string) => {
+        return AudioRouter.rawToCache(rawResourceName, cacheFileName);
       },
     }
   : createFallback();
