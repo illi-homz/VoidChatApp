@@ -12,7 +12,7 @@ import { observer } from 'mobx-react-lite';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../navigation/types';
 import type { Contact } from '../../types';
-import { useStore, useServerStore } from '../../stores';
+import { useStore } from '../../stores';
 import { socketService } from '../../services/socket';
 import { useToast } from '../../components/Toast';
 import { QrScannerModal } from '../../components/QrScannerModal';
@@ -29,7 +29,6 @@ export const AddFriendScreen = observer(function AddFriendScreen({
 }: AddFriendScreenProps): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const store = useStore();
-  const serverStore = useServerStore();
   const { toast } = useToast();
   const [friendId, setFriendId] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -114,11 +113,9 @@ export const AddFriendScreen = observer(function AddFriendScreen({
 
   const handleQrScan = useCallback(
     (data: string): void => {
-      // Проверка: является ли QR invite-ссылкой
-      if (data.startsWith('voidchat://invite')) {
+      if (data.startsWith('voidchat://user')) {
         setShowScanner(false);
 
-        // Парсим параметры через простой split (URL API недоступен в RN)
         const queryString = data.split('?')[1] || '';
         const params: Record<string, string> = {};
         queryString.split('&').forEach(pair => {
@@ -128,63 +125,48 @@ export const AddFriendScreen = observer(function AddFriendScreen({
           }
         });
 
-        const host = params['host'] || '';
-        const port = params['port'] || '9001';
-        const userId = params['user'] || '';
-        const serverName = params['name'] || '';
-        const auto = params['auto'] === '1';
+        const userId = params['id'] || '';
+        const publicKey = params['key'] || '';
 
-        if (!host || !userId) {
-          toast('Неверный формат приглашения', 'error');
+        if (!userId || !publicKey) {
+          toast('Неверный формат QR-кода пользователя', 'error');
           return;
         }
 
-        // Проверяем: есть ли уже этот сервер в списке и активен ли он
-        const inviteUrl = `http://${host}:${port}`;
-        const existingServer = serverStore.servers.find(s => s.url === inviteUrl);
-
-        if (existingServer && serverStore.activeServerId === existingServer.id) {
-          // Сервер уже есть и активен — отправляем friend request напрямую.
-          // Параметр auto=1 не используется здесь осознанно: будучи на сервере,
-          // пользователь добавляет контакт через обычный friend_request
-          // (с подтверждением), а не через claim_invite (без подтверждения).
-          submitFriendRequest(userId);
+        // Нельзя добавить самого себя
+        if (store.user && userId === store.user.userId) {
+          toast('Нельзя добавить самого себя', 'error');
           return;
         }
 
-        // Сервера нет или он не активен — навигируем на AddServerScreen
-        navigation.replace('AddServer', {
-          initialHost: host,
-          initialPort: port,
-          initialName: serverName,
-          inviterUserId: userId,
-          autoFriend: auto,
-        });
+        // Проверка: контакт уже существует
+        if (store.contacts.some(c => c.userId === userId)) {
+          toast('Пользователь уже в контактах', 'info');
+          return;
+        }
+
+        // Добавляем контакт глобально (publicKey уже известен)
+        const newContact: Contact = {
+          userId,
+          publicKey,
+          createdAt: Date.now(),
+        };
+        store.addContact(newContact);
+
+        // Отправляем friend_request через сервер, чтобы вторая сторона получила наш publicKey
+        if (socketService.connectionStatus === 'connected') {
+          socketService.sendFriendRequest(userId);
+        }
+
+        toast('Контакт добавлен', 'success');
+        navigation.goBack();
         return;
       }
 
-      // Старое поведение — это userId
-      // Проверка: не сканируем свой же QR
-      if (store.user && data === store.user.userId) {
-        toast('Нельзя добавить самого себя', 'error');
-        return;
-      }
-
-      // Проверка: контакт уже существует
-      if (store.contacts.some(c => c.userId === data)) {
-        toast('Пользователь уже в контактах', 'error');
-        return;
-      }
-
-      setShowScanner(false);
-
-      // Заполняем поле ввода (для UX)
-      setFriendId(data);
-
-      // Автоматически отправляем friend request
-      submitFriendRequest(data);
+      // Если QR не нашего формата — ошибка
+      toast('Отсканируйте QR-код пользователя VoidChat', 'error');
     },
-    [store, serverStore, navigation, toast, submitFriendRequest],
+    [store, navigation, toast],
   );
 
   useEffect(() => {

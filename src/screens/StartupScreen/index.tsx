@@ -15,7 +15,7 @@ interface StartupScreenProps {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Startup'>;
 }
 
-type StartupStatus = 'loading' | 'connecting' | 'error' | 'no_user';
+type StartupStatus = 'loading' | 'connecting' | 'error';
 
 export const StartupScreen = observer(function StartupScreen({ navigation }: StartupScreenProps) {
   const appStore = useStore();
@@ -72,8 +72,8 @@ export const StartupScreen = observer(function StartupScreen({ navigation }: Sta
       await appStore.load(targetServer.id);
 
       if (!appStore.user) {
-        setErrorMessage('Пользователь не найден на этом сервере');
-        setStatus('no_user');
+        setErrorMessage('Идентификация не выполнена. Переустановите приложение.');
+        setStatus('error');
         return;
       }
 

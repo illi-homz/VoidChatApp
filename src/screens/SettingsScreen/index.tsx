@@ -16,13 +16,13 @@ import type { RootStackParamList } from '../../navigation/types';
 import { useStore, useServerStore } from '../../stores';
 import { socketService } from '../../services/socket';
 import { useToast } from '../../components/Toast';
-import { QrScannerModal } from '../../components/QrScannerModal';
+
 import { ConfirmAlert } from '../../components/ConfirmAlert';
 import { Colors } from '../../theme';
 import { Icon } from '../../components/Icon';
 import { version } from '../../../package.json';
 import { formatDurationMs } from '../../utils/formatDuration';
-import { parseServerUrl } from '../../utils/parseServerUrl';
+
 import { getHitSlop } from '../../utils/getHitSlop';
 import { checkForUpdates, downloadAndInstall, downloadLatestApk } from '../../services/AppUpdater';
 import { screenCapture } from '../../services/ScreenCapture';
@@ -48,7 +48,6 @@ export const SettingsScreen = observer(function SettingsScreen({
   }, []);
 
   const [reconnecting, setReconnecting] = useState(false);
-  const [showScanner, setShowScanner] = useState(false);
   const [updateState, setUpdateState] = useState<'idle' | 'checking' | 'downloading'>('idle');
   const [showUpdateConfirm, setShowUpdateConfirm] = useState(false);
 
@@ -99,12 +98,10 @@ export const SettingsScreen = observer(function SettingsScreen({
   const server = serverStore.activeServer;
   const user = store.user;
 
-  const parsedUrl = useMemo(() => (server ? parseServerUrl(server.url) : null), [server?.url]);
-
   const inviteLink = useMemo(() => {
-    if (!parsedUrl || !user) return '';
-    return `voidchat://invite?host=${parsedUrl.host}&port=${parsedUrl.port}&user=${encodeURIComponent(user.userId)}&name=${encodeURIComponent(server?.name || '')}&auto=1`;
-  }, [parsedUrl, user?.userId]);
+    if (!user) return '';
+    return `voidchat://user?id=${encodeURIComponent(user.userId)}&key=${encodeURIComponent(user.publicKey)}`;
+  }, [user?.userId, user?.publicKey]);
 
   const cleanUrl = useMemo(
     () => (server ? server.url.replace(/^https?:\/\//, '') : ''),
@@ -144,71 +141,6 @@ export const SettingsScreen = observer(function SettingsScreen({
     Clipboard.setString(apkUrl);
     toast('Ссылка на APK скопирована', 'success');
   }, [toast]);
-
-  const handleQrScan = useCallback(
-    (data: string): void => {
-      if (data.startsWith('voidchat://invite')) {
-        setShowScanner(false);
-        const queryString = data.split('?')[1] || '';
-        const params: Record<string, string> = {};
-        queryString.split('&').forEach(pair => {
-          const [key, value] = pair.split('=');
-          if (key && value) {
-            params[decodeURIComponent(key)] = decodeURIComponent(value);
-          }
-        });
-        const host = params['host'] || '';
-        const port = params['port'] || '9001';
-        const userId = params['user'] || '';
-        const serverName = params['name'] || '';
-        const auto = params['auto'] === '1';
-        if (!host || !userId) {
-          toast('Неверный формат приглашения', 'error');
-          return;
-        }
-
-        // Если сервер уже есть в списке и активен — отправляем приглашение напрямую
-        const serverUrl = `http://${host}:${port}`;
-        const existingServer = serverStore.servers.find(s => s.url === serverUrl);
-        if (existingServer && existingServer.id === serverStore.activeServerId) {
-          if (socketService.connectionStatus !== 'connected') {
-            toast('Нет соединения с сервером', 'error');
-            return;
-          }
-          socketService.sendClaimInvite(userId);
-          toast('Запрос дружбы отправлен', 'success');
-          return;
-        }
-
-        // Если сервер есть, но не активен — переключаемся на него и отправляем запрос
-        if (existingServer) {
-          toast('Переключение на сервер...', 'success');
-          navigation.navigate('AddServer', {
-            initialHost: host,
-            initialPort: port,
-            initialName: existingServer.name,
-            inviterUserId: userId,
-            autoFriend: auto,
-            existingServerId: existingServer.id,
-          });
-          return;
-        }
-
-        // Сервера нет — стандартный переход на AddServerScreen
-        navigation.navigate('AddServer', {
-          initialHost: host,
-          initialPort: port,
-          initialName: serverName,
-          inviterUserId: userId,
-          autoFriend: auto,
-        });
-      } else {
-        toast('Отсканируйте QR-код приглашения на сервер', 'error');
-      }
-    },
-    [navigation, toast, serverStore, socketService],
-  );
-
   const runUpdate = useCallback(async () => {
     setUpdateState('checking');
     try {
@@ -396,15 +328,8 @@ export const SettingsScreen = observer(function SettingsScreen({
                 </View>
               </View>
 
-              {/* Кнопки: сканер QR + переключение сервера */}
+              {/* Кнопка переключения сервера */}
               <View style={styles.serverBottomRow}>
-                <TouchableOpacity
-                  style={styles.serverQrButton}
-                  onPress={() => setShowScanner(true)}
-                  activeOpacity={0.7}
-                >
-                  <Icon name='camera' size={22} color={Colors.primary} />
-                </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.shareButton, { flex: 1 }]}
                   onPress={() => navigation.navigate('ServerList', { returnToHome: false })}
@@ -422,24 +347,9 @@ export const SettingsScreen = observer(function SettingsScreen({
           ) : (
             <View style={styles.noServerContainer}>
               <Text style={styles.noServerText}>Сервер не выбран</Text>
-              <TouchableOpacity
-                style={styles.noServerScanButton}
-                onPress={() => setShowScanner(true)}
-                activeOpacity={0.7}
-              >
-                <Icon name='camera' size={22} color='#000' />
-                <Text style={styles.noServerScanText}> Отсканировать QR приглашения</Text>
-              </TouchableOpacity>
             </View>
           )}
         </View>
-
-        {/* QrScannerModal всегда рендерится, чтобы работать при любом состоянии сервера */}
-        <QrScannerModal
-          visible={showScanner}
-          onScan={handleQrScan}
-          onClose={() => setShowScanner(false)}
-        />
 
         <ConfirmAlert
           visible={showUpdateConfirm}

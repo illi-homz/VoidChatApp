@@ -32,6 +32,7 @@ import { webrtcService } from '../../services/WebRTCService';
 import { navigationRef } from '../../navigation/AppNavigator';
 import { styles } from './styles';
 import { soundNotificationService } from '../../services/SoundNotificationService';
+import { dbService } from '../../services/DatabaseService';
 
 interface HomeScreenProps {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Home'>;
@@ -324,6 +325,12 @@ export const HomeScreen = observer(function HomeScreen({
           createdAt: Date.now(),
         };
         store.addContact(newContact);
+        // Добавляем known_servers для этого контакта
+        if (serverStore.activeServerId) {
+          dbService.addContactServerKnown(request.fromUserId, serverStore.activeServerId).catch((err: Error) => {
+          console.warn('[HomeScreen] Failed to add known server:', err);
+        });
+        }
       }
 
       showSheet({
@@ -358,6 +365,12 @@ export const HomeScreen = observer(function HomeScreen({
           createdAt: Date.now(),
         };
         store.addContact(newContact);
+        // Добавляем known_servers для этого контакта
+        if (serverStore.activeServerId) {
+          dbService.addContactServerKnown(data.targetUserId, serverStore.activeServerId).catch((err: Error) => {
+          console.warn('[HomeScreen] Failed to add known server:', err);
+        });
+        }
       }
       toast(`Запрос дружбы отправлен пользователю ${maskUserId(data.targetUserId)}`, 'success');
     });
@@ -374,6 +387,12 @@ export const HomeScreen = observer(function HomeScreen({
         };
         store.addContact(newContact);
       }
+      // Добавляем known_servers для этого контакта
+      if (serverStore.activeServerId) {
+        dbService.addContactServerKnown(data.fromUserId, serverStore.activeServerId).catch((err: Error) => {
+          console.warn('[HomeScreen] Failed to add known server:', err);
+        });
+      }
       toast(`Пользователь ${maskUserId(data.fromUserId)} теперь ваш контакт`, 'success');
     });
 
@@ -386,6 +405,12 @@ export const HomeScreen = observer(function HomeScreen({
           createdAt: Date.now(),
         };
         store.addContact(newContact);
+        // Добавляем known_servers для этого контакта
+        if (serverStore.activeServerId) {
+          dbService.addContactServerKnown(data.targetUserId, serverStore.activeServerId).catch((err: Error) => {
+          console.warn('[HomeScreen] Failed to add known server:', err);
+        });
+        }
       }
     });
 
@@ -399,6 +424,12 @@ export const HomeScreen = observer(function HomeScreen({
           createdAt: Date.now(),
         };
         store.addContact(newContact);
+        // Добавляем known_servers для этого контакта
+        if (serverStore.activeServerId) {
+          dbService.addContactServerKnown(userId, serverStore.activeServerId).catch((err: Error) => {
+          console.warn('[HomeScreen] Failed to add known server:', err);
+        });
+        }
         toast(`Пользователь ${maskUserId(userId)} присоединился по приглашению`, 'success');
 
         // Отправляем friend_accept, чтобы инициатор получил наш publicKey
@@ -408,6 +439,12 @@ export const HomeScreen = observer(function HomeScreen({
         // Если контакт уже существует, но publicKey пустой — обновляем
         if (publicKey && !existing.publicKey) {
           store.updateContactPublicKey(userId, publicKey);
+          // Добавляем known_servers для этого контакта
+          if (serverStore.activeServerId) {
+            dbService.addContactServerKnown(userId, serverStore.activeServerId).catch((err: Error) => {
+          console.warn('[HomeScreen] Failed to add known server:', err);
+        });
+          }
         }
       }
     });
@@ -424,6 +461,12 @@ export const HomeScreen = observer(function HomeScreen({
         store.addContact(newContact);
       } else if (publicKey) {
         store.updateContactPublicKey(inviterUserId, publicKey);
+      }
+      // Добавляем known_servers для этого контакта
+      if (serverStore.activeServerId) {
+        dbService.addContactServerKnown(inviterUserId, serverStore.activeServerId).catch((err: Error) => {
+          console.warn('[HomeScreen] Failed to add known server:', err);
+        });
       }
       toast(`Вы добавили сервер и контакт ${maskUserId(inviterUserId)}`, 'success');
     });
@@ -594,6 +637,12 @@ export const HomeScreen = observer(function HomeScreen({
       };
 
       store.addContact(newContact);
+      // Добавляем known_servers для этого контакта
+      if (serverStore.activeServerId) {
+        dbService.addContactServerKnown(request.fromUserId, serverStore.activeServerId).catch((err: Error) => {
+          console.warn('[HomeScreen] Failed to add known server:', err);
+        });
+      }
     },
     [],
   );

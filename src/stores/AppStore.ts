@@ -2,6 +2,8 @@ import { makeAutoObservable, runInAction } from 'mobx';
 import * as Keychain from 'react-native-keychain';
 import { dbService } from '../services/DatabaseService';
 import type { Contact, User, Message, CallRecord, VoiceStorageInfo } from '../types';
+import { generateKeyPair, initCrypto } from '../services/crypto';
+import { v4 as uuidv4 } from 'uuid';
 
 export class AppStore {
   user: User | null = null;
@@ -20,6 +22,110 @@ export class AppStore {
 
   constructor() {
     makeAutoObservable(this);
+  }
+
+  /**
+   * Инициализация глобальной identity пользователя.
+   * - Если identity уже существует (ранее сохранена) — загружает её
+   * - Если нет, но есть серверы с per-server identity — мигрирует первый/активный сервер
+   * - Если нет ни того, ни другого — генерирует новую
+   *
+   * Вызывается один раз при старте приложения (в App.tsx).
+   */
+  async initIdentity(): Promise<void> {
+    // 1. Проверяем, есть ли уже глобальная identity
+    const existing = await dbService.getGlobalIdentity();
+
+    if (existing) {
+      // Загружаем privateKey из Keychain
+      let privateKey = '';
+      try {
+        const credentials = await Keychain.getGenericPassword({
+          service: 'voidchat_identity',
+        });
+        if (credentials?.password) {
+          privateKey = credentials.password;
+        }
+      } catch {
+        console.warn('[AppStore] Failed to load global private key from Keychain');
+      }
+
+      runInAction(() => {
+        this.user = {
+          userId: existing.userId,
+          publicKey: existing.publicKey,
+          privateKey,
+        };
+      });
+      return;
+    }
+
+    // 2. Миграция: пробуем взять identity с первого/активного сервера
+    const { serverStore } = require('./ServerStore');
+    if (serverStore.servers.length > 0) {
+      const targetId = serverStore.activeServerId ?? serverStore.servers[0].id;
+      const serverUserData = await dbService.getUser(targetId);
+
+      if (serverUserData) {
+        // Мигрируем privateKey из per-server Keychain
+        let privateKey = '';
+        try {
+          const credentials = await Keychain.getGenericPassword({
+            service: `voidchat_${targetId}`,
+          });
+          if (credentials?.password) {
+            privateKey = credentials.password;
+            // Сохраняем в новый глобальный Keychain
+            await Keychain.setGenericPassword('voidchat_identity', privateKey, {
+              service: 'voidchat_identity',
+            });
+            // Удаляем старый per-server ключ
+            await Keychain.resetGenericPassword({
+              service: `voidchat_${targetId}`,
+            });
+          }
+        } catch {
+          console.warn('[AppStore] Failed to migrate private key from server');
+        }
+
+        // Сохраняем как глобальную identity
+        await dbService.saveGlobalIdentity(serverUserData.userId, serverUserData.publicKey);
+
+        runInAction(() => {
+          this.user = {
+            userId: serverUserData.userId,
+            publicKey: serverUserData.publicKey,
+            privateKey,
+          };
+        });
+
+        console.log('[AppStore] Identity migrated from server', targetId);
+        return;
+      }
+    }
+
+    // 3. Ничего нет — генерируем новую identity
+    await initCrypto();
+    const keyPair = generateKeyPair();
+    const newUserId = uuidv4();
+
+    // Сохраняем публичные данные
+    await dbService.saveGlobalIdentity(newUserId, keyPair.publicKey);
+
+    // Сохраняем privateKey в Keychain
+    await Keychain.setGenericPassword('voidchat_identity', keyPair.privateKey, {
+      service: 'voidchat_identity',
+    });
+
+    runInAction(() => {
+      this.user = {
+        userId: newUserId,
+        publicKey: keyPair.publicKey,
+        privateKey: keyPair.privateKey,
+      };
+    });
+
+    console.log('[AppStore] New global identity generated');
   }
 
   // ===== ЗАГРУЗКА =====
@@ -41,11 +147,10 @@ export class AppStore {
     });
 
     try {
-      // 3. Холодная загрузка данных из SQLite
-      const [userData, contacts, unreadCounts, callRecords] = await Promise.all([
-        dbService.getUser(serverId),
-        dbService.getContacts(serverId),
-        dbService.getAllUnreadCounts(serverId),
+      // 3. Холодная загрузка: контакты и unread — глобальные, call records — per-server
+      const [contacts, unreadCounts, callRecords] = await Promise.all([
+        dbService.getContactsGlobal(),
+        dbService.getAllUnreadCountsGlobal(),
         dbService.getCallRecords(serverId),
       ]);
 
@@ -55,34 +160,7 @@ export class AppStore {
         this.callRecords = callRecords;
       });
 
-      // 4. Keychain для privateKey (без изменений)
-      if (userData) {
-        let privateKey = '';
-        try {
-          const credentials = await Keychain.getGenericPassword({
-            service: `voidchat_${serverId}`,
-          });
-          if (credentials && credentials.password) {
-            privateKey = credentials.password;
-          }
-        } catch {
-          console.warn('[AppStore] Failed to load private key from Keychain');
-        }
-
-        runInAction(() => {
-          this.user = {
-            userId: userData.userId,
-            publicKey: userData.publicKey,
-            privateKey, // может быть пустой — но это уже было и раньше
-          };
-        });
-      } else {
-        runInAction(() => {
-          this.user = null;
-        });
-      }
-
-      // 5. Reactive подписки
+      // 4. Reactive подписки: контакты и unread — глобальные, call records — per-server
       this._setupSubscriptions(serverId);
 
       runInAction(() => {
@@ -99,27 +177,27 @@ export class AppStore {
   // ===== ПОДПИСКИ =====
 
   private _setupSubscriptions(serverId: string): void {
-    // Контакты
+    // Контакты — глобальные (без serverId)
     this._unsubscribers.set(
       'contacts',
-      dbService.subscribeContacts(serverId, rows => {
+      dbService.subscribeContactsGlobal(rows => {
         runInAction(() => {
           this.contacts = rows;
         });
       }),
     );
 
-    // Unread counts
+    // Unread counts — глобальные (без serverId)
     this._unsubscribers.set(
       'unread',
-      dbService.subscribeUnreadCounts(serverId, map => {
+      dbService.subscribeUnreadCountsGlobal(map => {
         runInAction(() => {
           this.unreadCount = map;
         });
       }),
     );
 
-    // Call records
+    // Call records — остаются per-server
     this._unsubscribers.set(
       'callRecords',
       dbService.subscribeCallRecords(serverId, records => {
@@ -178,16 +256,14 @@ export class AppStore {
       this.user = user;
     });
 
-    if (this.currentServerId) {
-      // Сохраняем публичные данные в SQLite
-      await dbService.saveUser(this.currentServerId, user.userId, user.publicKey);
+    // Сохраняем публичные данные глобально
+    await dbService.saveGlobalIdentity(user.userId, user.publicKey);
 
-      // Приватный ключ в Keychain (как было)
-      if (user.privateKey) {
-        await Keychain.setGenericPassword(this.currentServerId, user.privateKey, {
-          service: `voidchat_${this.currentServerId}`,
-        });
-      }
+    // Приватный ключ в глобальный Keychain
+    if (user.privateKey) {
+      await Keychain.setGenericPassword('voidchat_identity', user.privateKey, {
+        service: 'voidchat_identity',
+      });
     }
   }
 
@@ -195,30 +271,26 @@ export class AppStore {
     runInAction(() => {
       this.user = null;
     });
-    if (this.currentServerId) {
-      await Promise.all([
-        dbService.deleteUser(this.currentServerId),
-        Keychain.resetGenericPassword({ service: `voidchat_${this.currentServerId}` }),
-      ]);
-    }
+    await Promise.all([
+      dbService.deleteGlobalIdentity(),
+      Keychain.resetGenericPassword({ service: 'voidchat_identity' }),
+    ]);
   }
 
   // ===== КОНТАКТЫ =====
 
   async addContact(contact: Contact): Promise<void> {
     const existing = this.contacts.find(c => c.userId === contact.userId);
-    if (!existing && this.currentServerId) {
+    if (!existing) {
       runInAction(() => {
         this.contacts = [...this.contacts, contact];
       });
-      await dbService.addContact(this.currentServerId, contact);
+      await dbService.addContactGlobal(contact);
       // reactive subscription обновит this.contacts
     }
   }
 
   async removeContact(userId: string): Promise<void> {
-    if (!this.currentServerId) return;
-
     // Оптимистичное обновление UI
     runInAction(() => {
       this.contacts = this.contacts.filter(c => c.userId !== userId);
@@ -228,12 +300,11 @@ export class AppStore {
       this.unreadCount = updated;
     });
 
-    await dbService.removeContact(this.currentServerId, userId);
+    await dbService.removeContactGlobal(userId);
     // reactive subscription синхронизирует
   }
 
   async setNickname(userId: string, nickname: string): Promise<void> {
-    if (!this.currentServerId) return;
     const contact = this.contacts.find(c => c.userId === userId);
     if (contact) {
       contact.nickname = nickname || undefined;
@@ -241,19 +312,18 @@ export class AppStore {
       runInAction(() => {
         this.contacts = [...this.contacts];
       });
-      await dbService.setContactNickname(this.currentServerId, userId, nickname);
+      await dbService.setContactNicknameGlobal(userId, nickname);
     }
   }
 
   async updateContactPublicKey(userId: string, publicKey: string): Promise<void> {
-    if (!this.currentServerId) return;
     const contact = this.contacts.find(c => c.userId === userId);
     if (contact) {
       contact.publicKey = publicKey;
       runInAction(() => {
         this.contacts = [...this.contacts];
       });
-      await dbService.updateContactPublicKey(this.currentServerId, userId, publicKey);
+      await dbService.updateContactPublicKeyGlobal(userId, publicKey);
     }
   }
 
@@ -336,11 +406,10 @@ export class AppStore {
   }
 
   async markAsRead(contactId: string): Promise<void> {
-    if (!this.currentServerId) return;
     runInAction(() => {
       this.unreadCount = { ...this.unreadCount, [contactId]: 0 };
     });
-    await dbService.resetUnread(this.currentServerId, contactId);
+    await dbService.resetUnreadGlobal(contactId);
   }
 
   async markMessagesRead(contactId: string): Promise<void> {
@@ -350,8 +419,6 @@ export class AppStore {
   }
 
   async incrementUnread(contactId: string): Promise<void> {
-    if (!this.currentServerId) return;
-
     // Оптимистичное обновление (для мгновенного UI)
     runInAction(() => {
       this.unreadCount = {
@@ -360,7 +427,7 @@ export class AppStore {
       };
     });
 
-    await dbService.incrementUnread(this.currentServerId, contactId);
+    await dbService.incrementUnreadGlobal(contactId);
   }
 
   // ===== ЗВОНКИ =====
@@ -550,22 +617,17 @@ export class AppStore {
       this.callRecords = [];
       this.devMode = false;
     });
-    if (this.currentServerId) {
-      await Promise.all([
-        dbService.clearServerData(this.currentServerId),
-        Keychain.resetGenericPassword({ service: `voidchat_${this.currentServerId}` }),
-      ]);
-    }
+    await Promise.all([
+      dbService.clearServerData(this.currentServerId || ''),
+      Keychain.resetGenericPassword({ service: 'voidchat_identity' }),
+    ]);
   }
 
   async clearServerData(serverId: string): Promise<void> {
     runInAction(() => {
       this.presenceMap = {};
     });
-    await Promise.all([
-      dbService.clearServerData(serverId),
-      Keychain.resetGenericPassword({ service: `voidchat_${serverId}` }),
-    ]);
+    await dbService.clearServerData(serverId);
   }
 
   resetInMemoryState(): void {

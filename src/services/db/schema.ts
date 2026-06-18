@@ -4,7 +4,7 @@
  */
 
 /** Текущая версия схемы БД. */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 // ---------------------------------------------------------------------------
 // Таблицы
@@ -103,6 +103,25 @@ export const CREATE_TABLE_CALL_RECORDS = `
 export const CREATE_TABLE_SERVER_UNREAD = `
   CREATE TABLE IF NOT EXISTS server_unread (
     server_id TEXT PRIMARY KEY,
+    count INTEGER NOT NULL DEFAULT 0
+  );
+`;
+
+/** Глобальная таблица контактов (без привязки к серверу) — v3. */
+export const CREATE_TABLE_CONTACTS_V2 = `
+  CREATE TABLE IF NOT EXISTS contacts_v2 (
+    user_id TEXT PRIMARY KEY,
+    public_key TEXT NOT NULL,
+    nickname TEXT,
+    created_at INTEGER NOT NULL,
+    known_servers TEXT DEFAULT '[]'
+  );
+`;
+
+/** Глобальная таблица unread counts (без привязки к серверу) — v3. */
+export const CREATE_TABLE_UNREAD_COUNTS_V2 = `
+  CREATE TABLE IF NOT EXISTS unread_counts_v2 (
+    contact_id TEXT PRIMARY KEY,
     count INTEGER NOT NULL DEFAULT 0
   );
 `;

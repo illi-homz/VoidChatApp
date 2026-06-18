@@ -15,10 +15,8 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../navigation/types';
 import { useServerStore, useStore } from '../../stores';
 import { socketService } from '../../services/socket';
-import { initCrypto, generateKeyPair } from '../../services/crypto';
 import { useToast } from '../../components/Toast';
 import { QrScannerModal } from '../../components/QrScannerModal';
-import { v4 as uuidv4 } from 'uuid';
 import { Colors } from '../../theme/colors';
 import { Icon } from '../../components/Icon';
 import { formatServerAddress } from '../../utils/formatServerAddress';
@@ -129,12 +127,9 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
           if (user) {
             await socketService.connect(existing.url, user.userId, user.publicKey);
           } else {
-            // Если пользователя нет — создаём нового (крайний случай)
-            await initCrypto();
-            const { publicKey, privateKey } = generateKeyPair();
-            const newUserId = uuidv4();
-            await appStore.saveUser({ userId: newUserId, publicKey, privateKey });
-            await socketService.connect(existing.url, newUserId, publicKey);
+            toast('Ошибка: пользователь не инициализирован', 'error');
+            setIsConnecting(false);
+            return;
           }
 
           // Отправляем приглашение
@@ -152,20 +147,22 @@ export function AddServerScreen({ navigation }: AddServerScreenProps): React.JSX
           return;
         }
 
-        await initCrypto();
-        const { publicKey, privateKey } = generateKeyPair();
-        const newUserId = uuidv4();
+        const user = appStore.user;
+        if (!user) {
+          toast('Ошибка: пользователь не инициализирован', 'error');
+          setIsConnecting(false);
+          return;
+        }
 
-        const serverId = uuidv4();
+        const serverId = `server_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         const serverConfig = { id: serverId, name: trimmedName, url: serverUrl };
 
         await serverStore.add(serverConfig);
         await serverStore.setActive(serverId);
 
         await appStore.load(serverId);
-        await appStore.saveUser({ userId: newUserId, publicKey, privateKey });
 
-        await socketService.connect(serverUrl, newUserId, publicKey);
+        await socketService.connect(serverUrl, user.userId, user.publicKey);
 
         // Обработка приглашения
         const targetUserId = pendingInviterRef.current || inviterUserId || undefined;

@@ -320,6 +320,81 @@ export class DatabaseService {
     });
   }
 
+  // ===== ГЛОБАЛЬНЫЕ КОНТАКТЫ (v3) =====
+
+  async getContactsGlobal(): Promise<Contact[]> {
+    const { rows } = await this.getDb().execute(
+      'SELECT * FROM contacts_v2 ORDER BY created_at ASC'
+    );
+    return (rows as Record<string, unknown>[]).map(r => mapContact(r));
+  }
+
+  async addContactGlobal(contact: Contact): Promise<void> {
+    await this.getDb().transaction(async (tx: Transaction) => {
+      await tx.execute(
+        `INSERT OR IGNORE INTO contacts_v2
+         (user_id, public_key, nickname, created_at)
+         VALUES (?, ?, ?, ?)`,
+        [contact.userId, contact.publicKey, contact.nickname ?? null, contact.createdAt],
+      );
+    });
+  }
+
+  async removeContactGlobal(userId: string): Promise<void> {
+    await this.getDb().transaction(async (tx: Transaction) => {
+      await tx.execute('DELETE FROM contacts_v2 WHERE user_id = ?', [userId]);
+      await tx.execute('DELETE FROM unread_counts_v2 WHERE contact_id = ?', [userId]);
+      await tx.execute('DELETE FROM messages WHERE contact_id = ?', [userId]);
+      await tx.execute('DELETE FROM unread_counts WHERE contact_id = ?', [userId]);
+      await tx.execute('DELETE FROM call_records WHERE contact_id = ?', [userId]);
+    });
+  }
+
+  async updateContactPublicKeyGlobal(userId: string, publicKey: string): Promise<void> {
+    await this.getDb().transaction(async (tx: Transaction) => {
+      await tx.execute('UPDATE contacts_v2 SET public_key = ? WHERE user_id = ?', [
+        publicKey,
+        userId,
+      ]);
+    });
+  }
+
+  async setContactNicknameGlobal(userId: string, nickname: string): Promise<void> {
+    await this.getDb().transaction(async (tx: Transaction) => {
+      await tx.execute('UPDATE contacts_v2 SET nickname = ? WHERE user_id = ?', [
+        nickname,
+        userId,
+      ]);
+    });
+  }
+
+  async addContactServerKnown(userId: string, serverId: string): Promise<void> {
+    await this.getDb().transaction(async (tx: Transaction) => {
+      await tx.execute(
+        `UPDATE contacts_v2 SET known_servers = (
+          SELECT json_group_array(DISTINCT value)
+          FROM (
+            SELECT value FROM json_each(contacts_v2.known_servers)
+            UNION
+            SELECT ?
+          )
+        ) WHERE user_id = ?`,
+        [serverId, userId],
+      );
+    });
+  }
+
+  subscribeContactsGlobal(callback: (contacts: Contact[]) => void): () => void {
+    return this.getDb().reactiveExecute({
+      query: 'SELECT * FROM contacts_v2 ORDER BY created_at ASC',
+      arguments: [],
+      fireOn: [{ table: 'contacts_v2' }],
+      callback: (data: { rows: Record<string, unknown>[] }) => {
+        callback(data.rows.map(r => mapContact(r)));
+      },
+    });
+  }
+
   // ===== СООБЩЕНИЯ =====
 
   async addMessage(serverId: string, contactId: string, message: Message): Promise<void> {
@@ -606,6 +681,56 @@ export class DatabaseService {
     });
   }
 
+  // ===== ГЛОБАЛЬНЫЕ UNREAD COUNTS (v3) =====
+
+  async getAllUnreadCountsGlobal(): Promise<Record<string, number>> {
+    const { rows } = await this.getDb().execute(
+      'SELECT contact_id, count FROM unread_counts_v2'
+    );
+    const map: Record<string, number> = {};
+    for (const row of (rows as Record<string, unknown>[]).map(r => mapUnreadRow(r))) {
+      map[row.contact_id] = row.count;
+    }
+    return map;
+  }
+
+  async incrementUnreadGlobal(contactId: string): Promise<void> {
+    await this.getDb().transaction(async (tx: Transaction) => {
+      await tx.execute(
+        `INSERT INTO unread_counts_v2 (contact_id, count)
+         VALUES (?, 1)
+         ON CONFLICT(contact_id) DO UPDATE SET count = count + 1`,
+        [contactId],
+      );
+    });
+  }
+
+  async resetUnreadGlobal(contactId: string): Promise<void> {
+    await this.getDb().transaction(async (tx: Transaction) => {
+      await tx.execute(
+        `INSERT INTO unread_counts_v2 (contact_id, count)
+         VALUES (?, 0)
+         ON CONFLICT(contact_id) DO UPDATE SET count = 0`,
+        [contactId],
+      );
+    });
+  }
+
+  subscribeUnreadCountsGlobal(callback: (unreads: Record<string, number>) => void): () => void {
+    return this.getDb().reactiveExecute({
+      query: 'SELECT contact_id, count FROM unread_counts_v2',
+      arguments: [],
+      fireOn: [{ table: 'unread_counts_v2' }],
+      callback: (data: { rows: Record<string, unknown>[] }) => {
+        const map: Record<string, number> = {};
+        for (const row of data.rows.map(r => mapUnreadRow(r))) {
+          map[row.contact_id] = row.count;
+        }
+        callback(map);
+      },
+    });
+  }
+
   // ===== CALL RECORDS =====
 
   async getCallRecords(serverId: string): Promise<CallRecord[]> {
@@ -704,6 +829,29 @@ export class DatabaseService {
     });
   }
 
+  // ===== GLOBAL IDENTITY =====
+
+  async getGlobalIdentity(): Promise<{ userId: string; publicKey: string } | null> {
+    const userId = await this.getMetadata('global_user_id');
+    const publicKey = await this.getMetadata('global_public_key');
+
+    if (userId && publicKey) {
+      return { userId, publicKey };
+    }
+
+    return null;
+  }
+
+  async saveGlobalIdentity(userId: string, publicKey: string): Promise<void> {
+    await this.setMetadata('global_user_id', userId);
+    await this.setMetadata('global_public_key', publicKey);
+  }
+
+  async deleteGlobalIdentity(): Promise<void> {
+    await this.deleteMetadata('global_user_id');
+    await this.deleteMetadata('global_public_key');
+  }
+
   // ===== ОЧИСТКА =====
 
   async clearServerData(serverId: string): Promise<void> {
@@ -727,6 +875,8 @@ export class DatabaseService {
       await tx.execute('DELETE FROM server_unread');
       await tx.execute('DELETE FROM servers');
       await tx.execute('DELETE FROM app_metadata');
+      await tx.execute('DELETE FROM contacts_v2');
+      await tx.execute('DELETE FROM unread_counts_v2');
     });
   }
 

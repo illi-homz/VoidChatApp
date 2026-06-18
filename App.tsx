@@ -4,6 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import BootSplash from 'react-native-bootsplash';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { serverStore } from './src/stores/ServerStore';
+import { appStore } from './src/stores/AppStore';
 import { dbService } from './src/services/DatabaseService';
 import { screenCapture } from './src/services/ScreenCapture';
 import { StoreProvider } from './src/stores';
@@ -18,10 +19,11 @@ function App(): React.JSX.Element {
     (async () => {
       try {
         await dbService.initialize();
+        await serverStore.load();
+        await appStore.initIdentity();
       } catch (e) {
-        console.error('[App] Database initialization failed', e);
+        console.error('[App] Initialization failed', e);
       }
-      serverStore.load();
     })();
   }, []);
 

@@ -8,8 +8,13 @@
  */
 
 import type { DB } from '@op-engineering/op-sqlite';
-import { CREATE_TABLE_SCHEMA_VERSION } from './schema';
-import { CREATE_ALL_TABLES, CREATE_ALL_INDEXES } from './schema';
+import {
+  CREATE_TABLE_SCHEMA_VERSION,
+  CREATE_ALL_TABLES,
+  CREATE_ALL_INDEXES,
+  CREATE_TABLE_CONTACTS_V2,
+  CREATE_TABLE_UNREAD_COUNTS_V2,
+} from './schema';
 
 // ---------------------------------------------------------------------------
 // Типы
@@ -52,6 +57,60 @@ export const MIGRATIONS: Migration[] = [
       "CREATE INDEX IF NOT EXISTS idx_messages_voice ON messages(server_id, media_type) WHERE media_type = 'voice'",
     ],
     down: ['DROP INDEX IF EXISTS idx_messages_voice'],
+  },
+  {
+    version: 3,
+    up: [
+      // 1. Создать новые таблицы
+      CREATE_TABLE_CONTACTS_V2,
+      CREATE_TABLE_UNREAD_COUNTS_V2,
+
+      // 2. Перенести контакты со всех серверов в глобальную таблицу
+      // Первое вхождение каждого user_id (INSERT OR IGNORE)
+      `INSERT OR IGNORE INTO contacts_v2 (user_id, public_key, nickname, created_at, known_servers)
+       SELECT
+         c.user_id,
+         c.public_key,
+         c.nickname,
+         c.created_at,
+         json_array(c.server_id)
+       FROM contacts c
+       WHERE c.user_id NOT IN (SELECT user_id FROM contacts_v2)`,
+
+      // 3. Для контактов, которые уже есть (дубликаты на других серверах),
+      // обновляем known_servers и nickname
+      `INSERT INTO contacts_v2 (user_id, public_key, nickname, created_at, known_servers)
+       SELECT
+         c.user_id,
+         c.public_key,
+         c.nickname,
+         c.created_at,
+         json_array(c.server_id)
+       FROM contacts c
+       WHERE c.user_id IN (SELECT user_id FROM contacts_v2)
+       ON CONFLICT(user_id) DO UPDATE SET
+          known_servers = (
+            SELECT json_group_array(DISTINCT value)
+            FROM (
+              SELECT value FROM json_each(contacts_v2.known_servers)
+              UNION
+              SELECT value FROM json_each(excluded.known_servers)
+            )
+          ),
+          nickname = CASE
+            WHEN contacts_v2.nickname IS NULL AND excluded.nickname IS NOT NULL
+            THEN excluded.nickname
+            ELSE contacts_v2.nickname
+          END`,
+
+      // 4. Перенести unread counts, суммируя по contact_id
+      `INSERT INTO unread_counts_v2 (contact_id, count)
+       SELECT contact_id, SUM(count) as total
+       FROM unread_counts
+       GROUP BY contact_id
+       ON CONFLICT(contact_id) DO UPDATE SET count = count + excluded.count`,
+    ],
+    down: ['DROP TABLE IF EXISTS contacts_v2', 'DROP TABLE IF EXISTS unread_counts_v2'],
   },
 ];
 
