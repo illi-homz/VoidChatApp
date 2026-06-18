@@ -390,16 +390,37 @@ const CallScreenComponent: React.FC = observer(() => {
     });
 
     // Звонок принят (caller получает answer SDP)
-    const unsubAccepted = socketService.onCallAccepted(data => {
+    const unsubAccepted = socketService.onCallAccepted(async data => {
       if (data.callId === callStore.callId && callStore.status === 'calling') {
-        soundNotificationService.stopLoop();
-        console.log('[CallScreen] ✅ initial answer received, setting remote description');
-        webrtcService
-          .setRemoteDescription(data.sdp)
-          .then(() => {
-            callStore.setConnected();
-          })
-          .catch(() => {});
+        try {
+          await soundNotificationService.stopLoop();
+
+          if (endedRef.current) {
+            console.log('[CallScreen] ⏭ call ended while stopLoop was pending, skipping');
+            return;
+          }
+
+          console.log('[CallScreen] ✅ initial answer received, setting remote description');
+          await webrtcService.setRemoteDescription(data.sdp);
+
+          if (endedRef.current) {
+            console.log('[CallScreen] ⏭ call ended while setRemoteDescription was pending');
+            webrtcService.stopCall();
+            return;
+          }
+
+          callStore.setConnected();
+        } catch (e) {
+          if (endedRef.current) {
+            console.log('[CallScreen] ⏭ call already ended, skipping duplicate cleanup');
+            return;
+          }
+
+          console.warn('[CallScreen] ❌ setRemoteDescription failed:', e);
+          callStore.setFailed('Ошибка соединения');
+          webrtcService.stopCall();
+          scheduleGoBack();
+        }
       } else if (data.callId === callStore.callId && callStore.status === 'connected') {
         // Renegotiation answer
         console.log('[CallScreen] 🔄 renegotiation answer received, setting remote description');
