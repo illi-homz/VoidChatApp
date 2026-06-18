@@ -11,10 +11,8 @@ interface VideoPiPProps {
 
 /**
  * VideoPiP — self-view для видео-звонков.
- * Вертикальный прямоугольник без рамки, в правом верхнем углу.
- *
- * iOS: overflow: hidden + borderRadius обрезает RTCView.
- * Android: SurfaceView не обрезается — квадратные углы.
+ * На Android использует TextureView (через проп useTextureView),
+ * который корректно обрезается overflow:hidden + borderRadius.
  */
 export function VideoPiP({ streamURL, style, onLayout }: VideoPiPProps): React.JSX.Element | null {
   if (streamURL === null) {
@@ -28,7 +26,13 @@ export function VideoPiP({ streamURL, style, onLayout }: VideoPiPProps): React.J
       accessibilityRole='none'
       accessibilityLabel='Моё видео'
     >
-      <RTCView streamURL={streamURL} style={styles.video} objectFit='cover' mirror={true} zOrder={1} />
+      <RTCView
+        streamURL={streamURL}
+        style={styles.video}
+        objectFit='cover'
+        mirror={true}
+        useTextureView={Platform.OS === 'android'}
+      />
     </View>
   );
 }

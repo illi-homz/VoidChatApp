@@ -1,8 +1,8 @@
 import { StyleSheet } from 'react-native';
 
-const W = 80;
-const H = 80;
-const RADIUS = 40;
+const W = 86;
+const H = 128;
+const RADIUS = 26;
 
 export const styles = StyleSheet.create({
   box: {
@@ -13,9 +13,9 @@ export const styles = StyleSheet.create({
     height: H,
     borderRadius: RADIUS,
     overflow: 'hidden',
+    zIndex: 10,
     borderWidth: 2,
     borderColor: 'rgba(255, 215, 0, 0.6)',
-    zIndex: 10,
   },
   video: {
     width: W,

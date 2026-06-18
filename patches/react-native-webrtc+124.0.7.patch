@@ -1,0 +1,388 @@
+diff --git a/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/RTCVideoViewManager.java b/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/RTCVideoViewManager.java
+index 5556094..e8cfc9a 100644
+--- a/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/RTCVideoViewManager.java
++++ b/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/RTCVideoViewManager.java
+@@ -76,6 +76,11 @@ public class RTCVideoViewManager extends SimpleViewManager<WebRTCView> {
+         view.setZOrder(zOrder);
+     }
+ 
++    @ReactProp(name = "useTextureView")
++    public void setUseTextureView(WebRTCView view, boolean useTextureView) {
++        view.setUseTextureView(useTextureView);
++    }
++
+     /**
+      * Sets the callback for when video dimensions change.
+      *
+diff --git a/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/TextureViewRenderer.java b/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/TextureViewRenderer.java
+new file mode 100644
+index 0000000..8fd9eea
+--- /dev/null
++++ b/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/TextureViewRenderer.java
+@@ -0,0 +1,162 @@
++package com.oney.WebRTCModule;
++
++import android.content.Context;
++import android.graphics.Matrix;
++import android.graphics.SurfaceTexture;
++import android.opengl.EGL14;
++import android.util.Log;
++import android.view.TextureView;
++
++import org.webrtc.EglBase;
++import org.webrtc.EglRenderer;
++import org.webrtc.GlRectDrawer;
++import org.webrtc.RendererCommon;
++import org.webrtc.VideoFrame;
++import org.webrtc.VideoSink;
++
++public class TextureViewRenderer extends TextureView implements VideoSink {
++    private static final String TAG = "TextureViewRenderer";
++
++    private static final int[] EGL_CONFIG_ATTRIBUTES = new int[] {
++        EGL14.EGL_RED_SIZE, 8,
++        EGL14.EGL_GREEN_SIZE, 8,
++        EGL14.EGL_BLUE_SIZE, 8,
++        EGL14.EGL_ALPHA_SIZE, 8,
++        EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES2_BIT,
++        EGL14.EGL_SURFACE_TYPE, EGL14.EGL_WINDOW_BIT,
++        EGL14.EGL_NONE,
++    };
++
++    private final EglRenderer eglRenderer;
++    private boolean isInitialized;
++    private RendererCommon.RendererEvents rendererEvents;
++
++    private int frameWidth;
++    private int frameHeight;
++    private int frameRotation;
++
++    public TextureViewRenderer(Context context) {
++        super(context);
++        this.eglRenderer = new EglRenderer("TextureViewRenderer");
++        setSurfaceTextureListener(surfaceTextureListener);
++    }
++
++    public void init(EglBase.Context sharedContext, RendererCommon.RendererEvents rendererEvents) {
++        if (isInitialized) return;
++        this.rendererEvents = rendererEvents;
++        eglRenderer.init(sharedContext, EGL_CONFIG_ATTRIBUTES, new GlRectDrawer());
++        isInitialized = true;
++    }
++
++    public void release() {
++        if (isInitialized) {
++            eglRenderer.release();
++            isInitialized = false;
++        }
++    }
++
++    @Override
++    public void onFrame(VideoFrame frame) {
++        eglRenderer.onFrame(frame);
++        updateFrameDimensions(frame);
++    }
++
++    private void updateFrameDimensions(VideoFrame frame) {
++        int rotation = frame.getRotation();
++        int width = frame.getRotatedWidth();
++        int height = frame.getRotatedHeight();
++
++        boolean changed = false;
++        if (frameWidth != width || frameHeight != height || frameRotation != rotation) {
++            frameWidth = width;
++            frameHeight = height;
++            frameRotation = rotation;
++            changed = true;
++        }
++
++        if (changed && rendererEvents != null) {
++            rendererEvents.onFrameResolutionChanged(width, height, rotation);
++            post(() -> {
++                requestLayout();
++                // Применяем setTransform для cover-эффекта:
++                // кадр заполняет view, сохраняя aspect ratio, избыток центрируется.
++                int vw = getWidth();
++                int vh = getHeight();
++                if (vw > 0 && vh > 0 && frameWidth > 0 && frameHeight > 0) {
++                    float frameAspect = (float) frameWidth / frameHeight;
++                    float viewAspect = (float) vw / vh;
++                    Matrix matrix = new Matrix();
++                    if (frameAspect > viewAspect) {
++                        // Frame шире → заполняем по высоте
++                        float displayW = vh * frameAspect;
++                        float sx = displayW / vw;
++                        float dx = -(displayW - vw) / 2f;
++                        matrix.setScale(sx, 1f);
++                        matrix.postTranslate(dx, 0);
++                    } else {
++                        // Frame выше → заполняем по ширине
++                        float displayH = vw / frameAspect;
++                        float sy = displayH / vh;
++                        float dy = -(displayH - vh) / 2f;
++                        matrix.setScale(1f, sy);
++                        matrix.postTranslate(0, dy);
++                    }
++                    // Зеркалирование для фронтальной камеры
++                    if (mirror) {
++                        Matrix flip = new Matrix();
++                        flip.setScale(-1f, 1f);
++                        flip.postTranslate(vw, 0f);
++                        matrix.postConcat(flip);
++                    }
++                    setTransform(matrix);
++                }
++            });
++        }
++    }
++
++    public void setMirror(boolean mirror) {
++        this.mirror = mirror;
++        eglRenderer.setMirror(mirror);
++    }
++
++    private boolean mirror;
++
++    private final SurfaceTextureListener surfaceTextureListener = new SurfaceTextureListener() {
++        @Override
++        public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
++            Log.d(TAG, "Surface texture available: " + width + "x" + height);
++            eglRenderer.createEglSurface(surface);
++        }
++
++        @Override
++        public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
++            Log.d(TAG, "Surface texture destroyed");
++            eglRenderer.releaseEglSurface(new Runnable() {
++                @Override
++                public void run() {
++                    // No-op
++                }
++            });
++            return true;
++        }
++
++        @Override
++        public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
++            Log.d(TAG, "Surface texture size changed: " + width + "x" + height);
++            if (width > 0 && height > 0 && isInitialized) {
++                eglRenderer.releaseEglSurface(new Runnable() {
++                    @Override
++                    public void run() {
++                        // No-op
++                    }
++                });
++                eglRenderer.createEglSurface(surface);
++            }
++        }
++
++        @Override
++        public void onSurfaceTextureUpdated(SurfaceTexture surface) {
++            // No-op
++        }
++    };
++}
+diff --git a/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/WebRTCView.java b/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/WebRTCView.java
+index 5d14d0f..eebb761 100644
+--- a/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/WebRTCView.java
++++ b/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/WebRTCView.java
+@@ -144,11 +144,16 @@ public class WebRTCView extends ViewGroup {
+      */
+     private final SurfaceViewRenderer surfaceViewRenderer;
+ 
++    private TextureViewRenderer textureViewRenderer;
++
+     /**
+      * The {@code VideoTrack}, if any, rendered by this {@code WebRTCView}.
+      */
+     private VideoTrack videoTrack;
+ 
++    private boolean useTextureView;
++    private boolean rendererReady; // flag for textureView init
++
+     /**
+      * The callback to be called when video dimensions change.
+      */
+@@ -205,7 +210,11 @@ public class WebRTCView extends ViewGroup {
+             // infrastructure hooked up while this View is not attached to a
+             // window. Additionally, a memory leak was solved in a similar way
+             // on iOS.
+-            tryAddRendererToVideoTrack();
++            if (useTextureView) {
++                tryAddTextureViewRendererToVideoTrack();
++            } else {
++                tryAddRendererToVideoTrack();
++            }
+         } finally {
+             super.onAttachedToWindow();
+         }
+@@ -310,9 +319,6 @@ public class WebRTCView extends ViewGroup {
+ 
+             switch (scalingType) {
+                 case SCALE_ASPECT_FILL:
+-                    // Fill this ViewGroup with surfaceViewRenderer and the latter
+-                    // will take care of filling itself with the video similarly to
+-                    // the cover value the CSS property object-fit.
+                     r = width;
+                     l = 0;
+                     b = height;
+@@ -320,11 +326,6 @@ public class WebRTCView extends ViewGroup {
+                     break;
+                 case SCALE_ASPECT_FIT:
+                 default:
+-                    // Lay surfaceViewRenderer out inside this ViewGroup in accord
+-                    // with the contain value of the CSS property object-fit.
+-                    // SurfaceViewRenderer will fill itself with the video similarly
+-                    // to the cover or contain value of the CSS property object-fit
+-                    // (which will not matter, eventually).
+                     if (frameHeight == 0 || frameWidth == 0) {
+                         l = t = r = b = 0;
+                     } else {
+@@ -332,7 +333,6 @@ public class WebRTCView extends ViewGroup {
+                                                                             : frameHeight / (float) frameWidth;
+                         Point frameDisplaySize =
+                                 RendererCommon.getDisplaySize(scalingType, frameAspectRatio, width, height);
+-
+                         l = (width - frameDisplaySize.x) / 2;
+                         t = (height - frameDisplaySize.y) / 2;
+                         r = l + frameDisplaySize.x;
+@@ -341,7 +341,11 @@ public class WebRTCView extends ViewGroup {
+                     break;
+             }
+         }
+-        surfaceViewRenderer.layout(l, t, r, b);
++        if (useTextureView && textureViewRenderer != null) {
++            textureViewRenderer.layout(0, 0, width, height);
++        } else {
++            surfaceViewRenderer.layout(l, t, r, b);
++        }
+     }
+ 
+     /**
+@@ -349,6 +353,22 @@ public class WebRTCView extends ViewGroup {
+      * resources (if rendering is in progress).
+      */
+     private void removeRendererFromVideoTrack() {
++        if (useTextureView) {
++            if (textureViewRenderer != null) {
++                if (videoTrack != null) {
++                    ThreadUtils.runOnExecutor(() -> {
++                        try {
++                            videoTrack.removeSink(textureViewRenderer);
++                        } catch (Throwable tr) {
++                            Log.e(TAG, "Failed to remove texture renderer", tr);
++                        }
++                    });
++                }
++                textureViewRenderer.release();
++                rendererReady = false;
++            }
++            return;
++        }
+         if (rendererAttached) {
+             if (videoTrack != null) {
+                 ThreadUtils.runOnExecutor(() -> {
+@@ -386,7 +406,11 @@ public class WebRTCView extends ViewGroup {
+     private void requestSurfaceViewRendererLayout() {
+         // Google/WebRTC just call requestLayout() on surfaceViewRenderer when
+         // they change the value of its mirror or surfaceType property.
+-        surfaceViewRenderer.requestLayout();
++        if (useTextureView && textureViewRenderer != null) {
++            WebRTCView.this.requestLayout();
++        } else {
++            surfaceViewRenderer.requestLayout();
++        }
+         // The above is not enough though when the video frame's dimensions or
+         // rotation change. The following will suffice.
+         if (!ViewCompat.isInLayout(this)) {
+@@ -407,6 +431,9 @@ public class WebRTCView extends ViewGroup {
+         if (this.mirror != mirror) {
+             this.mirror = mirror;
+             surfaceViewRenderer.setMirror(mirror);
++            if (textureViewRenderer != null) {
++                textureViewRenderer.setMirror(mirror);
++            }
+             // SurfaceViewRenderer takes the value of its mirror property into
+             // account upon its layout.
+             requestSurfaceViewRendererLayout();
+@@ -475,6 +502,10 @@ public class WebRTCView extends ViewGroup {
+             // After realizing/applying the change in the value of
+             // this.streamURL, reflect it on the value of videoTrack.
+             setVideoTrack(videoTrack);
++
++            if (useTextureView && videoTrack != null) {
++                tryAddTextureViewRendererToVideoTrack();
++            }
+         }
+     }
+ 
+@@ -500,7 +531,9 @@ public class WebRTCView extends ViewGroup {
+             this.videoTrack = videoTrack;
+ 
+             if (videoTrack != null) {
+-                tryAddRendererToVideoTrack();
++                if (!useTextureView) {
++                    tryAddRendererToVideoTrack();
++                }
+                 if (oldVideoTrack == null) {
+                     // If there was no old track, clean the surface so we start
+                     // with black.
+@@ -519,6 +552,7 @@ public class WebRTCView extends ViewGroup {
+      * @param zOrder The z-order to set on this {@code WebRTCView}.
+      */
+     public void setZOrder(int zOrder) {
++        if (useTextureView) return;
+         switch (zOrder) {
+             case 0:
+                 surfaceViewRenderer.setZOrderMediaOverlay(false);
+@@ -580,4 +614,31 @@ public class WebRTCView extends ViewGroup {
+     public void setOnDimensionsChange(boolean enabled) {
+         this.onDimensionsChangeEnabled = enabled;
+     }
++
++    public void setUseTextureView(boolean useTextureView) {
++        this.useTextureView = useTextureView;
++    }
++
++    private void tryAddTextureViewRendererToVideoTrack() {
++        if (!useTextureView || rendererReady || videoTrack == null) return;
++        if (!ViewCompat.isAttachedToWindow(this)) return;
++
++        if (textureViewRenderer == null) {
++            textureViewRenderer = new TextureViewRenderer(getContext());
++            addView(textureViewRenderer, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
++        }
++
++        EglBase.Context sharedContext = EglUtils.getRootEglBaseContext();
++        if (sharedContext == null) return;
++
++        textureViewRenderer.init(sharedContext, rendererEvents);
++        ThreadUtils.runOnExecutor(() -> {
++            try {
++                videoTrack.addSink(textureViewRenderer);
++            } catch (Throwable tr) {
++                Log.e(TAG, "Failed to add texture renderer to video track", tr);
++            }
++        });
++        rendererReady = true;
++    }
+ }
+diff --git a/node_modules/react-native-webrtc/src/RTCView.ts b/node_modules/react-native-webrtc/src/RTCView.ts
+index ea97a43..5e36faa 100644
+--- a/node_modules/react-native-webrtc/src/RTCView.ts
++++ b/node_modules/react-native-webrtc/src/RTCView.ts
+@@ -16,6 +16,14 @@ export interface RTCVideoViewProps extends ViewProps {
+    */
+   mirror?: boolean;
+ 
++  /**
++   * Use TextureView instead of SurfaceView for rendering.
++   * TextureView supports hardware acceleration and allows rounded corners.
++   *
++   * useTextureView: boolean
++   */
++  useTextureView?: boolean;
++
+   /**
+    * In the fashion of
+    * https://www.w3.org/TR/html5/embedded-content-0.html#dom-video-videowidth
