@@ -17,6 +17,7 @@ import type {
 } from '../types';
 
 import { webrtcService } from './WebRTCService';
+import { callStore } from '../stores/CallStore';
 
 const HEARTBEAT_INTERVAL = 30000;
 const MAX_BUFFER_SIZE = 500;
@@ -228,6 +229,15 @@ class SocketService {
         this.startHeartbeat();
         this.connectedCallback?.();
         resolve();
+
+        // Если локально звонка нет — почистить stale звонок на сервере
+        if (callStore.status === 'idle') {
+          this.socket?.emit('cleanup_my_call');
+          // Очищаем буферы call-событий — они относятся к stale звонку
+          // и могут вызвать race condition (stale call_incoming из буфера
+          // при попытке нового звонка)
+          this.clearCallBuffers();
+        }
 
         // Предзагрузка TURN-конфигурации с таймаутом 5 секунд.
         // Не блокируем connect — если TURN не загрузится, звонки продолжают
@@ -519,6 +529,16 @@ class SocketService {
     this.reconnectAttempt = 0;
     this.lastError = null;
     return this.connect(serverUrl, userId, publicKey);
+  }
+
+  clearCallBuffers(): void {
+    this.callIncomingBuffer = [];
+    this.callOfferSentBuffer = [];
+    this.callAcceptedBuffer = [];
+    this.callDeclinedBuffer = [];
+    this.callEndedBuffer = [];
+    this.iceCandidateBuffer = [];
+    this.callTimedOutBuffer = [];
   }
 
   clearListeners(): void {

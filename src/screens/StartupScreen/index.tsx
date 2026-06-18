@@ -9,6 +9,7 @@ import { socketService } from '../../services/socket';
 import { Colors } from '../../theme/colors';
 import { Icon } from '../../components/Icon';
 import { styles } from './styles';
+import { callStore } from '../../stores/CallStore';
 
 interface StartupScreenProps {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Startup'>;
@@ -97,6 +98,9 @@ export const StartupScreen = observer(function StartupScreen({ navigation }: Sta
       }
 
       // 7. Успех — на Home
+      // Сбросить возможный stale активный звонок
+      callStore.reset();
+      socketService.clearCallBuffers();
       navigation.replace('Home');
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Неизвестная ошибка';
