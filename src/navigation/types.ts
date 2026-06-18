@@ -5,7 +5,7 @@ export type RootStackParamList = {
   Home: undefined;
   Settings: undefined;
   ServerList: { errorMessage?: string; returnToHome?: boolean } | undefined;
-  Chat: { contactId: string; contactName: string };
+  Chat: { contactId: string; contactName?: string };
   AddFriend: undefined;
   AddServer:
     | {

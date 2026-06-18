@@ -1,5 +1,5 @@
-import React from 'react';
-import { View } from 'react-native';
+import React, { useEffect } from 'react';
+import { DeviceEventEmitter, View } from 'react-native';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { RootStackParamList } from './types';
@@ -35,6 +35,28 @@ const linking = {
 };
 
 export function AppNavigator({ onReady }: AppNavigatorProps): React.JSX.Element {
+  useEffect(() => {
+    const subscription = DeviceEventEmitter.addListener(
+      'notification_tapped',
+      (contactId: string) => {
+        if (!navigationRef.isReady()) {
+          const retry = setInterval(() => {
+            if (navigationRef.isReady()) {
+              clearInterval(retry);
+              navigationRef.navigate('Chat', { contactId });
+            }
+          }, 100);
+          setTimeout(() => clearInterval(retry), 5000);
+          return;
+        }
+        navigationRef.navigate('Chat', { contactId });
+      },
+    );
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
   return (
     <View style={{ flex: 1 }}>
       <NavigationContainer ref={navigationRef} onReady={onReady} linking={linking}>

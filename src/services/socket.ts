@@ -18,6 +18,8 @@ import type {
 
 import { webrtcService } from './WebRTCService';
 import { callStore } from '../stores/CallStore';
+import { backgroundSocketService } from './BackgroundSocketService';
+import { getCurrentAppState } from '../hooks/useAppStateReconnect';
 
 const HEARTBEAT_INTERVAL = 30000;
 const MAX_BUFFER_SIZE = 500;
@@ -198,8 +200,8 @@ class SocketService {
       const timeout = setTimeout(() => {
         this.socket?.close();
         this.socket = null;
-        reject(new Error('Connection timed out after 15 seconds'));
-      }, 15_000);
+        reject(new Error('Connection timed out after 35 seconds'));
+      }, 35_000);
       let resolved = false;
 
       this.socket = io(serverUrl, {
@@ -230,6 +232,11 @@ class SocketService {
         this.connectedCallback?.();
         resolve();
 
+        // Запускаем foreground service для поддержания сокета в фоне
+        backgroundSocketService.start().catch((err: Error) => {
+          console.warn('[socket] BackgroundService start failed:', err.message);
+        });
+
         // Если локально звонка нет — почистить stale звонок на сервере
         if (callStore.status === 'idle') {
           this.socket?.emit('cleanup_my_call');
@@ -249,7 +256,7 @@ class SocketService {
       });
 
       this.socket.on('connect_error', (err: Error) => {
-        clearTimeout(timeout);
+        // НЕ очищаем timeout здесь — пусть работает
         this.reconnectAttempt++;
         this.lastError = err.message;
         this._connected = false;
@@ -259,8 +266,13 @@ class SocketService {
           `[socket] connect_error (${this.reconnectAttempt}/${this.maxReconnectAttempts}):`,
           err.message,
         );
-        if (!resolved) {
-          reject(err);
+        if (this.reconnectAttempt >= this.maxReconnectAttempts) {
+          backgroundSocketService.stop().catch(() => {});
+        }
+        // reject ТОЛЬКО когда все попытки исчерпаны
+        if (!resolved && this.reconnectAttempt >= this.maxReconnectAttempts) {
+          clearTimeout(timeout);
+          reject(new Error(`Connection failed after ${this.maxReconnectAttempts} attempts`));
         }
       });
 
@@ -269,6 +281,7 @@ class SocketService {
         this._connected = false;
         this.stopHeartbeat();
         this.connectedAt = null;
+        backgroundSocketService.stop().catch(() => {});
         this.disconnectedCallback?.();
         if (reason === 'io server disconnect') {
           // Сервер инициировал отключение — Socket.IO не будет переподключаться
@@ -288,11 +301,13 @@ class SocketService {
         this.connectionStatus = 'disconnected';
         this._connected = false;
         this.stopHeartbeat();
+        backgroundSocketService.stop().catch(() => {});
         console.warn('[socket] reconnect failed after', this.maxReconnectAttempts, 'attempts');
       });
 
       this.socket.on('kicked', (data: { message: string }) => {
         this.stopHeartbeat();
+        backgroundSocketService.stop().catch(() => {});
         this.kickedCallback?.(data);
       });
 
@@ -346,6 +361,15 @@ class SocketService {
         if (this.messageCallbacks.length > 0) {
           for (const cb of this.messageCallbacks) {
             cb(data);
+          }
+          // System notification for background state
+          const appState = getCurrentAppState();
+          if (appState !== 'active') {
+            backgroundSocketService.showNotification(
+              'Новое сообщение',
+              `От: ${data.from}`,
+              data.from,
+            );
           }
         } else {
           this.messageBuffer.push(data);
@@ -454,6 +478,15 @@ class SocketService {
           for (const cb of this.voiceMessageCallbacks) {
             cb(data);
           }
+          // System notification for background state
+          const appState = getCurrentAppState();
+          if (appState !== 'active') {
+            backgroundSocketService.showNotification(
+              '🎤 Голосовое сообщение',
+              `От: ${data.from}`,
+              data.from,
+            );
+          }
         } else {
           this.voiceMessageBuffer.push(data);
           if (this.voiceMessageBuffer.length > MAX_BUFFER_SIZE) {
@@ -505,6 +538,7 @@ class SocketService {
 
   disconnect(): void {
     this.stopHeartbeat();
+    backgroundSocketService.stop().catch(() => {});
     this.socket?.disconnect();
     this.socket = null;
     this.connectedUrl = null;

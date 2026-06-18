@@ -24,7 +24,12 @@ import { version } from '../../../package.json';
 import { formatDurationMs } from '../../utils/formatDuration';
 
 import { getHitSlop } from '../../utils/getHitSlop';
-import { checkForUpdates, downloadAndInstall, downloadLatestApk } from '../../services/AppUpdater';
+import {
+  checkForUpdates,
+  downloadAndInstall,
+  downloadLatestApk,
+  hasPendingUpdate,
+} from '../../services/AppUpdater';
 import { screenCapture } from '../../services/ScreenCapture';
 import { styles } from './styles';
 
@@ -409,29 +414,31 @@ export const SettingsScreen = observer(function SettingsScreen({
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.updateButton, updateState !== 'idle' && styles.updateButtonDisabled]}
-            onPress={handleUpdate}
-            disabled={updateState !== 'idle'}
-            activeOpacity={0.7}
-          >
-            {updateState === 'checking' ? (
-              <>
-                <ActivityIndicator size={18} color={Colors.primary} />
-                <Text style={styles.updateButtonText}> Проверка...</Text>
-              </>
-            ) : updateState === 'downloading' ? (
-              <>
-                <ActivityIndicator size={18} color={Colors.primary} />
-                <Text style={styles.updateButtonText}> Загрузка...</Text>
-              </>
-            ) : (
-              <>
-                <Icon name='download' size={18} color={Colors.primary} />
-                <Text style={styles.updateButtonText}> Обновить</Text>
-              </>
-            )}
-          </TouchableOpacity>
+          {hasPendingUpdate() && (
+            <TouchableOpacity
+              style={[styles.updateButton, updateState !== 'idle' && styles.updateButtonDisabled]}
+              onPress={handleUpdate}
+              disabled={updateState !== 'idle'}
+              activeOpacity={0.7}
+            >
+              {updateState === 'checking' ? (
+                <>
+                  <ActivityIndicator size={18} color={Colors.primary} />
+                  <Text style={styles.updateButtonText}> Проверка...</Text>
+                </>
+              ) : updateState === 'downloading' ? (
+                <>
+                  <ActivityIndicator size={18} color={Colors.primary} />
+                  <Text style={styles.updateButtonText}> Загрузка...</Text>
+                </>
+              ) : (
+                <>
+                  <Icon name='download' size={18} color={Colors.primary} />
+                  <Text style={styles.updateButtonText}> Обновить</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
 
           {devMode && (
             <>

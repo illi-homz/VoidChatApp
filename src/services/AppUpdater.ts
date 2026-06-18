@@ -162,3 +162,35 @@ export async function downloadAndInstall(downloadUrl: string, fileName: string):
     }
   }
 }
+
+// ---- Cached update check ----
+
+let _cachedUpdateResult: UpdateCheckResult | null = null;
+
+/**
+ * Проверяет наличие обновлений и кэширует результат.
+ * Можно вызывать в фоне — не блокирует UI.
+ */
+export async function checkForUpdatesCached(): Promise<void> {
+  try {
+    _cachedUpdateResult = await checkForUpdates();
+  } catch {
+    // Не фатально — при следующем вызове перепроверится
+    _cachedUpdateResult = null;
+  }
+}
+
+/**
+ * Возвращает закэшированный результат проверки обновлений.
+ * null — проверка ещё не выполнялась.
+ */
+export function getCachedUpdateResult(): UpdateCheckResult | null {
+  return _cachedUpdateResult;
+}
+
+/**
+ * Есть ли обновление по данным кэша?
+ */
+export function hasPendingUpdate(): boolean {
+  return _cachedUpdateResult?.hasUpdate === true;
+}

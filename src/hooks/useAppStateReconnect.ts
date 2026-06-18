@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { AppState } from 'react-native';
+import { AppState, AppStateStatus } from 'react-native';
 import { socketService } from '../services/socket';
 
 export function useAppStateReconnect(): void {
@@ -24,4 +24,12 @@ export function useAppStateReconnect(): void {
       subscription.remove();
     };
   }, []);
+}
+
+/**
+ * Возвращает текущее состояние приложения.
+ * Значения: 'active' | 'background' | 'inactive' | 'unknown'
+ */
+export function getCurrentAppState(): AppStateStatus {
+  return AppState.currentState;
 }

@@ -7,6 +7,7 @@ import { serverStore } from './src/stores/ServerStore';
 import { appStore } from './src/stores/AppStore';
 import { dbService } from './src/services/DatabaseService';
 import { screenCapture } from './src/services/ScreenCapture';
+import { checkForUpdatesCached } from './src/services/AppUpdater';
 import { StoreProvider } from './src/stores';
 import { ToastProvider } from './src/components/Toast';
 import { NotificationProvider } from './src/components/NotificationBanner';
@@ -21,6 +22,9 @@ function App(): React.JSX.Element {
         await dbService.initialize();
         await serverStore.load();
         await appStore.initIdentity();
+
+        // Фоновая проверка обновлений — не блокирует UI
+        checkForUpdatesCached();
       } catch (e) {
         console.error('[App] Initialization failed', e);
       }

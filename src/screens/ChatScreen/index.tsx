@@ -74,7 +74,8 @@ export const ChatScreen = observer(function ChatScreen({
   const initialIdsRef = useRef<Set<string> | null>(null);
   const [showCallConfirm, setShowCallConfirm] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const displayName = store.contacts.find(c => c.userId === contactId)?.nickname ?? contactName;
+  const displayName =
+    store.contacts.find(c => c.userId === contactId)?.nickname ?? contactName ?? '';
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const selectedIdsRef = useRef(selectedIds);

@@ -9,6 +9,7 @@ import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.voidchatapp.audiorouter.AudioRouterPackage
 import com.voidchatapp.clipboard.ClipboardPackage
 import com.voidchatapp.installapk.InstallApkPackage
+import com.voidchatapp.background.BackgroundServicePackage
 import com.voidchatapp.screencapture.ScreenCapturePackage
 import io.wazo.callkeep.RNCallKeepPackage
 
@@ -24,6 +25,7 @@ class MainApplication : Application(), ReactApplication {
           add(AudioRouterPackage())
           add(InstallApkPackage())
           add(RNCallKeepPackage())
+          add(BackgroundServicePackage())
         },
     )
   }
