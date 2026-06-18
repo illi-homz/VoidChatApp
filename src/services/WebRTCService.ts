@@ -7,6 +7,7 @@ import {
   RTCIceCandidate,
   permissions,
 } from 'react-native-webrtc';
+import { makeObservable, observable, runInAction } from 'mobx';
 
 declare const __DEV__: boolean;
 
@@ -67,6 +68,8 @@ class WebRTCService {
 
   private _pc: RTCPeerConnection | null = null;
   private _localStream: MediaStream | null = null;
+  /** Observable URL для реактивного обновления VideoPiP. */
+  localStreamURL: string | null = null;
   private _remoteStream: MediaStream | null = null;
   private _currentFacingMode: 'user' | 'environment' = 'user';
   /** Ссылка на RTCRtpSender видео — нужна для replaceTrack после выключения камеры. */
@@ -102,6 +105,12 @@ class WebRTCService {
   private _callInSetup: boolean = false;
   private _earlyCandidates: string[] = [];
   private _backgroundMode: boolean = false;
+
+  constructor() {
+    makeObservable(this, {
+      localStreamURL: observable,
+    });
+  }
 
   // ================================================================
   //  Геттеры
@@ -211,6 +220,7 @@ class WebRTCService {
       : false;
     const stream = await mediaDevices.getUserMedia({ audio: true, video: videoConstraints });
     this._localStream = stream;
+    runInAction(() => { this.localStreamURL = stream.toURL(); });
     if (withVideo) {
       this._currentFacingMode = 'user';
     }
@@ -285,6 +295,7 @@ class WebRTCService {
       }
 
       this._localStream?.addTrack(newVideoTrack);
+      runInAction(() => { this.localStreamURL = this._localStream?.toURL() ?? null; });
 
       if (this._pc) {
         if (this._videoSender) {
@@ -304,6 +315,7 @@ class WebRTCService {
         track.stop();
         this._localStream?.removeTrack(track);
       });
+      runInAction(() => { this.localStreamURL = null; });
 
       if (this._pc) {
         const sender = this._pc.getSenders().find(s => s.track?.kind === 'video');
@@ -367,31 +379,64 @@ class WebRTCService {
 
   /**
    * Переключить камеру между front (facingMode: 'user') и back (facingMode: 'environment').
-   * Определяет текущую камеру через enumerateDevices, останавливает старый трек,
-   * создаёт новый через getUserMedia и заменяет через replaceTrack.
+   *
+   * Основной способ — applyConstraints на существующем видео-треке.
+   * Это не создаёт новый трек и не меняет MediaStream, поэтому RTCView
+   * продолжает показывать тот же трек (с новой камеры) — никакого зависания.
+   *
+   * Если applyConstraints не поддерживается устройством — fallback на
+   * старый метод (stop + getUserMedia + replaceTrack).
    */
   async switchCamera(): Promise<void> {
     if (!this._localStream) return;
     const videoTracks = this._localStream.getVideoTracks();
     if (videoTracks.length === 0) return;
 
-    const currentTrack = videoTracks[0];
-    // Переключаем на противоположную камеру
+    const videoTrack = videoTracks[0];
     const newFacingMode: 'user' | 'environment' =
       this._currentFacingMode === 'user' ? 'environment' : 'user';
 
     try {
+      // Применяем полный набор констрейнтов к существующему треку,
+      // чтобы не сбрасывались resolution/bitrate при смене камеры
+      await videoTrack.applyConstraints({
+        width: { min: 480, ideal: 1280, max: 1280 },
+        height: { min: 360, ideal: 720, max: 720 },
+        frameRate: { min: 20, ideal: 30, max: 30 },
+        facingMode: newFacingMode,
+      });
+
+      // Запоминаем новое состояние (stream и URL не меняются)
+      this._currentFacingMode = newFacingMode;
+      console.log('[WebRTC] Camera switched to', newFacingMode, 'via applyConstraints');
+    } catch (e) {
+      console.warn('[WebRTC] Failed to switch camera via applyConstraints:', e);
+      // Если applyConstraints не сработал — пробуем старый метод (stop + getUserMedia)
+      await this._switchCameraFallback(newFacingMode);
+    }
+  }
+
+  /**
+   * Fallback для переключения камеры — старый метод с остановкой трека
+   * и созданием нового через getUserMedia.
+   * Используется, если applyConstraints не поддерживается устройством.
+   */
+  private async _switchCameraFallback(newFacingMode: 'user' | 'environment'): Promise<void> {
+    if (!this._localStream) return;
+    const videoTracks = this._localStream.getVideoTracks();
+    if (videoTracks.length === 0) return;
+
+    const currentTrack = videoTracks[0];
+    try {
       try {
         await permissions.request({ name: 'camera' });
       } catch {
-        // permissions API может быть недоступен
+        /* ok */
       }
 
-      // Останавливаем старый трек и удаляем из локального потока
       currentTrack.stop();
       this._localStream.removeTrack(currentTrack);
 
-      // Создаём новый видео-трек с противоположной камерой
       const newStream = await mediaDevices.getUserMedia({
         audio: false,
         video: {
@@ -404,14 +449,13 @@ class WebRTCService {
 
       const newVideoTrack = newStream.getVideoTracks()[0];
       if (!newVideoTrack) {
-        console.warn('[WebRTC] switchCamera: no video track in new stream');
+        console.warn('[WebRTC] switchCamera fallback: no video track in new stream');
+        runInAction(() => { this.localStreamURL = null; });
         return;
       }
 
-      // Добавляем новый трек в локальный поток
       this._localStream.addTrack(newVideoTrack);
 
-      // Заменяем трек в PeerConnection (без renegotiation)
       if (this._pc) {
         const sender = this._pc.getSenders().find(s => s.track?.kind === 'video');
         if (sender) {
@@ -421,11 +465,11 @@ class WebRTCService {
         }
       }
 
-      // Запоминаем новое состояние
       this._currentFacingMode = newFacingMode;
-      console.log('[WebRTC] Camera switched to', newFacingMode);
+      runInAction(() => { this.localStreamURL = this._localStream.toURL(); });
+      console.log('[WebRTC] Camera switched (fallback) to', newFacingMode);
     } catch (e) {
-      console.warn('[WebRTC] Failed to switch camera:', e);
+      console.warn('[WebRTC] Failed to switch camera (fallback):', e);
     }
   }
 
@@ -787,6 +831,7 @@ class WebRTCService {
     this._localStream?.getAudioTracks().forEach(t => t.stop());
     // Останавливаем видео-треки
     this._localStream?.getVideoTracks().forEach(t => t.stop());
+    runInAction(() => { this.localStreamURL = null; });
     this._localStream = null;
     this._remoteStream = null;
     this._iceRestartAttempted = false;

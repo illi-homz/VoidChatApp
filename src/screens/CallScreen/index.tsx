@@ -619,8 +619,8 @@ const CallScreenComponent: React.FC = observer(() => {
         )}
       </View>
 
-      {callType === 'video' && callStore.isCameraOn && webrtcService.localStream && (
-        <VideoPiP streamURL={webrtcService.localStream.toURL()} />
+      {callType === 'video' && callStore.isCameraOn && webrtcService.localStreamURL && (
+        <VideoPiP streamURL={webrtcService.localStreamURL} />
       )}
 
       <View style={styles.controlsSection}>
