@@ -1,11 +1,23 @@
 diff --git a/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/RTCVideoViewManager.java b/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/RTCVideoViewManager.java
-index 5556094..e8cfc9a 100644
+index 5556094..eb91e8e 100644
 --- a/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/RTCVideoViewManager.java
 +++ b/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/RTCVideoViewManager.java
-@@ -76,6 +76,11 @@ public class RTCVideoViewManager extends SimpleViewManager<WebRTCView> {
+@@ -76,6 +76,23 @@ public class RTCVideoViewManager extends SimpleViewManager<WebRTCView> {
          view.setZOrder(zOrder);
      }
  
++    /**
++     * Sets whether this RTCVideoView should use a TextureView instead of
++     * the default SurfaceView for rendering on Android.
++     *
++     * TextureView is a regular view in the view hierarchy and respects
++     * overflow:hidden + borderRadius from parent views. SurfaceView renders
++     * on a separate hardware layer and cannot be clipped.
++     *
++     * @param view The WebRTCView on which the setting is applied.
++     * @param useTextureView {@code true} to use TextureView, {@code false}
++     *                       to use SurfaceView (default).
++     */
 +    @ReactProp(name = "useTextureView")
 +    public void setUseTextureView(WebRTCView view, boolean useTextureView) {
 +        view.setUseTextureView(useTextureView);
@@ -16,10 +28,10 @@ index 5556094..e8cfc9a 100644
       *
 diff --git a/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/TextureViewRenderer.java b/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/TextureViewRenderer.java
 new file mode 100644
-index 0000000..8fd9eea
+index 0000000..07ea444
 --- /dev/null
 +++ b/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/TextureViewRenderer.java
-@@ -0,0 +1,162 @@
+@@ -0,0 +1,167 @@
 +package com.oney.WebRTCModule;
 +
 +import android.content.Context;
@@ -104,19 +116,21 @@ index 0000000..8fd9eea
 +                // кадр заполняет view, сохраняя aspect ratio, избыток центрируется.
 +                int vw = getWidth();
 +                int vh = getHeight();
-+                if (vw > 0 && vh > 0 && frameWidth > 0 && frameHeight > 0) {
++                if (vw > 0 && vh > 0 && width > 0 && height > 0) {
 +                    float frameAspect = (float) frameWidth / frameHeight;
 +                    float viewAspect = (float) vw / vh;
-+                    Matrix matrix = new Matrix();
-+                    if (frameAspect > viewAspect) {
-+                        // Frame шире → заполняем по высоте
++                    transformMatrix.reset();
++                    Matrix matrix = transformMatrix;
++                    boolean fill = (scalingType == RendererCommon.ScalingType.SCALE_ASPECT_FILL);
++                    if (fill ? (frameAspect > viewAspect) : (frameAspect < viewAspect)) {
++                        // Scale to fill/fit by height.
 +                        float displayW = vh * frameAspect;
 +                        float sx = displayW / vw;
 +                        float dx = -(displayW - vw) / 2f;
 +                        matrix.setScale(sx, 1f);
 +                        matrix.postTranslate(dx, 0);
 +                    } else {
-+                        // Frame выше → заполняем по ширине
++                        // Scale to fill/fit by width.
 +                        float displayH = vw / frameAspect;
 +                        float sy = displayH / vh;
 +                        float dy = -(displayH - vh) / 2f;
@@ -125,7 +139,8 @@ index 0000000..8fd9eea
 +                    }
 +                    // Зеркалирование для фронтальной камеры
 +                    if (mirror) {
-+                        Matrix flip = new Matrix();
++                        flipMatrix.reset();
++                        Matrix flip = flipMatrix;
 +                        flip.setScale(-1f, 1f);
 +                        flip.postTranslate(vw, 0f);
 +                        matrix.postConcat(flip);
@@ -138,10 +153,16 @@ index 0000000..8fd9eea
 +
 +    public void setMirror(boolean mirror) {
 +        this.mirror = mirror;
-+        eglRenderer.setMirror(mirror);
 +    }
 +
++    public void setScalingType(RendererCommon.ScalingType scalingType) {
++        this.scalingType = scalingType;
++    }
++
++    private RendererCommon.ScalingType scalingType = RendererCommon.ScalingType.SCALE_ASPECT_FILL;
 +    private boolean mirror;
++    private final Matrix transformMatrix = new Matrix();
++    private final Matrix flipMatrix = new Matrix();
 +
 +    private final SurfaceTextureListener surfaceTextureListener = new SurfaceTextureListener() {
 +        @Override
@@ -152,13 +173,9 @@ index 0000000..8fd9eea
 +
 +        @Override
 +        public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
++            if (!isInitialized) return false;
 +            Log.d(TAG, "Surface texture destroyed");
-+            eglRenderer.releaseEglSurface(new Runnable() {
-+                @Override
-+                public void run() {
-+                    // No-op
-+                }
-+            });
++            eglRenderer.releaseEglSurface(() -> surface.release());
 +            return true;
 +        }
 +
@@ -183,7 +200,7 @@ index 0000000..8fd9eea
 +    };
 +}
 diff --git a/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/WebRTCView.java b/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/WebRTCView.java
-index 5d14d0f..eebb761 100644
+index 5d14d0f..031db18 100644
 --- a/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/WebRTCView.java
 +++ b/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/WebRTCView.java
 @@ -144,11 +144,16 @@ public class WebRTCView extends ViewGroup {
@@ -305,7 +322,17 @@ index 5d14d0f..eebb761 100644
              // SurfaceViewRenderer takes the value of its mirror property into
              // account upon its layout.
              requestSurfaceViewRendererLayout();
-@@ -475,6 +502,10 @@ public class WebRTCView extends ViewGroup {
+@@ -437,6 +464,9 @@ public class WebRTCView extends ViewGroup {
+             }
+             this.scalingType = scalingType;
+             surfaceViewRenderer.setScalingType(scalingType);
++            if (textureViewRenderer != null) {
++                textureViewRenderer.setScalingType(scalingType);
++            }
+         }
+         // Both this instance ant its SurfaceViewRenderer take the value of
+         // their scalingType properties into account upon their layouts.
+@@ -475,6 +505,10 @@ public class WebRTCView extends ViewGroup {
              // After realizing/applying the change in the value of
              // this.streamURL, reflect it on the value of videoTrack.
              setVideoTrack(videoTrack);
@@ -316,7 +343,7 @@ index 5d14d0f..eebb761 100644
          }
      }
  
-@@ -500,7 +531,9 @@ public class WebRTCView extends ViewGroup {
+@@ -500,7 +534,9 @@ public class WebRTCView extends ViewGroup {
              this.videoTrack = videoTrack;
  
              if (videoTrack != null) {
@@ -327,7 +354,7 @@ index 5d14d0f..eebb761 100644
                  if (oldVideoTrack == null) {
                      // If there was no old track, clean the surface so we start
                      // with black.
-@@ -519,6 +552,7 @@ public class WebRTCView extends ViewGroup {
+@@ -519,6 +555,7 @@ public class WebRTCView extends ViewGroup {
       * @param zOrder The z-order to set on this {@code WebRTCView}.
       */
      public void setZOrder(int zOrder) {
@@ -335,13 +362,22 @@ index 5d14d0f..eebb761 100644
          switch (zOrder) {
              case 0:
                  surfaceViewRenderer.setZOrderMediaOverlay(false);
-@@ -580,4 +614,31 @@ public class WebRTCView extends ViewGroup {
+@@ -580,4 +617,44 @@ public class WebRTCView extends ViewGroup {
      public void setOnDimensionsChange(boolean enabled) {
          this.onDimensionsChangeEnabled = enabled;
      }
 +
 +    public void setUseTextureView(boolean useTextureView) {
++        if (this.useTextureView == useTextureView) return;
 +        this.useTextureView = useTextureView;
++        if (videoTrack != null && ViewCompat.isAttachedToWindow(this)) {
++            removeRendererFromVideoTrack();
++            if (useTextureView) {
++                tryAddTextureViewRendererToVideoTrack();
++            } else {
++                tryAddRendererToVideoTrack();
++            }
++        }
 +    }
 +
 +    private void tryAddTextureViewRendererToVideoTrack() {
@@ -356,19 +392,23 @@ index 5d14d0f..eebb761 100644
 +        EglBase.Context sharedContext = EglUtils.getRootEglBaseContext();
 +        if (sharedContext == null) return;
 +
-+        textureViewRenderer.init(sharedContext, rendererEvents);
-+        ThreadUtils.runOnExecutor(() -> {
-+            try {
-+                videoTrack.addSink(textureViewRenderer);
-+            } catch (Throwable tr) {
-+                Log.e(TAG, "Failed to add texture renderer to video track", tr);
-+            }
-+        });
-+        rendererReady = true;
++        try {
++            textureViewRenderer.init(sharedContext, rendererEvents);
++            ThreadUtils.runOnExecutor(() -> {
++                try {
++                    videoTrack.addSink(textureViewRenderer);
++                    rendererReady = true;
++                } catch (Throwable tr) {
++                    Log.e(TAG, "Failed to add texture renderer to video track", tr);
++                }
++            });
++        } catch (Exception e) {
++            Log.e(TAG, "Failed to init TextureViewRenderer", e);
++        }
 +    }
  }
 diff --git a/node_modules/react-native-webrtc/src/RTCView.ts b/node_modules/react-native-webrtc/src/RTCView.ts
-index ea97a43..5e36faa 100644
+index ea97a43..0bafbe0 100644
 --- a/node_modules/react-native-webrtc/src/RTCView.ts
 +++ b/node_modules/react-native-webrtc/src/RTCView.ts
 @@ -16,6 +16,14 @@ export interface RTCVideoViewProps extends ViewProps {
@@ -386,3 +426,12 @@ index ea97a43..5e36faa 100644
    /**
     * In the fashion of
     * https://www.w3.org/TR/html5/embedded-content-0.html#dom-video-videowidth
+@@ -24,7 +32,7 @@ export interface RTCVideoViewProps extends ViewProps {
+    *
+    * objectFit: 'contain' | 'cover'
+    *
+-   * Defaults to 'cover'.
++   * Defaults to 'cover' (but historically this default may vary).
+    */
+   objectFit?: 'contain' | 'cover';
+ 
